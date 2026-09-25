@@ -419,8 +419,8 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         exportFileName={`quartiers_${currentCity.name.toLowerCase()}`}
         exportTitle={`Quartiers et Coordonnées GPS - ${currentCity.name}`}
         exportSubtitle={`${filteredCityNeighborhoods.length} quartiers enregistrés`}
-        pageSizeOptions={[25, 50, 100, 250]}
-        defaultPageSize={25}
+        pageSizeOptions={[10, 25, 50, 100]}
+        defaultPageSize={10}
         emptyMessage={`Aucun quartier enregistré pour ${currentCity.name}. Utilisez le bouton 'Importer Excel' pour charger la liste.`}
       />
 

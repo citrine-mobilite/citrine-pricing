@@ -1,7 +1,19 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { initializeApp } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  writeBatch
+} from 'firebase/firestore';
 import {
   INITIAL_CITIES,
   INITIAL_NEIGHBORHOODS,
@@ -33,14 +45,78 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
-// In-memory persistent database for the server session (with seeded defaults)
+// Initialize Firestore
+let db: any = null;
+try {
+  const cfgPath = path.join(__dirname, 'firebase-applet-config.json');
+  if (fs.existsSync(cfgPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+    const firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    console.log(`[Firestore] Connecté à la base de données : ${firebaseConfig.firestoreDatabaseId}`);
+  }
+} catch (err) {
+  console.warn('[Firestore] Avertissement initialisation :', err);
+}
+
+function cleanFirestoreDoc<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v)));
+}
+
+// Persistent database cache (synced with Firestore)
 let users: User[] = [...INITIAL_USERS];
 let cities: City[] = [...INITIAL_CITIES];
 let neighborhoods: Neighborhood[] = [...INITIAL_NEIGHBORHOODS];
-
-// 100% Clean state: no pre-seeded mock campaigns, trips appear ONLY after live execution
 let campaigns: PricingCampaign[] = [];
 let tripResults: TripResult[] = [];
+
+// Sync from Firestore on server startup
+async function syncFromFirestore() {
+  if (!db) return;
+  try {
+    // 1. Users
+    const usersSnap = await getDocs(collection(db, 'users'));
+    if (!usersSnap.empty) {
+      users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+      console.log(`[Firestore] ${users.length} utilisateurs chargés depuis Firestore.`);
+    }
+
+    // 2. Cities
+    const citiesSnap = await getDocs(collection(db, 'cities'));
+    if (!citiesSnap.empty) {
+      cities = citiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as City));
+      console.log(`[Firestore] ${cities.length} villes chargées depuis Firestore.`);
+    }
+
+    // 3. Neighborhoods from /neighborhoods
+    let nbsSnap = await getDocs(collection(db, 'neighborhoods'));
+    if (!nbsSnap.empty) {
+      neighborhoods = nbsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
+      console.log(`[Firestore] ${neighborhoods.length} quartiers chargés depuis /neighborhoods.`);
+    } else {
+      const allLoadedNbs: Neighborhood[] = [];
+      for (const city of cities) {
+        const subSnap = await getDocs(collection(db, 'cities', city.id, 'neighborhoods'));
+        subSnap.docs.forEach(d => allLoadedNbs.push({ id: d.id, ...d.data() } as Neighborhood));
+      }
+      if (allLoadedNbs.length > 0) {
+        neighborhoods = allLoadedNbs;
+        console.log(`[Firestore] ${neighborhoods.length} quartiers chargés depuis les sous-collections.`);
+      }
+    }
+
+    // 4. Campaigns
+    const campsSnap = await getDocs(collection(db, 'campaigns'));
+    if (!campsSnap.empty) {
+      campaigns = campsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+      campaigns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      console.log(`[Firestore] ${campaigns.length} campagnes chargées depuis Firestore.`);
+    }
+  } catch (err) {
+    console.warn('[Firestore] Erreur lors de la synchronisation initiale :', err);
+  }
+}
+syncFromFirestore();
 
 let yangoSettings: YangoSettings = {
   apiEndpoint: 'https://ya-authproxy.yango.com/3.0/routestats',
@@ -547,13 +623,23 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
   });
 });
 
-// 2. User management (Admin only in production)
-app.get('/api/users', (_req: Request, res: Response) => {
-  res.json(users);
+// 2. User management
+app.get('/api/users', async (_req: Request, res: Response) => {
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'users'));
+      if (!snap.empty) {
+        users = snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+      }
+    } catch (e) {
+      console.warn('[Firestore] get users error:', e);
+    }
+  }
+  return res.json(users);
 });
 
-app.post('/api/users', (req: Request, res: Response) => {
-  const { name, email, role, password } = req.body;
+app.post('/api/users', async (req: Request, res: Response) => {
+  const { name, email, role } = req.body;
   if (!name || !email || !role) {
     return res.status(400).json({ error: 'Nom, email et rôle sont obligatoires.' });
   }
@@ -573,10 +659,19 @@ app.post('/api/users', (req: Request, res: Response) => {
   };
 
   users.push(newUser);
+
+  if (db) {
+    try {
+      await setDoc(doc(db, 'users', newUser.id), cleanFirestoreDoc(newUser));
+    } catch (e) {
+      console.warn('[Firestore] create user error:', e);
+    }
+  }
+
   return res.status(201).json(newUser);
 });
 
-app.put('/api/users/:id', (req: Request, res: Response) => {
+app.put('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const user = users.find(u => u.id === id);
   if (!user) {
@@ -588,10 +683,18 @@ app.put('/api/users/:id', (req: Request, res: Response) => {
   if (role !== undefined) user.role = role;
   if (active !== undefined) user.active = Boolean(active);
 
+  if (db) {
+    try {
+      await setDoc(doc(db, 'users', user.id), cleanFirestoreDoc(user), { merge: true });
+    } catch (e) {
+      console.warn('[Firestore] update user error:', e);
+    }
+  }
+
   return res.json(user);
 });
 
-app.delete('/api/users/:id', (req: Request, res: Response) => {
+app.delete('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const index = users.findIndex(u => u.id === id);
   if (index === -1) {
@@ -601,12 +704,31 @@ app.delete('/api/users/:id', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Impossible de supprimer le dernier utilisateur.' });
   }
   users.splice(index, 1);
+
+  if (db) {
+    try {
+      await deleteDoc(doc(db, 'users', id));
+    } catch (e) {
+      console.warn('[Firestore] delete user error:', e);
+    }
+  }
+
   return res.json({ success: true, message: 'Utilisateur supprimé.' });
 });
 
 // 3. City routes
-app.get('/api/cities', (_req: Request, res: Response) => {
-  // Augment with active neighborhood counts
+app.get('/api/cities', async (_req: Request, res: Response) => {
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'cities'));
+      if (!snap.empty) {
+        cities = snap.docs.map(d => ({ id: d.id, ...d.data() } as City));
+      }
+    } catch (e) {
+      console.warn('[Firestore] get cities error:', e);
+    }
+  }
+
   const enriched = cities.map(city => {
     const cityNbs = neighborhoods.filter(n => n.cityId === city.id);
     const activeNbs = cityNbs.filter(n => n.active);
@@ -621,7 +743,7 @@ app.get('/api/cities', (_req: Request, res: Response) => {
   return res.json(enriched);
 });
 
-app.post('/api/cities', (req: Request, res: Response) => {
+app.post('/api/cities', async (req: Request, res: Response) => {
   const { name, country, currency, currencySymbol, lat, lng, autoSchedule } = req.body;
   if (!name || !country) {
     return res.status(400).json({ error: 'Le nom de la ville et le pays sont obligatoires.' });
@@ -647,10 +769,19 @@ app.post('/api/cities', (req: Request, res: Response) => {
   };
 
   cities.push(newCity);
+
+  if (db) {
+    try {
+      await setDoc(doc(db, 'cities', newCity.id), cleanFirestoreDoc(newCity));
+    } catch (e) {
+      console.warn('[Firestore] create city error:', e);
+    }
+  }
+
   return res.status(201).json(newCity);
 });
 
-app.put('/api/cities/:id', (req: Request, res: Response) => {
+app.put('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const city = cities.find(c => c.id === id);
   if (!city) {
@@ -667,26 +798,54 @@ app.put('/api/cities/:id', (req: Request, res: Response) => {
   if (autoSchedule) city.autoSchedule = autoSchedule;
   city.updatedAt = new Date().toISOString();
 
+  if (db) {
+    try {
+      await setDoc(doc(db, 'cities', city.id), cleanFirestoreDoc(city), { merge: true });
+    } catch (e) {
+      console.warn('[Firestore] update city error:', e);
+    }
+  }
+
   return res.json(city);
 });
 
-app.delete('/api/cities/:id', (req: Request, res: Response) => {
+app.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   cities = cities.filter(c => c.id !== id);
   neighborhoods = neighborhoods.filter(n => n.cityId !== id);
+
+  if (db) {
+    try {
+      await deleteDoc(doc(db, 'cities', id));
+    } catch (e) {
+      console.warn('[Firestore] delete city error:', e);
+    }
+  }
+
   return res.json({ success: true, message: 'Ville et quartiers associés supprimés.' });
 });
 
 // 4. Neighborhood routes
-app.get('/api/neighborhoods', (req: Request, res: Response) => {
+app.get('/api/neighborhoods', async (req: Request, res: Response) => {
   const { cityId } = req.query;
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'neighborhoods'));
+      if (!snap.empty) {
+        neighborhoods = snap.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
+      }
+    } catch (e) {
+      console.warn('[Firestore] get neighborhoods error:', e);
+    }
+  }
+
   if (cityId) {
     return res.json(neighborhoods.filter(n => n.cityId === cityId));
   }
   return res.json(neighborhoods);
 });
 
-app.post('/api/neighborhoods', (req: Request, res: Response) => {
+app.post('/api/neighborhoods', async (req: Request, res: Response) => {
   const { cityId, name, lat, lng, active, zoneType } = req.body;
   if (!cityId || !name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: 'cityId, nom, latitude et longitude sont requis.' });
@@ -709,10 +868,23 @@ app.post('/api/neighborhoods', (req: Request, res: Response) => {
   };
 
   neighborhoods.push(newNeighborhood);
+
+  if (db) {
+    try {
+      const cleaned = cleanFirestoreDoc(newNeighborhood);
+      await Promise.all([
+        setDoc(doc(db, 'neighborhoods', newNeighborhood.id), cleaned),
+        setDoc(doc(db, 'cities', cityId, 'neighborhoods', newNeighborhood.id), cleaned)
+      ]);
+    } catch (e) {
+      console.warn('[Firestore] create neighborhood error:', e);
+    }
+  }
+
   return res.status(201).json(newNeighborhood);
 });
 
-app.put('/api/neighborhoods/:id', (req: Request, res: Response) => {
+app.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const nb = neighborhoods.find(n => n.id === id);
   if (!nb) {
@@ -726,44 +898,106 @@ app.put('/api/neighborhoods/:id', (req: Request, res: Response) => {
   if (active !== undefined) nb.active = Boolean(active);
   if (zoneType !== undefined) nb.zoneType = zoneType;
 
+  if (db) {
+    try {
+      const cleaned = cleanFirestoreDoc(nb);
+      await Promise.all([
+        setDoc(doc(db, 'neighborhoods', nb.id), cleaned, { merge: true }),
+        setDoc(doc(db, 'cities', nb.cityId, 'neighborhoods', nb.id), cleaned, { merge: true })
+      ]);
+    } catch (e) {
+      console.warn('[Firestore] update neighborhood error:', e);
+    }
+  }
+
   return res.json(nb);
 });
 
-app.delete('/api/neighborhoods/:id', (req: Request, res: Response) => {
+app.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const targetNb = neighborhoods.find(n => n.id === id);
   neighborhoods = neighborhoods.filter(n => n.id !== id);
+
+  if (db) {
+    try {
+      const promises = [deleteDoc(doc(db, 'neighborhoods', id))];
+      if (targetNb) {
+        promises.push(deleteDoc(doc(db, 'cities', targetNb.cityId, 'neighborhoods', id)));
+      }
+      await Promise.all(promises);
+    } catch (e) {
+      console.warn('[Firestore] delete neighborhood error:', e);
+    }
+  }
+
   return res.json({ success: true, message: 'Quartier supprimé.' });
 });
 
 // Clear all neighborhoods of a city
-app.delete('/api/neighborhoods/city/:cityId', (req: Request, res: Response) => {
+app.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Response) => {
   const { cityId } = req.params;
-  const initialCount = neighborhoods.filter(n => n.cityId === cityId).length;
+  const toDelete = neighborhoods.filter(n => n.cityId === cityId);
   neighborhoods = neighborhoods.filter(n => n.cityId !== cityId);
+
+  if (db && toDelete.length > 0) {
+    try {
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+        const chunk = toDelete.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          batch.delete(doc(db, 'neighborhoods', item.id));
+          batch.delete(doc(db, 'cities', cityId, 'neighborhoods', item.id));
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn('[Firestore] clear neighborhoods error:', e);
+    }
+  }
+
   return res.json({
     success: true,
-    deletedCount: initialCount,
-    message: `Tous les quartiers de la ville (${initialCount}) ont été vidés.`
+    deletedCount: toDelete.length,
+    message: `Tous les quartiers de la ville (${toDelete.length}) ont été vidés.`
   });
 });
 
-app.post('/api/neighborhoods/seed-city', (req: Request, res: Response) => {
+app.post('/api/neighborhoods/seed-city', async (req: Request, res: Response) => {
   const { cityId } = req.body;
   const city = cities.find(c => c.id === cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
 
-  // Re-seed from initial presets for this city if available
   const presets = INITIAL_NEIGHBORHOODS.filter(n => n.cityId === cityId);
   if (presets.length > 0) {
     neighborhoods = neighborhoods.filter(n => n.cityId !== cityId).concat(presets);
+
+    if (db) {
+      try {
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < presets.length; i += BATCH_SIZE) {
+          const chunk = presets.slice(i, i + BATCH_SIZE);
+          const batch = writeBatch(db);
+          for (const nb of chunk) {
+            const cityName = nb.cityId === 'city_douala' ? 'Douala' : 'Yaoundé';
+            const cleaned = cleanFirestoreDoc({ ...nb, cityName, updatedAt: new Date().toISOString() });
+            batch.set(doc(db, 'neighborhoods', nb.id), cleaned, { merge: true });
+            batch.set(doc(db, 'cities', nb.cityId, 'neighborhoods', nb.id), cleaned, { merge: true });
+          }
+          await batch.commit();
+        }
+      } catch (e) {
+        console.warn('[Firestore] seed-city error:', e);
+      }
+    }
   }
   return res.json({ success: true, neighborhoods: neighborhoods.filter(n => n.cityId === cityId) });
 });
 
 // Batch import of neighborhoods (from Excel or user list)
-app.post('/api/neighborhoods/import-batch', (req: Request, res: Response) => {
+app.post('/api/neighborhoods/import-batch', async (req: Request, res: Response) => {
   const { cityId, neighborhoods: importedList } = req.body;
   if (!cityId || !Array.isArray(importedList) || importedList.length === 0) {
     return res.status(400).json({ error: 'cityId et une liste non-vide de quartiers sont requis.' });
@@ -785,12 +1019,33 @@ app.post('/api/neighborhoods/import-batch', (req: Request, res: Response) => {
         lng: Number(item.lng),
         active: item.active ?? true,
         zoneType: item.zoneType || 'commercial',
+        fullAddress: item.fullAddress,
+        district: item.district,
         createdAt: new Date().toISOString()
       };
       createdNeighborhoods.push(nb);
-      neighborhoods.push(nb);
     }
   });
+
+  neighborhoods = neighborhoods.concat(createdNeighborhoods);
+
+  if (db && createdNeighborhoods.length > 0) {
+    try {
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < createdNeighborhoods.length; i += BATCH_SIZE) {
+        const chunk = createdNeighborhoods.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db);
+        for (const nb of chunk) {
+          const cleaned = cleanFirestoreDoc({ ...nb, cityName: city.name, updatedAt: new Date().toISOString() });
+          batch.set(doc(db, 'neighborhoods', nb.id), cleaned, { merge: true });
+          batch.set(doc(db, 'cities', cityId, 'neighborhoods', nb.id), cleaned, { merge: true });
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      console.warn('[Firestore] import batch error:', e);
+    }
+  }
 
   return res.status(201).json({
     success: true,
@@ -798,7 +1053,6 @@ app.post('/api/neighborhoods/import-batch', (req: Request, res: Response) => {
     neighborhoods: createdNeighborhoods
   });
 });
-
 
 // 5. Dual routestats single test proxy (Yango & Hero)
 app.post('/api/routestats', async (req: Request, res: Response) => {

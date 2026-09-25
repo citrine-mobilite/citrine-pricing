@@ -65,11 +65,38 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'usr_admin_01',
     email: 'admin@citrine-pricing.cm',
-    name: 'Admin',
+    name: 'Admin Plateforme',
     role: 'admin',
     active: true,
     createdAt: '2026-01-10T08:00:00.000Z',
-    lastLoginAt: '2026-09-23T08:30:00.000Z'
+    lastLoginAt: '2026-09-25T10:00:00.000Z'
+  },
+  {
+    id: 'usr_citrine_admin',
+    email: 'citrinemobilite@gmail.com',
+    name: 'Citrine Mobilité (Super Admin)',
+    role: 'admin',
+    active: true,
+    createdAt: '2026-01-10T08:00:00.000Z',
+    lastLoginAt: '2026-09-25T10:00:00.000Z'
+  },
+  {
+    id: 'usr_resp_01',
+    email: 'responsable@citrine-pricing.cm',
+    name: 'Sophie (Responsable Pricing)',
+    role: 'responsable',
+    active: true,
+    createdAt: '2026-02-01T08:00:00.000Z',
+    lastLoginAt: '2026-09-25T09:15:00.000Z'
+  },
+  {
+    id: 'usr_emp_01',
+    email: 'employe@citrine-pricing.cm',
+    name: 'Marc (Opérations)',
+    role: 'employe',
+    active: true,
+    createdAt: '2026-03-01T08:00:00.000Z',
+    lastLoginAt: '2026-09-24T17:00:00.000Z'
   }
 ];
 

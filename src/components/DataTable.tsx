@@ -47,8 +47,8 @@ export function DataTable<T extends Record<string, any>>({
   exportFileName = 'export',
   exportTitle = 'Rapport Citrine Pricing',
   exportSubtitle = '',
-  pageSizeOptions = [25, 50, 100, 250],
-  defaultPageSize = 25,
+  pageSizeOptions = [10, 25, 50, 100],
+  defaultPageSize = 10,
   emptyMessage = 'Aucune donnée disponible.',
   actions,
   isLoading = false

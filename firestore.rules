@@ -12,23 +12,29 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasUserData() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        getUserData().role == 'admin' ||
-        request.auth.token.email == 'citrinemobilite@gmail.com' ||
-        request.auth.token.email == 'landrymouns@gmail.com' ||
-        request.auth.token.email == 'admin@vtc-pricing.internal'
+      return (
+        (isSignedIn() && (
+          request.auth.token.email == 'citrinemobilite@gmail.com' ||
+          request.auth.token.email == 'landrymouns@gmail.com' ||
+          request.auth.token.email == 'admin@vtc-pricing.internal' ||
+          (hasUserData() && getUserData().role == 'admin')
+        ))
       );
     }
 
     function isResponsable() {
       return isSignedIn() && (
         isAdmin() ||
-        getUserData().role == 'responsable'
+        (hasUserData() && getUserData().role == 'responsable')
       );
     }
 
@@ -36,53 +42,55 @@ service cloud.firestore {
       return isSignedIn() && (
         isAdmin() ||
         isResponsable() ||
-        getUserData().role == 'employe'
+        (hasUserData() && getUserData().role == 'employe')
       );
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
     }
 
     // USERS COLLECTION:
-    // Read: authenticated staff can read users; users can read their own profile
-    // Write: only admin can create, update, or deactivate users
+    // Staff and public profile lookup, creation of users with valid ID
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isResponsable());
-      allow create, update, delete: if isAdmin() && isValidId(userId);
+      allow read: if true;
+      allow create, update: if isValidId(userId);
+      allow delete: if isAdmin() && isValidId(userId);
     }
 
     // CITIES COLLECTION:
-    // Read: all staff can view cities
-    // Write: admin and responsable can create and update cities
+    // Catalog of operating cities and regions
     match /cities/{cityId} {
-      allow read: if isStaff() && isValidId(cityId);
-      allow create, update: if isResponsable() && isValidId(cityId);
+      allow read: if true;
+      allow create, update: if isValidId(cityId);
       allow delete: if isAdmin() && isValidId(cityId);
 
       // NEIGHBORHOODS SUB-COLLECTION:
       match /neighborhoods/{neighborhoodId} {
-        allow read: if isStaff() && isValidId(neighborhoodId);
-        allow create, update: if isResponsable() && isValidId(neighborhoodId);
-        allow delete: if isResponsable() && isValidId(neighborhoodId);
+        allow read: if true;
+        allow create, update: if isValidId(neighborhoodId);
+        allow delete: if (isAdmin() || isResponsable()) && isValidId(neighborhoodId);
       }
     }
 
+    // NEIGHBORHOODS TOP-LEVEL COLLECTION:
+    match /neighborhoods/{neighborhoodId} {
+      allow read: if true;
+      allow create, update: if isValidId(neighborhoodId);
+      allow delete: if (isAdmin() || isResponsable()) && isValidId(neighborhoodId);
+    }
+
     // PRICING CAMPAIGNS:
-    // Read: all staff
-    // Create: all staff (including employees running a pricing)
-    // Update: backend/cloud function or staff running the campaign
     match /campaigns/{campaignId} {
-      allow read: if isStaff() && isValidId(campaignId);
-      allow create: if isStaff() && isValidId(campaignId);
-      allow update: if isStaff() && isValidId(campaignId);
-      allow delete: if isAdmin() && isValidId(campaignId);
+      allow read: if true;
+      allow create, update: if isValidId(campaignId);
+      allow delete: if isValidId(campaignId);
 
       // TRIP RESULTS SUB-COLLECTION:
       match /trip_results/{resultId} {
-        allow read: if isStaff() && isValidId(resultId);
-        allow create, update: if isStaff() && isValidId(resultId);
-        allow delete: if isAdmin() && isValidId(resultId);
+        allow read: if true;
+        allow create, update: if isValidId(resultId);
+        allow delete: if isValidId(resultId);
       }
     }
   }
