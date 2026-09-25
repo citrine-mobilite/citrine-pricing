@@ -246,13 +246,6 @@ export const api = {
     return `${BASE_URL}/campaigns/${campaignId}/export`;
   },
 
-  // Trigger 3x/day schedule
-  async triggerScheduledPricing(): Promise<{ success: boolean; triggeredCount: number; cities: string[] }> {
-    const res = await fetch(`${BASE_URL}/cron/trigger-scheduled`, { method: 'POST' });
-    if (!res.ok) throw new Error('Erreur lors du déclenchement automatique.');
-    return res.json();
-  },
-
   // Single Route Test
   async testSingleRoute(data: {
     startLat: number;

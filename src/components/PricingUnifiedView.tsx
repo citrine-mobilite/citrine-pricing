@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { City, Neighborhood, PricingCampaign, TripResult } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { CAMEROON_SLOTS } from '../data/seedData';
 import { DataTable, Column } from './DataTable';
 import { YangoResponseInspectorModal } from './YangoResponseInspectorModal';
 import {
@@ -107,9 +106,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     cityActiveNeighborhoods.length > 1
       ? cityActiveNeighborhoods.length * (cityActiveNeighborhoods.length - 1)
       : 0;
-
-  // Time slot
-  const [selectedSlot, setSelectedSlot] = useState<string>('now');
 
   // Sample Size Selector : Soit Test Rapide (25 trajets) soit Campagne Complète (tous les trajets)
   const [sampleChoice, setSampleChoice] = useState<'25' | 'all'>('25');
@@ -692,21 +688,10 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               </select>
             </div>
 
-            {/* Time slot */}
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={selectedSlot}
-                onChange={(e) => setSelectedSlot(e.target.value)}
-                className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer"
-              >
-                <option value="now">Instantané (Maintenant)</option>
-                {CAMEROON_SLOTS.map((slot) => (
-                  <option key={slot} value={slot}>
-                    Créneau {slot}
-                  </option>
-                ))}
-              </select>
+            {/* Mode Manuel Badge */}
+            <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-200/80 text-amber-900 rounded-lg px-2.5 py-1.5 text-xs font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+              <span>Calcul Manuel Direct</span>
             </div>
 
             {/* Divider */}

@@ -1,19 +1,14 @@
 import React from 'react';
 import {
-  RotateCw,
-  Clock,
   LogOut,
   MapPin,
   Menu
 } from 'lucide-react';
-import { CAMEROON_SLOTS } from '../data/seedData';
 import { useAuth } from '../context/AuthContext';
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onQuickTrigger: () => void;
-  isTriggeringAuto: boolean;
   onToggleMobileMenu?: () => void;
 }
 
@@ -30,8 +25,6 @@ const TAB_TITLES: Record<string, string> = {
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
-  onQuickTrigger,
-  isTriggeringAuto,
   onToggleMobileMenu
 }) => {
   const { user, logout } = useAuth();
@@ -73,22 +66,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Firebase: citrine-pricing</span>
         </div>
 
-        {/* Scheduled Slots indicator */}
-        <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-          <Clock className="w-3.5 h-3.5 text-slate-400" />
-          <span>{CAMEROON_SLOTS.length} cycles / jour programmés</span>
+        {/* Mode Tarification Manuelle Indicator */}
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/80 text-amber-900 text-xs font-medium">
+          <span className="w-2 h-2 rounded-full bg-amber-600" />
+          <span>Mode : Tarification Manuelle</span>
         </div>
-
-        {/* Execute Auto-Cycle Now Button */}
-        <button
-          onClick={onQuickTrigger}
-          disabled={isTriggeringAuto}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 shadow-2xs transition disabled:opacity-50 cursor-pointer"
-          title="Déclencher immédiatement le cycle programmé"
-        >
-          <RotateCw className={`w-3.5 h-3.5 text-slate-500 ${isTriggeringAuto ? 'animate-spin' : ''}`} />
-          <span>{isTriggeringAuto ? 'Exécution...' : 'Déclencher cycle'}</span>
-        </button>
 
         {/* Separator */}
         <div className="h-4 w-px bg-slate-200" />

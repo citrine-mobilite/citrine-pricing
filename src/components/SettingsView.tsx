@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { HeroSettings, YangoSettings } from '../types';
-import { CAMEROON_SLOTS } from '../data/seedData';
 import { api } from '../services/api';
 import { testConnection } from '../firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -22,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'yango' | 'hero' | 'firebase' | 'schedule'>('yango');
+  const [activeTab, setActiveTab] = useState<'yango' | 'hero' | 'firebase'>('yango');
   const [firebaseStatus, setFirebaseStatus] = useState<'testing' | 'connected' | 'error' | null>(null);
 
   const [yangoSettings, setYangoSettings] = useState<YangoSettings>({
@@ -136,18 +135,6 @@ export const SettingsView: React.FC = () => {
           >
             <Flame className="w-3.5 h-3.5 text-amber-500" />
             <span>Firebase</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('schedule')}
-            className={`px-3 py-1.5 font-medium rounded-md transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'schedule'
-                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-slate-500" />
-            <span>Cycles Automatiques</span>
           </button>
         </div>
       </div>
@@ -474,37 +461,6 @@ export const SettingsView: React.FC = () => {
               <span>Connexion établie avec succès avec le projet Firebase <strong>citrine-pricing</strong>.</span>
             </div>
           )}
-        </div>
-      )}
-
-      {/* TAB 4: AUTOMATED SCHEDULES */}
-      {activeTab === 'schedule' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-slate-500" />
-              <span>Cycles Automatiques Journaliers (18 Déclenchements / Jour)</span>
-            </h2>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-200">
-              Automate Cloud Actif
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-500">
-            Le pricing en parallèle (Yango + Hero Cab) se lance automatiquement aux heures suivantes chaque jour :
-          </p>
-
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {CAMEROON_SLOTS.map((slot) => (
-              <div
-                key={slot}
-                className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center"
-              >
-                <div className="text-xs font-semibold text-slate-900 font-mono">{slot}</div>
-                <div className="text-[10px] text-slate-400">Cameroun</div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

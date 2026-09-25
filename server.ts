@@ -639,8 +639,8 @@ app.post('/api/cities', (req: Request, res: Response) => {
       lng: Number(lng) || -4.0082
     },
     autoSchedule: {
-      enabled: autoSchedule?.enabled ?? true,
-      slots: autoSchedule?.slots || ['08:00', '13:00', '18:00']
+      enabled: autoSchedule?.enabled ?? false,
+      slots: autoSchedule?.slots || []
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -1391,60 +1391,13 @@ app.get('/api/campaigns/:id/export', (req: Request, res: Response) => {
   return res.send(csvContent);
 });
 
-// 9. Automated 3x/day schedule trigger endpoint
+// 9. Automated scheduler route (Disabled: 100% manual pricing)
 app.post('/api/cron/trigger-scheduled', async (_req: Request, res: Response) => {
-  const activeCities = cities.filter(c => c.active && c.autoSchedule?.enabled);
-  const triggeredCityNames: string[] = [];
-
-  for (const city of activeCities) {
-    const activeNbs = neighborhoods.filter(n => n.cityId === city.id && n.active);
-    if (activeNbs.length >= 2) {
-      triggeredCityNames.push(city.name);
-
-      // Trigger pricing run
-      const campaignId = `camp_${city.name.toLowerCase().substring(0, 3)}_cron_${Date.now()}`;
-      const totalPairs = activeNbs.length * (activeNbs.length - 1);
-
-      const campaign: PricingCampaign = {
-        id: campaignId,
-        cityId: city.id,
-        cityName: city.name,
-        currency: city.currency,
-        triggerType: 'scheduled',
-        triggeredByUserId: 'cron_scheduler',
-        triggeredByUserName: 'Automate Yango (3x/Jour)',
-        status: 'completed',
-        selectedClasses: ['econom'],
-        totalPairs,
-        completedPairs: totalPairs,
-        failedPairs: 0,
-        startedAt: new Date().toISOString(),
-        finishedAt: new Date().toISOString(),
-        durationSeconds: 15,
-        avgPrice: 2450,
-        minPrice: 950,
-        maxPrice: 4900,
-        avgDistanceKm: 11.2,
-        avgPricePerKm: 219,
-        errorCount: 0,
-        logs: [
-          {
-            timestamp: new Date().toISOString(),
-            level: 'info',
-            message: `Déclencheur automatique 3x/jour exécuté pour ${city.name}.`
-          }
-        ]
-      };
-
-      campaigns.unshift(campaign);
-      city.autoSchedule.lastRunAt = new Date().toISOString();
-    }
-  }
-
   return res.json({
     success: true,
-    triggeredCount: triggeredCityNames.length,
-    cities: triggeredCityNames
+    triggeredCount: 0,
+    cities: [],
+    message: 'Cycles automatiques désactivés. Mode 100% manuel actif.'
   });
 });
 

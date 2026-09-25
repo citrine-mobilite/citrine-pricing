@@ -1,11 +1,7 @@
 import { City, Neighborhood, PricingCampaign, TripResult, User, YangoSettings } from '../types';
 import { getDoualaFullAddressNeighborhoods } from './officialDoualaNeighborhoods';
 
-export const CAMEROON_SLOTS = [
-  '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
-  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
-  '19:00', '19:30', '20:00', '20:30', '21:00', '22:00'
-];
+export const CAMEROON_SLOTS: string[] = [];
 
 export const INITIAL_CITIES: City[] = [
   {
@@ -17,9 +13,9 @@ export const INITIAL_CITIES: City[] = [
     active: true,
     center: { lat: 4.0511, lng: 9.7679 },
     autoSchedule: {
-      enabled: true,
-      slots: CAMEROON_SLOTS,
-      lastRunAt: '2026-09-23T08:00:00.000Z'
+      enabled: false,
+      slots: [],
+      lastRunAt: undefined
     }
   },
   {
@@ -31,9 +27,9 @@ export const INITIAL_CITIES: City[] = [
     active: true,
     center: { lat: 3.8480, lng: 11.5021 },
     autoSchedule: {
-      enabled: true,
-      slots: CAMEROON_SLOTS,
-      lastRunAt: '2026-09-23T08:00:00.000Z'
+      enabled: false,
+      slots: [],
+      lastRunAt: undefined
     }
   }
 ];

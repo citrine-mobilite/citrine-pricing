@@ -31,8 +31,7 @@ function AppContent() {
   const [selectedCityId, setSelectedCityId] = useState<string>('city_douala');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
-  // Quick Trigger & Mobile Menu State
-  const [isTriggeringAuto, setIsTriggeringAuto] = useState<boolean>(false);
+  // Mobile Menu State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   // Campaign selection helper: updates both selectedCampaignId and selectedCityId
@@ -82,20 +81,6 @@ function AppContent() {
     fetchData();
   }, [fetchData]);
 
-  // Handle quick cron trigger from Navbar
-  const handleQuickCron = async () => {
-    setIsTriggeringAuto(true);
-    try {
-      await api.triggerScheduledPricing();
-      await fetchData();
-      setActiveTab('campaigns');
-    } catch (err: any) {
-      alert(err.message || 'Erreur lors du déclenchement du cycle.');
-    } finally {
-      setIsTriggeringAuto(false);
-    }
-  };
-
   const activeCampaigns = campaigns.filter((c) => c.status === 'in_progress');
 
   // Enriched cities for CitiesView
@@ -130,8 +115,6 @@ function AppContent() {
         <Navbar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          onQuickTrigger={handleQuickCron}
-          isTriggeringAuto={isTriggeringAuto}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
 

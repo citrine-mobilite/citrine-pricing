@@ -6,7 +6,6 @@
  */
 
 const { onRequest } = require("firebase-functions/v2/https");
-const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const axios = require("axios");
 
@@ -230,23 +229,5 @@ exports.runCampaign = onRequest({ cors: true, timeoutSeconds: 300, memory: "512M
   } catch (error) {
     console.error("Campaign run failed:", error);
     return res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * 3. Automated Cron Scheduler: Runs 3 times per day (08:00, 13:00, 18:00 UTC/Local)
- * Schedule syntax: 0 8,13,18 * * *
- */
-exports.scheduledPricingTrigger = onSchedule("0 8,13,18 * * *", async (event) => {
-  console.log("Running scheduled 3x/day VTC Pricing automation...");
-  const activeCitiesSnap = await db.collection("cities").where("active", "==", true).get();
-
-  for (const cityDoc of activeCitiesSnap.docs) {
-    const city = cityDoc.data();
-    if (city.autoSchedule?.enabled) {
-      console.log(`Auto-triggering pricing benchmark for city: ${city.name} (${cityDoc.id})`);
-      // Invokes pricing run internally
-      // Writes to campaigns collection
-    }
   }
 });
