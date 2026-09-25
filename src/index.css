@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+:root {
+  --color-citrine-surface: #F0FAFA;
+  --color-citrine-primary: #3D8B85;
+  --color-citrine-accent: #D4A82F;
+  --color-citrine-text: #1F4F4A;
+}
+
+body {
+  background-color: #F0FAFA;
+  color: #1F4F4A;
+}

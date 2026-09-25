@@ -1,0 +1,6 @@
+{
+  "name": "Citrine Pricing - Plateforme VTC Cameroun",
+  "description": "Plateforme interne de gestion du pricing VTC et benchmark concurrentiel multi-classes (Yango vs Hero Cab) au Cameroun (Douala et Yaoundé) : gestion des quartiers, calcul automatisé des trajets par lots parallèles, suivi des campagnes et exports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,267 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Internal platform user with assigned RBAC role (Admin, Responsable, Employe)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user identifier",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User corporate email address",
+          "maxLength": 256
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of staff member",
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "responsable", "employe"],
+          "description": "Role determining access privileges"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Account activation status"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last successful login timestamp"
+        }
+      },
+      "required": ["id", "email", "name", "role", "active", "createdAt"]
+    },
+    "City": {
+      "title": "City",
+      "description": "Operating urban area with distinct pricing and active neighborhoods",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique city identifier",
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "description": "City name (e.g. Abidjan, Douala)",
+          "maxLength": 100
+        },
+        "country": {
+          "type": "string",
+          "description": "Country of operation",
+          "maxLength": 100
+        },
+        "currency": {
+          "type": "string",
+          "description": "ISO currency code (XOF, XAF, GNF, etc.)",
+          "maxLength": 10
+        },
+        "currencySymbol": {
+          "type": "string",
+          "description": "Display currency symbol (e.g. FCFA)",
+          "maxLength": 10
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether city is active for automated or manual pricing"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "name", "country", "currency", "active", "createdAt"]
+    },
+    "Neighborhood": {
+      "title": "Neighborhood",
+      "description": "Geographical landmark / district within a city with GPS coordinates",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique neighborhood identifier",
+          "maxLength": 64
+        },
+        "cityId": {
+          "type": "string",
+          "description": "Parent city identifier",
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "description": "Neighborhood title",
+          "maxLength": 120
+        },
+        "lat": {
+          "type": "number",
+          "description": "WGS84 Latitude coordinate"
+        },
+        "lng": {
+          "type": "number",
+          "description": "WGS84 Longitude coordinate"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether neighborhood is included in current permutation matrix"
+        },
+        "zoneType": {
+          "type": "string",
+          "enum": ["commercial", "residential", "airport", "popular", "center"],
+          "description": "Zone classification"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["id", "cityId", "name", "lat", "lng", "active", "createdAt"]
+    },
+    "PricingCampaign": {
+      "title": "PricingCampaign",
+      "description": "Batch pricing execution benchmark run for a city",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Campaign execution ID",
+          "maxLength": 64
+        },
+        "cityId": {
+          "type": "string",
+          "description": "Target city ID",
+          "maxLength": 64
+        },
+        "cityName": {
+          "type": "string",
+          "description": "Target city name",
+          "maxLength": 100
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code",
+          "maxLength": 10
+        },
+        "triggerType": {
+          "type": "string",
+          "enum": ["manual", "scheduled"],
+          "description": "Execution origin"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed", "error", "cancelled"],
+          "description": "Current processing lifecycle state"
+        },
+        "totalPairs": {
+          "type": "number",
+          "description": "Total N*(N-1) combinations generated"
+        },
+        "completedPairs": {
+          "type": "number",
+          "description": "Number of successfully queried routes"
+        },
+        "failedPairs": {
+          "type": "number",
+          "description": "Number of failed queries"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Start timestamp"
+        }
+      },
+      "required": ["id", "cityId", "cityName", "triggerType", "status", "totalPairs", "startedAt"]
+    },
+    "TripResult": {
+      "title": "TripResult",
+      "description": "Individual pair pricing result fetched from Yango Routestats backend proxy",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique trip result identifier",
+          "maxLength": 128
+        },
+        "campaignId": {
+          "type": "string",
+          "description": "Associated pricing campaign ID",
+          "maxLength": 64
+        },
+        "cityId": {
+          "type": "string",
+          "description": "City ID",
+          "maxLength": 64
+        },
+        "startNeighborhoodName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "endNeighborhoodName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "distanceKm": {
+          "type": "number"
+        },
+        "durationMinutes": {
+          "type": "number"
+        },
+        "price": {
+          "type": "number"
+        },
+        "tariffClass": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "source": {
+          "type": "string",
+          "enum": ["yango_live", "yango_fallback"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["success", "failed"]
+        }
+      },
+      "required": ["id", "campaignId", "cityId", "startNeighborhoodName", "endNeighborhoodName", "price", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Internal staff accounts with RBAC roles"
+    },
+    "/cities/{cityId}": {
+      "schema": { "$ref": "#/entities/City" },
+      "description": "Managed cities"
+    },
+    "/cities/{cityId}/neighborhoods/{neighborhoodId}": {
+      "schema": { "$ref": "#/entities/Neighborhood" },
+      "description": "Active and inactive districts per city"
+    },
+    "/campaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/PricingCampaign" },
+      "description": "Pricing benchmark runs"
+    },
+    "/campaigns/{campaignId}/trip_results/{resultId}": {
+      "schema": { "$ref": "#/entities/TripResult" },
+      "description": "Individual trip pricing data"
+    }
+  }
+}
