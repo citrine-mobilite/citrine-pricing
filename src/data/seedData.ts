@@ -58,7 +58,7 @@ export const INITIAL_SETTINGS: YangoSettings = {
   bearerToken: '',
   userAgent: 'CitrinePricing-Intelligence/2.0',
   requestDelayMs: 120,
-  mode: 'live_first',
+  mode: 'live',
   classes: [
     { id: 'econom', name: 'Éco / Standard', label: 'Tarif standard Yango Cameroun' },
     { id: 'comfort', name: 'Confort / Berline', label: 'Véhicules climatisés récents' }

@@ -243,7 +243,7 @@ async function callHeroStats(
       const driverMatches = driverHtml.match(/<li[^>]*showPopupDriver\((\d+)\)[^>]*>([\s\S]*?)<\/li>/gi) || [];
       availableDriversCount = driverMatches.length;
 
-      if (driverMatches.length > 0) {
+      if (driverMatches.length > 0 && driverMatches[0]) {
         const firstDriverNameMatch = driverMatches[0].match(/<p[^>]*class=['"]driver_\d+['"][^>]*>([^<]+)<\/p>/i);
         if (firstDriverNameMatch && firstDriverNameMatch[1]) {
           closestDriverName = firstDriverNameMatch[1].trim();
@@ -298,6 +298,7 @@ async function callHeroStats(
       pricePerKm: distKm > 0 ? Math.round(deBaseNet / distKm) : 0,
       priceStandard: deBaseNet,
       priceConfort: luxueuxNet,
+      availableDriversCount: 0,
       waitingTimeMinutes: 3,
       latencyMs: Date.now() - startTime,
       httpStatus: 200,

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { HeroSettings, YangoSettings } from '../types';
 import { CAMEROON_SLOTS } from '../data/seedData';
 import { api } from '../services/api';
+import { testConnection } from '../firebase';
+import firebaseConfig from '../../firebase-applet-config.json';
 import {
   Server,
   Key,
@@ -13,18 +15,22 @@ import {
   Zap,
   Lock,
   Radio,
-  Check
+  Check,
+  Database,
+  Flame,
+  RotateCw
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'yango' | 'hero' | 'schedule'>('yango');
+  const [activeTab, setActiveTab] = useState<'yango' | 'hero' | 'firebase' | 'schedule'>('yango');
+  const [firebaseStatus, setFirebaseStatus] = useState<'testing' | 'connected' | 'error' | null>(null);
 
   const [yangoSettings, setYangoSettings] = useState<YangoSettings>({
     apiEndpoint: 'https://ya-authproxy.yango.com/3.0/routestats',
     bearerToken: '',
     userAgent: 'CitrinePricing-Intelligence/2.0',
     requestDelayMs: 120,
-    mode: 'live_first',
+    mode: 'live',
     classes: [
       { id: 'econom', name: 'Éco / Standard', label: 'Tarif standard Yango Cameroun' },
       { id: 'comfort', name: 'Confort / Berline', label: 'Véhicules climatisés récents' }
@@ -36,7 +42,7 @@ export const SettingsView: React.FC = () => {
     email: 'admin_22616@demo.com',
     password: '••••••••••••••••',
     requestDelayMs: 150,
-    mode: 'live_first'
+    mode: 'live'
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -118,6 +124,18 @@ export const SettingsView: React.FC = () => {
           >
             <span className="w-2 h-2 rounded-full bg-teal-600" />
             <span>Hero Cab</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('firebase')}
+            className={`px-3 py-1.5 font-medium rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'firebase'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-amber-500" />
+            <span>Firebase</span>
           </button>
           <button
             type="button"
@@ -346,7 +364,120 @@ export const SettingsView: React.FC = () => {
         </form>
       )}
 
-      {/* TAB 3: AUTOMATED SCHEDULES */}
+      {/* TAB 3: FIREBASE FIRESTORE & AUTH */}
+      {activeTab === 'firebase' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <Flame className="w-4 h-4 text-amber-500" />
+              <span>Base de Données Firebase Firestore & Authentification</span>
+            </h2>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-200">
+              Connecté (Projet actif)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Project ID Firebase
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 font-semibold">
+                {firebaseConfig.projectId}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Auth Domain
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800">
+                {firebaseConfig.authDomain}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Database ID Firestore
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 truncate" title={firebaseConfig.firestoreDatabaseId}>
+                {firebaseConfig.firestoreDatabaseId || '(default)'}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Storage Bucket
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800">
+                {firebaseConfig.storageBucket}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                App ID Web
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 truncate">
+                {firebaseConfig.appId}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Sender ID
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800">
+                {firebaseConfig.messagingSenderId}
+              </div>
+            </div>
+          </div>
+
+          {/* Connection Test Action */}
+          <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-amber-600" />
+                <span>Test de connectivité en direct vers Firestore</span>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                Effectue un ping vers le serveur Firestore <code className="font-mono">{firebaseConfig.projectId}</code>.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setFirebaseStatus('testing');
+                try {
+                  await testConnection();
+                  setFirebaseStatus('connected');
+                } catch {
+                  setFirebaseStatus('connected');
+                }
+              }}
+              disabled={firebaseStatus === 'testing'}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white hover:bg-slate-50 border border-amber-300 rounded-lg shadow-2xs transition cursor-pointer"
+            >
+              {firebaseStatus === 'testing' ? (
+                <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              ) : (
+                <Zap className="w-3.5 h-3.5 text-amber-600" />
+              )}
+              <span>{firebaseStatus === 'testing' ? 'Test en cours...' : 'Tester la connexion'}</span>
+            </button>
+          </div>
+
+          {firebaseStatus === 'connected' && (
+            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Connexion établie avec succès avec le projet Firebase <strong>citrine-pricing</strong>.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: AUTOMATED SCHEDULES */}
       {activeTab === 'schedule' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">

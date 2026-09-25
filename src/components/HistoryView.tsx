@@ -7,7 +7,8 @@ import {
   CheckCircle2,
   RotateCw,
   ArrowRight,
-  Filter
+  Filter,
+  Clock
 } from 'lucide-react';
 
 interface HistoryViewProps {

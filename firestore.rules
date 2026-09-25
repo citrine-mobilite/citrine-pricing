@@ -19,6 +19,7 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         getUserData().role == 'admin' ||
+        request.auth.token.email == 'citrinemobilite@gmail.com' ||
         request.auth.token.email == 'landrymouns@gmail.com' ||
         request.auth.token.email == 'admin@vtc-pricing.internal'
       );

@@ -84,6 +84,9 @@ export interface HeroQuote {
   pricePerKm: number;
   priceStandard?: number;
   priceConfort?: number;
+  priceSuv?: number;
+  priceGrossStandard?: number;
+  priceGrossConfort?: number;
   availableDriversCount: number;
   closestDriverDistanceKm?: number;
   closestDriverName?: string;

@@ -67,6 +67,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Right Controls */}
       <div className="flex items-center gap-3">
         
+        {/* Firebase Connected Indicator */}
+        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Firebase: citrine-pricing</span>
+        </div>
+
         {/* Scheduled Slots indicator */}
         <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 font-medium">
           <Clock className="w-3.5 h-3.5 text-slate-400" />
