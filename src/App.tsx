@@ -57,12 +57,12 @@ function AppContent() {
       setCampaigns(campaignsData);
       setUsers(usersData);
 
-      if (citiesData.length > 0 && !citiesData.some((c) => c.id === selectedCityId)) {
-        setSelectedCityId(citiesData[0].id);
+      if (citiesData.length > 0) {
+        setSelectedCityId((prev) => (citiesData.some((c) => c.id === prev) ? prev : citiesData[0].id));
       }
 
-      if (campaignsData.length > 0 && !selectedCampaignId) {
-        setSelectedCampaignId(campaignsData[0].id);
+      if (campaignsData.length > 0) {
+        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
       }
 
       // Fetch neighborhoods for all cities
@@ -75,7 +75,7 @@ function AppContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCityId, selectedCampaignId]);
+  }, []);
 
   useEffect(() => {
     fetchData();

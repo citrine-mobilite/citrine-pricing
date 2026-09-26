@@ -2020,7 +2020,7 @@ app.post('/api/cron/trigger-scheduled', async (_req: Request, res: Response) => 
 });
 
 // 10. Settings endpoint (Yango & Hero)
-app.get('/api/settings', async (_req: Request, res: Response) => {
+const handleGetYangoSettings = async (_req: Request, res: Response) => {
   if (db) {
     try {
       const snap = await getDoc(doc(db, 'settings', 'yango'));
@@ -2032,9 +2032,9 @@ app.get('/api/settings', async (_req: Request, res: Response) => {
     }
   }
   res.json(yangoSettings);
-});
+};
 
-app.post('/api/settings', async (req: Request, res: Response) => {
+const handlePostYangoSettings = async (req: Request, res: Response) => {
   const { apiEndpoint, bearerToken, userAgent, requestDelayMs, mode } = req.body;
   if (apiEndpoint) yangoSettings.apiEndpoint = apiEndpoint.trim();
   if (bearerToken !== undefined) yangoSettings.bearerToken = bearerToken.trim();
@@ -2058,7 +2058,12 @@ app.post('/api/settings', async (req: Request, res: Response) => {
   }
 
   return res.json({ success: true, settings: yangoSettings });
-});
+};
+
+app.get('/api/settings', handleGetYangoSettings);
+app.get('/api/settings/yango', handleGetYangoSettings);
+app.post('/api/settings', handlePostYangoSettings);
+app.post('/api/settings/yango', handlePostYangoSettings);
 
 app.get('/api/settings/hero', async (_req: Request, res: Response) => {
   if (db) {
@@ -2133,19 +2138,27 @@ app.delete('/api/history/:id', async (req: Request, res: Response) => {
 // ----------------- VITE MIDDLEWARE / STATIC FILES ----------------- //
 
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  const distPath = path.resolve(__dirname, 'dist');
+  const distIndex = path.resolve(distPath, 'index.html');
+  const hasDist = fs.existsSync(distIndex);
+
+  if (process.env.NODE_ENV === 'production' || hasDist) {
+    console.log(`[VTC Pricing Hub] Mode Production: fichiers servis depuis ${distPath}`);
+    app.use(express.static(distPath));
+    app.get('*', (req: Request, res: Response) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: `Endpoint API non trouvé : ${req.method} ${req.path}` });
+      }
+      res.sendFile(distIndex);
+    });
+  } else {
+    console.log(`[VTC Pricing Hub] Mode Développement: middleware Vite actif`);
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
