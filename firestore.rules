@@ -93,5 +93,19 @@ service cloud.firestore {
         allow delete: if isValidId(resultId);
       }
     }
+
+    // SYSTEM SETTINGS (Yango, Hero & General config):
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create, update: if isValidId(settingId);
+      allow delete: if isValidId(settingId);
+    }
+
+    // AUDIT & EXECUTION HISTORY:
+    match /history/{historyId} {
+      allow read: if true;
+      allow create, update: if isValidId(historyId);
+      allow delete: if isValidId(historyId);
+    }
   }
 }

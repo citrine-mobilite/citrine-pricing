@@ -73,23 +73,26 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
     };
   }, [activeCampaign?.id, onRefresh]);
 
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
   const handleCancel = async (id: string) => {
-    if (!confirm('Interrompre cette campagne ?')) return;
+    setCancellingId(id);
     try {
       await api.cancelCampaign(id);
       onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de l’interruption.');
+      console.error('Erreur lors de l’interruption:', err);
+    } finally {
+      setCancellingId(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Supprimer cette campagne et ses relevés archivés ?')) return;
     try {
       await api.deleteCampaign(id);
       onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de la suppression.');
+      console.error('Erreur lors de la suppression:', err);
     }
   };
 
@@ -242,10 +245,11 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           {c.status === 'in_progress' ? (
             <button
               onClick={() => handleCancel(c.id)}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 rounded transition"
+              disabled={cancellingId === c.id}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg shadow-2xs transition cursor-pointer"
             >
-              <StopCircle className="w-3.5 h-3.5" />
-              <span>Arrêter</span>
+              <StopCircle className={`w-3.5 h-3.5 ${cancellingId === c.id ? 'animate-spin' : ''}`} />
+              <span>{cancellingId === c.id ? 'Arrêt...' : 'Arrêter'}</span>
             </button>
           ) : (
             <button

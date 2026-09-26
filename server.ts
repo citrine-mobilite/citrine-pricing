@@ -59,8 +59,57 @@ try {
   console.warn('[Firestore] Avertissement initialisation :', err);
 }
 
-function cleanFirestoreDoc<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v)));
+function cleanFirestoreDoc<T>(input: T): any {
+  function sanitize(val: any, parentIsArray: boolean = false): any {
+    if (val === undefined || val === null) {
+      return null;
+    }
+
+    if (Array.isArray(val)) {
+      if (parentIsArray) {
+        // Nested array inside an array: convert to an array of objects or indexed object
+        // Example: [lng, lat] coordinate inside route array -> { lng: val[0], lat: val[1] }
+        if (val.length === 2 && typeof val[0] === 'number' && typeof val[1] === 'number') {
+          return { lng: val[0], lat: val[1] };
+        }
+        return val.reduce((acc: Record<string, any>, item, idx) => {
+          acc[`_${idx}`] = sanitize(item, false);
+          return acc;
+        }, {});
+      }
+
+      return val.map((item) => {
+        if (Array.isArray(item)) {
+          if (item.length === 2 && typeof item[0] === 'number' && typeof item[1] === 'number') {
+            return { lng: item[0], lat: item[1] };
+          }
+          return item.reduce((acc: Record<string, any>, sub, idx) => {
+            acc[`_${idx}`] = sanitize(sub, false);
+            return acc;
+          }, {});
+        }
+        return sanitize(item, true);
+      });
+    }
+
+    if (val instanceof Date) {
+      return val.toISOString();
+    }
+
+    if (typeof val === 'object') {
+      const cleaned: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) {
+          cleaned[k] = sanitize(v, false);
+        }
+      }
+      return cleaned;
+    }
+
+    return val;
+  }
+
+  return sanitize(input, false);
 }
 
 // Persistent database cache (synced with Firestore)
@@ -112,11 +161,59 @@ async function syncFromFirestore() {
       campaigns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
       console.log(`[Firestore] ${campaigns.length} campagnes chargées depuis Firestore.`);
     }
+
+    // 5. Settings
+    const yangoSnap = await getDoc(doc(db, 'settings', 'yango'));
+    if (yangoSnap.exists()) {
+      yangoSettings = { ...yangoSettings, ...yangoSnap.data() };
+      console.log('[Firestore] Paramètres Yango chargés depuis Firestore.');
+    }
+    const heroSnap = await getDoc(doc(db, 'settings', 'hero'));
+    if (heroSnap.exists()) {
+      heroSettings = { ...heroSettings, ...heroSnap.data() };
+      console.log('[Firestore] Paramètres Hero chargés depuis Firestore.');
+    }
+
+    // 6. History
+    const historySnap = await getDocs(collection(db, 'history'));
+    if (!historySnap.empty) {
+      historyRecords = historySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      historyRecords.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      console.log(`[Firestore] ${historyRecords.length} événements d'historique chargés.`);
+    }
   } catch (err) {
     console.warn('[Firestore] Erreur lors de la synchronisation initiale :', err);
   }
 }
 syncFromFirestore();
+
+let historyRecords: any[] = [];
+
+async function recordHistory(record: {
+  action: string;
+  eventType: 'campaign' | 'system' | 'settings' | 'users' | 'neighborhoods' | 'cities';
+  title: string;
+  description?: string;
+  performedBy?: string;
+  performedByName?: string;
+  status?: 'success' | 'failed' | 'in_progress' | 'cancelled';
+  metadata?: Record<string, any>;
+}) {
+  const item = {
+    id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    status: 'success',
+    ...record
+  };
+  historyRecords.unshift(item);
+  if (db) {
+    try {
+      await setDoc(doc(db, 'history', item.id), cleanFirestoreDoc(item));
+    } catch (e) {
+      console.warn('[Firestore] recordHistory error:', e);
+    }
+  }
+}
 
 let yangoSettings: YangoSettings = {
   apiEndpoint: 'https://ya-authproxy.yango.com/3.0/routestats',
@@ -139,7 +236,11 @@ let heroSettings: HeroSettings = {
 };
 
 // Map of running campaign abort signals
-const activeCampaignTasks = new Map<string, { cancelled: boolean }>();
+interface ActiveTask {
+  cancelled: boolean;
+  abortController: AbortController;
+}
+const activeCampaignTasks = new Map<string, ActiveTask>();
 
 interface TariffQuoteServer {
   tariffClass: string;
@@ -187,8 +288,21 @@ async function callHeroStats(
   tariffClass: string = 'econom',
   cityCurrency: string = 'XAF',
   originName: string = 'Départ',
-  destName: string = 'Destination'
+  destName: string = 'Destination',
+  signal?: AbortSignal
 ): Promise<HeroQuote> {
+  if (signal?.aborted) {
+    return {
+      success: false,
+      price: 0,
+      priceFormatted: 'Annulé',
+      pricePerKm: 0,
+      availableDriversCount: 0,
+      waitingTimeMinutes: 0,
+      source: 'hero_live'
+    };
+  }
+
   const startTime = Date.now();
   let httpStatus = 200;
   let rawResponse: any = null;
@@ -208,6 +322,10 @@ async function callHeroStats(
 
   try {
     const controller = new AbortController();
+    const onParentAbort = () => controller.abort();
+    if (signal) {
+      signal.addEventListener('abort', onParentAbort, { once: true });
+    }
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
     // 1. Appel direct du endpoint officiel HeroCab (cx-ajax_booking_details.php avec type=getVehicles)
@@ -392,8 +510,27 @@ async function callYangoRoutestats(
   endLat: number,
   endLng: number,
   tariffClass: string = 'econom',
-  cityCurrency: string = 'XAF'
+  cityCurrency: string = 'XAF',
+  signal?: AbortSignal
 ): Promise<YangoStatsResult> {
+  if (signal?.aborted) {
+    return {
+      success: false,
+      source: 'yango_live',
+      latencyMs: 0,
+      distanceMeters: 0,
+      distanceKm: 0,
+      durationSeconds: 0,
+      durationMinutes: 0,
+      price: 0,
+      priceFormatted: 'Annulé',
+      pricePerKm: 0,
+      classes: {},
+      availableClasses: [],
+      errorMessage: 'Cancelled'
+    };
+  }
+
   const payload = {
     route: [
       [startLng, startLat],
@@ -410,6 +547,10 @@ async function callYangoRoutestats(
 
   try {
     const controller = new AbortController();
+    const onParentAbort = () => controller.abort();
+    if (signal) {
+      signal.addEventListener('abort', onParentAbort, { once: true });
+    }
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
     const headers: Record<string, string> = {
@@ -663,6 +804,13 @@ app.post('/api/users', async (req: Request, res: Response) => {
   if (db) {
     try {
       await setDoc(doc(db, 'users', newUser.id), cleanFirestoreDoc(newUser));
+      await recordHistory({
+        action: 'USER_CREATED',
+        eventType: 'users',
+        title: `Nouvel utilisateur créé : ${newUser.name}`,
+        description: `Email : ${newUser.email}, Rôle : ${newUser.role}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] create user error:', e);
     }
@@ -686,6 +834,13 @@ app.put('/api/users/:id', async (req: Request, res: Response) => {
   if (db) {
     try {
       await setDoc(doc(db, 'users', user.id), cleanFirestoreDoc(user), { merge: true });
+      await recordHistory({
+        action: 'USER_UPDATED',
+        eventType: 'users',
+        title: `Utilisateur modifié : ${user.name}`,
+        description: `Rôle : ${user.role}, Actif : ${user.active ? 'Oui' : 'Non'}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] update user error:', e);
     }
@@ -696,6 +851,8 @@ app.put('/api/users/:id', async (req: Request, res: Response) => {
 
 app.delete('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const targetUser = users.find(u => u.id === id);
+  const userName = targetUser ? targetUser.name : id;
   const index = users.findIndex(u => u.id === id);
   if (index === -1) {
     return res.status(404).json({ error: 'Utilisateur introuvable.' });
@@ -708,6 +865,12 @@ app.delete('/api/users/:id', async (req: Request, res: Response) => {
   if (db) {
     try {
       await deleteDoc(doc(db, 'users', id));
+      await recordHistory({
+        action: 'USER_DELETED',
+        eventType: 'users',
+        title: `Utilisateur supprimé : ${userName}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] delete user error:', e);
     }
@@ -773,6 +936,13 @@ app.post('/api/cities', async (req: Request, res: Response) => {
   if (db) {
     try {
       await setDoc(doc(db, 'cities', newCity.id), cleanFirestoreDoc(newCity));
+      await recordHistory({
+        action: 'CITY_CREATED',
+        eventType: 'cities',
+        title: `Nouvelle ville créée : ${newCity.name}`,
+        description: `Pays : ${newCity.country}, Devise : ${newCity.currency}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] create city error:', e);
     }
@@ -801,6 +971,13 @@ app.put('/api/cities/:id', async (req: Request, res: Response) => {
   if (db) {
     try {
       await setDoc(doc(db, 'cities', city.id), cleanFirestoreDoc(city), { merge: true });
+      await recordHistory({
+        action: 'CITY_UPDATED',
+        eventType: 'cities',
+        title: `Ville mise à jour : ${city.name}`,
+        description: `État : ${city.active ? 'Actif' : 'Inactif'}, Devise : ${city.currency}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] update city error:', e);
     }
@@ -811,12 +988,21 @@ app.put('/api/cities/:id', async (req: Request, res: Response) => {
 
 app.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const targetCity = cities.find(c => c.id === id);
+  const cityName = targetCity ? targetCity.name : id;
   cities = cities.filter(c => c.id !== id);
   neighborhoods = neighborhoods.filter(n => n.cityId !== id);
 
   if (db) {
     try {
       await deleteDoc(doc(db, 'cities', id));
+      await recordHistory({
+        action: 'CITY_DELETED',
+        eventType: 'cities',
+        title: `Ville supprimée : ${cityName}`,
+        description: `La ville et ses quartiers ont été retirés de la base.`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] delete city error:', e);
     }
@@ -876,6 +1062,13 @@ app.post('/api/neighborhoods', async (req: Request, res: Response) => {
         setDoc(doc(db, 'neighborhoods', newNeighborhood.id), cleaned),
         setDoc(doc(db, 'cities', cityId, 'neighborhoods', newNeighborhood.id), cleaned)
       ]);
+      await recordHistory({
+        action: 'NEIGHBORHOOD_CREATED',
+        eventType: 'neighborhoods',
+        title: `Quartier ajouté : ${newNeighborhood.name}`,
+        description: `Ville : ${city.name} (${newNeighborhood.lat.toFixed(4)}, ${newNeighborhood.lng.toFixed(4)})`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] create neighborhood error:', e);
     }
@@ -905,6 +1098,13 @@ app.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
         setDoc(doc(db, 'neighborhoods', nb.id), cleaned, { merge: true }),
         setDoc(doc(db, 'cities', nb.cityId, 'neighborhoods', nb.id), cleaned, { merge: true })
       ]);
+      await recordHistory({
+        action: 'NEIGHBORHOOD_UPDATED',
+        eventType: 'neighborhoods',
+        title: `Quartier mis à jour : ${nb.name}`,
+        description: `Actif : ${nb.active ? 'Oui' : 'Non'}, Zone : ${nb.zoneType || 'commercial'}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] update neighborhood error:', e);
     }
@@ -916,6 +1116,7 @@ app.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
 app.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const targetNb = neighborhoods.find(n => n.id === id);
+  const nbName = targetNb ? targetNb.name : id;
   neighborhoods = neighborhoods.filter(n => n.id !== id);
 
   if (db) {
@@ -925,6 +1126,12 @@ app.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
         promises.push(deleteDoc(doc(db, 'cities', targetNb.cityId, 'neighborhoods', id)));
       }
       await Promise.all(promises);
+      await recordHistory({
+        action: 'NEIGHBORHOOD_DELETED',
+        eventType: 'neighborhoods',
+        title: `Quartier supprimé : ${nbName}`,
+        status: 'success'
+      });
     } catch (e) {
       console.warn('[Firestore] delete neighborhood error:', e);
     }
@@ -1092,8 +1299,19 @@ app.post('/api/routestats', async (req: Request, res: Response) => {
 });
 
 // 6. Campaign Management
-app.get('/api/campaigns', (req: Request, res: Response) => {
+app.get('/api/campaigns', async (req: Request, res: Response) => {
   const { cityId } = req.query;
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'campaigns'));
+      if (!snap.empty) {
+        campaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+      }
+    } catch (e) {
+      console.warn('[Firestore] get campaigns error:', e);
+    }
+  }
+
   let list = campaigns;
   if (cityId) {
     list = list.filter(c => c.cityId === cityId);
@@ -1103,8 +1321,20 @@ app.get('/api/campaigns', (req: Request, res: Response) => {
   return res.json(list);
 });
 
-app.get('/api/campaigns/:id', (req: Request, res: Response) => {
-  const campaign = campaigns.find(c => c.id === req.params.id);
+app.get('/api/campaigns/:id', async (req: Request, res: Response) => {
+  let campaign = campaigns.find(c => c.id === req.params.id);
+  if (!campaign && db) {
+    try {
+      const d = await getDoc(doc(db, 'campaigns', req.params.id));
+      if (d.exists()) {
+        campaign = { id: d.id, ...d.data() } as PricingCampaign;
+        campaigns.unshift(campaign);
+      }
+    } catch (e) {
+      console.warn('[Firestore] get campaign error:', e);
+    }
+  }
+
   if (!campaign) {
     return res.status(404).json({ error: 'Campagne introuvable.' });
   }
@@ -1206,7 +1436,10 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
   };
 
   campaigns.unshift(campaign);
-  activeCampaignTasks.set(campaignId, { cancelled: false });
+  const taskAbortController = new AbortController();
+  activeCampaignTasks.set(campaignId, { cancelled: false, abortController: taskAbortController });
+
+  console.log(`[Cache Mémoire] Campagne ${campaignId} initialisée en local. Traitement 100% en cache.`);
 
   // Run async background parallel processing of pairs via high-throughput Worker Pool
   (async () => {
@@ -1277,7 +1510,10 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
     // Worker prenant dynamiquement un lot de 500 et enchaînant sur le lot suivant dès qu'il termine
     const runLotWorker = async (workerId: number) => {
       while (nextChunkIndex < chunks.length) {
-        if (taskState?.cancelled) break;
+        if (taskState?.cancelled || (campaign.status as any) === 'cancelled') {
+          nextChunkIndex = chunks.length;
+          break;
+        }
 
         const currentChunk = chunks[nextChunkIndex++];
         if (!currentChunk) break;
@@ -1291,16 +1527,22 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
         // Traitement parallèle des requêtes à l'intérieur du lot de 500 (rafales de 10 requêtes simultanées)
         const SUB_CONCURRENCY = 10;
         for (let pIdx = 0; pIdx < currentChunk.pairs.length; pIdx += SUB_CONCURRENCY) {
-          if (taskState?.cancelled) break;
+          if (taskState?.cancelled || (campaign.status as any) === 'cancelled') {
+            nextChunkIndex = chunks.length;
+            break;
+          }
           const subBatch = currentChunk.pairs.slice(pIdx, pIdx + SUB_CONCURRENCY);
 
           await Promise.all(
             subBatch.map(async ({ origin, dest }) => {
+              if (taskState?.cancelled || (campaign.status as any) === 'cancelled') return;
               const tariff = selectedClasses[0] || 'econom';
               const [stats, heroStats] = await Promise.all([
-                callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency),
-                callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency)
+                callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency, taskState?.abortController.signal),
+                callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency, origin.name, dest.name, taskState?.abortController.signal)
               ]);
+
+              if (taskState?.cancelled || (campaign.status as any) === 'cancelled') return;
 
               if (stats.success) {
                 completed++;
@@ -1324,7 +1566,7 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
                 else if (cheaperProvider === 'hero') heroCheaperCount++;
                 else equalCount++;
 
-                // Statistiques par classe
+                // Statistiques par classe au fur et à mesure
                 if (stats.classes) {
                   for (const [k, qRaw] of Object.entries(stats.classes)) {
                     const q = qRaw as TariffQuoteServer;
@@ -1410,7 +1652,11 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
                     distanceKm: stats.distanceKm,
                     durationMinutes: stats.durationMinutes
                   },
-                  requestPayload: stats.requestPayload,
+                  requestPayload: {
+                    startCoords: { lat: origin.lat, lng: origin.lng },
+                    endCoords: { lat: dest.lat, lng: dest.lng },
+                    selectedClass: tariff
+                  },
                   httpStatus: stats.httpStatus,
                   apiCallDetails: {
                     endpoint: yangoSettings.apiEndpoint,
@@ -1429,8 +1675,28 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
                 campaign.errorCount = (campaign.errorCount || 0) + 1;
               }
 
+              // Mise à jour continue des métriques et moyennes en temps réel
               campaign.completedPairs = completed;
               campaign.failedPairs = failed;
+              campaign.avgPrice = completed > 0 ? Math.round(totalPrice / completed) : 0;
+              campaign.minPrice = minP === Infinity ? 0 : minP;
+              campaign.maxPrice = maxP === -Infinity ? 0 : maxP;
+              campaign.avgDistanceKm = completed > 0 ? Number((totalDistKm / completed).toFixed(2)) : 0;
+              campaign.avgPricePerKm = campaign.avgDistanceKm > 0 ? Math.round(campaign.avgPrice / campaign.avgDistanceKm) : 0;
+              campaign.durationSeconds = Math.max(1, Math.round((Date.now() - new Date(campaign.startedAt).getTime()) / 1000));
+              campaign.heroStats = {
+                avgPrice: completed > 0 ? Math.round(totalHeroPrice / completed) : 0,
+                minPrice: minHeroP === Infinity ? 0 : minHeroP,
+                maxPrice: maxHeroP === -Infinity ? 0 : maxHeroP,
+                avgDriversCount: completed > 0 ? Number((totalHeroDrivers / completed).toFixed(1)) : 0,
+                avgClosestDriverDistanceKm: completed > 0 ? Number((totalClosestDist / completed).toFixed(2)) : 0
+              };
+              campaign.deltaStats = {
+                yangoCheaperCount,
+                heroCheaperCount,
+                equalCount,
+                avgDeltaFcfa: completed > 0 ? Math.round(totalDelta / completed) : 0
+              };
             })
           );
         }
@@ -1446,7 +1712,7 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
       }
     };
 
-    // Lancement simultané des 20 workers
+    // Lancement simultané des workers
     const activeWorkers = Array.from({ length: NUM_PARALLEL_WORKERS }, (_, i) => runLotWorker(i + 1));
     await Promise.all(activeWorkers);
 
@@ -1497,6 +1763,16 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
       city.autoSchedule.lastRunAt = campaign.finishedAt;
     }
 
+    // Persist final completed campaign to Firestore in ONE SINGLE REQUEST (Zero intermediate writes)
+    if (db) {
+      try {
+        await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
+        console.log(`[Firestore Quota Optimisé] Campagne ${campaignId} enregistrée en 1 SEULE requête Firestore.`);
+      } catch (e) {
+        console.warn('[Firestore] final single campaign save error:', e);
+      }
+    }
+
     activeCampaignTasks.delete(campaignId);
   })();
 
@@ -1508,7 +1784,7 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/campaigns/:id/cancel', (req: Request, res: Response) => {
+app.post('/api/campaigns/:id/cancel', async (req: Request, res: Response) => {
   const { id } = req.params;
   const campaign = campaigns.find(c => c.id === id);
   if (!campaign) {
@@ -1518,36 +1794,124 @@ app.post('/api/campaigns/:id/cancel', (req: Request, res: Response) => {
   const task = activeCampaignTasks.get(id);
   if (task) {
     task.cancelled = true;
+    try {
+      task.abortController.abort();
+    } catch {
+      // ignore
+    }
   }
   campaign.status = 'cancelled';
+  campaign.finishedAt = new Date().toISOString();
+  if (campaign.startedAt) {
+    campaign.durationSeconds = Math.max(
+      1,
+      Math.round((new Date(campaign.finishedAt).getTime() - new Date(campaign.startedAt).getTime()) / 1000)
+    );
+  }
   (campaign.logs ??= []).push({
     timestamp: new Date().toISOString(),
     level: 'warn',
-    message: 'Arrêt forcé demandé.'
+    message: 'Arrêt forcé immédiat exécuté.'
   });
+
+  if (db) {
+    try {
+      await setDoc(doc(db, 'campaigns', id), cleanFirestoreDoc(campaign), { merge: true });
+      await recordHistory({
+        action: 'CAMPAIGN_CANCELLED',
+        eventType: 'campaign',
+        title: `Arrêt forcé de la campagne : ${campaign.cityName}`,
+        description: `Progression interrompue immédiatement à ${campaign.completedPairs}/${campaign.totalPairs} trajets.`,
+        status: 'cancelled'
+      });
+    } catch (e) {
+      console.warn('[Firestore] cancel campaign error:', e);
+    }
+  }
 
   return res.json({ success: true, campaign });
 });
 
-app.delete('/api/campaigns', (_req: Request, res: Response) => {
+app.delete('/api/campaigns', async (_req: Request, res: Response) => {
+  const oldCampaigns = [...campaigns];
   campaigns = [];
   tripResults = [];
+
+  if (db && oldCampaigns.length > 0) {
+    try {
+      for (const c of oldCampaigns) {
+        await deleteDoc(doc(db, 'campaigns', c.id));
+      }
+      await recordHistory({
+        action: 'ALL_CAMPAIGNS_DELETED',
+        eventType: 'campaign',
+        title: `Toutes les campagnes ont été réinitialisées`,
+        description: `${oldCampaigns.length} campagnes supprimées de Firestore.`,
+        status: 'success'
+      });
+    } catch (e) {
+      console.warn('[Firestore] delete all campaigns error:', e);
+    }
+  }
+
   return res.json({ success: true, message: 'Toutes les campagnes et résultats ont été réinitialisés.' });
 });
 
-app.delete('/api/campaigns/:id', (req: Request, res: Response) => {
+app.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const targetCamp = campaigns.find(c => c.id === id);
+  const campName = targetCamp ? `${targetCamp.cityName} (${targetCamp.startedAt})` : id;
   campaigns = campaigns.filter(c => c.id !== id);
   tripResults = tripResults.filter(t => t.campaignId !== id);
+
+  if (db) {
+    try {
+      await deleteDoc(doc(db, 'campaigns', id));
+      const subSnap = await getDocs(collection(db, 'campaigns', id, 'trip_results'));
+      if (!subSnap.empty) {
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < subSnap.docs.length; i += BATCH_SIZE) {
+          const chunk = subSnap.docs.slice(i, i + BATCH_SIZE);
+          const batch = writeBatch(db);
+          for (const d of chunk) {
+            batch.delete(doc(db, 'campaigns', id, 'trip_results', d.id));
+          }
+          await batch.commit();
+        }
+      }
+      await recordHistory({
+        action: 'CAMPAIGN_DELETED',
+        eventType: 'campaign',
+        title: `Campagne supprimée de Firestore`,
+        description: `Campagne ${campName} et ses relevés de prix supprimés.`,
+        status: 'success'
+      });
+    } catch (e) {
+      console.warn('[Firestore] delete campaign error:', e);
+    }
+  }
+
   return res.json({ success: true, message: 'Campagne et résultats archivés supprimés.' });
 });
 
 // 7. Trip results query
-app.get('/api/campaigns/:id/results', (req: Request, res: Response) => {
+app.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { startNeighborhood, endNeighborhood, minPrice, maxPrice, search } = req.query;
 
   let results = tripResults.filter(t => t.campaignId === id);
+
+  if (results.length === 0 && db) {
+    try {
+      const snap = await getDocs(collection(db, 'campaigns', id, 'trip_results'));
+      if (!snap.empty) {
+        results = snap.docs.map(d => ({ id: d.id, ...d.data() } as TripResult));
+        tripResults = tripResults.concat(results);
+      }
+    } catch (e) {
+      console.warn('[Firestore] get trip results error:', e);
+    }
+  }
 
   if (startNeighborhood) {
     results = results.filter(t => t.startNeighborhoodId === startNeighborhood || t.startNeighborhoodName === startNeighborhood);
@@ -1656,11 +2020,21 @@ app.post('/api/cron/trigger-scheduled', async (_req: Request, res: Response) => 
 });
 
 // 10. Settings endpoint (Yango & Hero)
-app.get('/api/settings', (_req: Request, res: Response) => {
+app.get('/api/settings', async (_req: Request, res: Response) => {
+  if (db) {
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'yango'));
+      if (snap.exists()) {
+        yangoSettings = { ...yangoSettings, ...snap.data() };
+      }
+    } catch (e) {
+      console.warn('[Firestore] get yango settings error:', e);
+    }
+  }
   res.json(yangoSettings);
 });
 
-app.post('/api/settings', (req: Request, res: Response) => {
+app.post('/api/settings', async (req: Request, res: Response) => {
   const { apiEndpoint, bearerToken, userAgent, requestDelayMs, mode } = req.body;
   if (apiEndpoint) yangoSettings.apiEndpoint = apiEndpoint.trim();
   if (bearerToken !== undefined) yangoSettings.bearerToken = bearerToken.trim();
@@ -1668,14 +2042,39 @@ app.post('/api/settings', (req: Request, res: Response) => {
   if (requestDelayMs !== undefined) yangoSettings.requestDelayMs = Math.max(50, Number(requestDelayMs));
   if (mode !== undefined) yangoSettings.mode = mode;
 
+  if (db) {
+    try {
+      await setDoc(doc(db, 'settings', 'yango'), cleanFirestoreDoc(yangoSettings), { merge: true });
+      await recordHistory({
+        action: 'SETTINGS_YANGO_UPDATED',
+        eventType: 'settings',
+        title: 'Mise à jour des paramètres Yango',
+        description: `Mode: ${yangoSettings.mode}, Délai: ${yangoSettings.requestDelayMs}ms, Classes: ${yangoSettings.classes?.length || 0}`,
+        status: 'success'
+      });
+    } catch (e) {
+      console.warn('[Firestore] save yango settings error:', e);
+    }
+  }
+
   return res.json({ success: true, settings: yangoSettings });
 });
 
-app.get('/api/settings/hero', (_req: Request, res: Response) => {
+app.get('/api/settings/hero', async (_req: Request, res: Response) => {
+  if (db) {
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'hero'));
+      if (snap.exists()) {
+        heroSettings = { ...heroSettings, ...snap.data() };
+      }
+    } catch (e) {
+      console.warn('[Firestore] get hero settings error:', e);
+    }
+  }
   res.json(heroSettings);
 });
 
-app.post('/api/settings/hero', (req: Request, res: Response) => {
+app.post('/api/settings/hero', async (req: Request, res: Response) => {
   const { apiEndpoint, email, password, requestDelayMs, mode } = req.body;
 
   if (apiEndpoint) heroSettings.apiEndpoint = apiEndpoint.trim();
@@ -1684,7 +2083,51 @@ app.post('/api/settings/hero', (req: Request, res: Response) => {
   if (requestDelayMs !== undefined) heroSettings.requestDelayMs = Math.max(50, Number(requestDelayMs));
   if (mode !== undefined) heroSettings.mode = mode;
 
+  if (db) {
+    try {
+      await setDoc(doc(db, 'settings', 'hero'), cleanFirestoreDoc(heroSettings), { merge: true });
+      await recordHistory({
+        action: 'SETTINGS_HERO_UPDATED',
+        eventType: 'settings',
+        title: 'Mise à jour des paramètres Hero',
+        description: `Mode: ${heroSettings.mode}, Délai: ${heroSettings.requestDelayMs}ms`,
+        status: 'success'
+      });
+    } catch (e) {
+      console.warn('[Firestore] save hero settings error:', e);
+    }
+  }
+
   return res.json({ success: true, settings: heroSettings });
+});
+
+// 11. History & Audit Trail endpoint
+app.get('/api/history', async (_req: Request, res: Response) => {
+  if (db) {
+    try {
+      const historySnap = await getDocs(collection(db, 'history'));
+      if (!historySnap.empty) {
+        historyRecords = historySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        historyRecords.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      }
+    } catch (e) {
+      console.warn('[Firestore] get history error:', e);
+    }
+  }
+  return res.json(historyRecords);
+});
+
+app.delete('/api/history/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  historyRecords = historyRecords.filter(h => h.id !== id);
+  if (db) {
+    try {
+      await deleteDoc(doc(db, 'history', id));
+    } catch (e) {
+      console.warn('[Firestore] delete history error:', e);
+    }
+  }
+  return res.json({ success: true, message: 'Entrée d’historique supprimée.' });
 });
 
 // ----------------- VITE MIDDLEWARE / STATIC FILES ----------------- //

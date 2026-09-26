@@ -33,12 +33,16 @@ export interface City {
 export interface Neighborhood {
   id: string;
   cityId: string;
+  cityName?: string;
   name: string;
   lat: number;
   lng: number;
   active: boolean;
   zoneType?: 'commercial' | 'residential' | 'airport' | 'popular' | 'center';
+  fullAddress?: string;
+  district?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export type CampaignStatus = 'pending' | 'in_progress' | 'completed' | 'error' | 'cancelled';
@@ -252,4 +256,17 @@ export interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+}
+
+export interface HistoryRecord {
+  id: string;
+  action: string;
+  eventType: 'campaign' | 'system' | 'settings' | 'users' | 'neighborhoods' | 'cities';
+  title: string;
+  description?: string;
+  performedBy?: string;
+  performedByName?: string;
+  timestamp: string;
+  status?: 'success' | 'failed' | 'in_progress' | 'cancelled';
+  metadata?: Record<string, any>;
 }

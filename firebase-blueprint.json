@@ -240,6 +240,70 @@
         }
       },
       "required": ["id", "campaignId", "cityId", "startNeighborhoodName", "endNeighborhoodName", "price", "status"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "API connection and pricing configuration for Yango, Hero and General system settings",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Setting identifier (e.g. yango, hero, general)"
+        },
+        "apiEndpoint": {
+          "type": "string"
+        },
+        "bearerToken": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "requestDelayMs": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "updatedAt"]
+    },
+    "HistoryRecord": {
+      "title": "HistoryRecord",
+      "description": "Audit trail log and historical execution record for pricing operations",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "eventType": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "performedBy": {
+          "type": "string"
+        },
+        "performedByName": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "action", "title", "timestamp"]
     }
   },
   "firestore": {
@@ -255,13 +319,25 @@
       "schema": { "$ref": "#/entities/Neighborhood" },
       "description": "Active and inactive districts per city"
     },
+    "/neighborhoods/{neighborhoodId}": {
+      "schema": { "$ref": "#/entities/Neighborhood" },
+      "description": "Global neighborhood catalogue"
+    },
     "/campaigns/{campaignId}": {
       "schema": { "$ref": "#/entities/PricingCampaign" },
-      "description": "Pricing benchmark runs"
+      "description": "Pricing benchmark runs (immutable execution records)"
     },
     "/campaigns/{campaignId}/trip_results/{resultId}": {
       "schema": { "$ref": "#/entities/TripResult" },
       "description": "Individual trip pricing data"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SystemSettings" },
+      "description": "Platform settings for Yango, Hero and Global configurations"
+    },
+    "/history/{historyId}": {
+      "schema": { "$ref": "#/entities/HistoryRecord" },
+      "description": "Audit and execution history log records"
     }
   }
 }

@@ -81,6 +81,23 @@ function AppContent() {
     fetchData();
   }, [fetchData]);
 
+  // Live polling for running campaigns so UI never hangs or spins indefinitely
+  useEffect(() => {
+    const hasActiveCampaign = campaigns.some((c) => c.status === 'in_progress');
+    if (!hasActiveCampaign) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const updatedCampaigns = await api.getCampaigns();
+        setCampaigns(updatedCampaigns);
+      } catch (err) {
+        console.error('Error polling active campaigns:', err);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [campaigns]);
+
   const activeCampaigns = campaigns.filter((c) => c.status === 'in_progress');
 
   // Enriched cities for CitiesView
@@ -153,10 +170,10 @@ function AppContent() {
                     selectedCampaignId={selectedCampaignId}
                     onSelectCampaignId={setSelectedCampaignId}
                     campaigns={campaigns}
+                    onRefresh={fetchData}
                     onCampaignStarted={(campId) => {
                       setSelectedCampaignId(campId);
                       fetchData();
-                      setActiveTab('campaigns');
                     }}
                   />
                 )}

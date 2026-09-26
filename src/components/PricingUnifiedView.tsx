@@ -17,7 +17,9 @@ import {
   Layers,
   Sparkles,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  StopCircle,
+  Activity
 } from 'lucide-react';
 
 interface PricingUnifiedViewProps {
@@ -29,6 +31,7 @@ interface PricingUnifiedViewProps {
   onSelectCampaignId?: (campaignId: string) => void;
   campaigns: PricingCampaign[];
   onCampaignStarted: (campaignId: string) => void;
+  onRefresh?: () => void;
 }
 
 export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
@@ -39,9 +42,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   selectedCampaignId: propSelectedCampaignId,
   onSelectCampaignId,
   campaigns,
-  onCampaignStarted
+  onCampaignStarted,
+  onRefresh
 }) => {
   const { user } = useAuth();
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Active city campaigns
   const cityCampaigns = useMemo(
@@ -165,29 +170,35 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       api
         .getCampaignResults(activeCampaignId)
         .then((data) => {
-          if (isMounted) setTrips(data);
+          if (isMounted) {
+            setTrips(data);
+            setIsLoadingTrips(false);
+          }
         })
-        .catch((err) => console.error('Error loading trips:', err));
+        .catch((err) => {
+          console.error('Error loading trips:', err);
+          if (isMounted) setIsLoadingTrips(false);
+        });
     };
 
     setIsLoadingTrips(true);
     fetchTrips();
-    setIsLoadingTrips(false);
 
-    // Polling actif toutes les 2 secondes si la campagne est en cours d'exécution
+    // Polling actif toutes les 1 secondes si la campagne est en cours d'exécution
     const activeCamp = campaigns.find(c => c.id === activeCampaignId);
     let intervalId: any = null;
     if (activeCamp?.status === 'in_progress') {
       intervalId = setInterval(() => {
         fetchTrips();
-      }, 2000);
+        if (onRefresh) onRefresh();
+      }, 1000);
     }
 
     return () => {
       isMounted = false;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [activeCampaignId, campaigns]);
+  }, [activeCampaignId, campaigns, onRefresh]);
 
   // Launch pricing handler (executes Yango and Hero in parallel)
   const handleLaunch = async (overrideLimit: number | 'all') => {
@@ -221,6 +232,20 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       setLaunchError(err.message || 'Erreur lors du lancement du pricing en parallèle.');
     } finally {
       setLaunchingTarget(null);
+    }
+  };
+
+  const handleCancelCampaign = async (campaignIdToCancel?: string) => {
+    const targetId = campaignIdToCancel || activeCampaignId;
+    if (!targetId) return;
+    setIsCancelling(true);
+    try {
+      await api.cancelCampaign(targetId);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      console.error('Erreur lors de l’interruption:', err);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -978,38 +1003,64 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                     minute: '2-digit'
                   })}
                 </span>
+                {activeCampaign.status === 'in_progress' && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
+                    <RotateCw className="w-3 h-3 animate-spin text-amber-600" />
+                    En cours d'exécution
+                  </span>
+                )}
+                {activeCampaign.status === 'cancelled' && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300">
+                    <StopCircle className="w-3 h-3 text-rose-600" />
+                    Campagne interrompue
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-600">
-                Affichage exclusif des {trips.length} relevés de la campagne{' '}
+                Affichage des {trips.length} relevés de la campagne{' '}
                 <strong className="font-mono text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{activeCampaign.id}</strong>{' '}
                 déclenchée par {activeCampaign.triggeredByUserName || 'Système'}.
               </p>
             </div>
 
-            {/* Direct Quick Switch Pills between campaigns of this city */}
-            {cityCampaigns.length > 1 && (
-              <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200/90 shrink-0 self-start md:self-auto overflow-x-auto">
-                {cityCampaigns.map((c) => {
-                  const isActive = c.id === activeCampaignId;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => handleCampaignChange(c.id)}
-                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                        isActive
-                          ? 'bg-[#1F4F4A] text-white font-semibold shadow-2xs'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`}
-                    >
-                      <span>{c.isTestSample ? '⚡ Test' : '🚀 Globale'}</span>
-                      <span className="text-[10px] opacity-80 font-mono">
-                        ({new Date(c.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div className="flex items-center gap-3 shrink-0">
+              {activeCampaign.status === 'in_progress' && (
+                <button
+                  onClick={() => handleCancelCampaign(activeCampaign.id)}
+                  disabled={isCancelling}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg shadow-md transition cursor-pointer"
+                  title="Stopper immédiatement toutes les requêtes de cette campagne"
+                >
+                  <StopCircle className={`w-4 h-4 ${isCancelling ? 'animate-spin' : ''}`} />
+                  <span>{isCancelling ? 'Interruption...' : 'Arrêter immédiatement'}</span>
+                </button>
+              )}
+
+              {/* Direct Quick Switch Pills between campaigns of this city */}
+              {cityCampaigns.length > 1 && (
+                <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200/90 shrink-0 self-start md:self-auto overflow-x-auto">
+                  {cityCampaigns.map((c) => {
+                    const isActive = c.id === activeCampaignId;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => handleCampaignChange(c.id)}
+                        className={`px-3 py-1.5 text-xs rounded-md font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                          isActive
+                            ? 'bg-[#1F4F4A] text-white font-semibold shadow-2xs'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }`}
+                      >
+                        <span>{c.isTestSample ? '⚡ Test' : '🚀 Globale'}</span>
+                        <span className="text-[10px] opacity-80 font-mono">
+                          ({new Date(c.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800">

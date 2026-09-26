@@ -299,5 +299,16 @@ export const api = {
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour des paramètres Hero.');
     return res.json();
+  },
+
+  // History & Audit logs
+  async getHistory(): Promise<any[]> {
+    const res = await fetch(`${BASE_URL}/history`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async deleteHistoryItem(id: string): Promise<void> {
+    await fetch(`${BASE_URL}/history/${id}`, { method: 'DELETE' });
   }
 };

@@ -70,17 +70,15 @@ export const LiveTrackerView: React.FC<LiveTrackerViewProps> = ({
 
   const handleCancel = async () => {
     if (!campaign) return;
-    if (confirm('Voulez-vous vraiment stopper immédiatement cette campagne en cours ?')) {
-      setIsCancelling(true);
-      try {
-        await api.cancelCampaign(campaign.id);
-        const updated = await api.getCampaign(campaign.id);
-        setCampaign(updated);
-      } catch (err: any) {
-        alert(err.message || 'Erreur lors de l’interruption.');
-      } finally {
-        setIsCancelling(false);
-      }
+    setIsCancelling(true);
+    try {
+      await api.cancelCampaign(campaign.id);
+      const updated = await api.getCampaign(campaign.id);
+      setCampaign(updated);
+    } catch (err: any) {
+      console.error('Erreur lors de l’interruption:', err);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
