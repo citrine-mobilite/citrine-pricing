@@ -3,6 +3,7 @@ import { City, Neighborhood } from '../types';
 import { api } from '../services/api';
 import { DataTable, Column } from './DataTable';
 import { parseNeighborhoodExcelFile } from '../utils/exportUtils';
+import { INITIAL_CITIES } from '../data/seedData';
 import {
   Compass,
   Plus,
@@ -35,7 +36,17 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   onRefresh,
   onLaunchPricingForCity
 }) => {
-  const currentCity = cities.find((c) => c.id === selectedCityId) || cities[0];
+  const fallbackCity: City = INITIAL_CITIES[0] || {
+    id: 'city_douala',
+    name: 'Douala',
+    country: 'Cameroun',
+    currency: 'XAF',
+    currencySymbol: 'FCFA',
+    active: true,
+    center: { lat: 4.0511, lng: 9.7679 },
+    autoSchedule: { enabled: false, slots: [] }
+  };
+  const currentCity = cities.find((c) => c.id === selectedCityId) || cities[0] || fallbackCity;
   const cityNeighborhoods = neighborhoods.filter((n) => n.cityId === currentCity?.id);
   const activeCount = cityNeighborhoods.filter((n) => n.active).length;
 
@@ -87,12 +98,14 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const [isLoadingOfficial, setIsLoadingOfficial] = useState(false);
 
   const handleClearAllCityNeighborhoods = async () => {
-    if (!confirm(`Voulez-vous vraiment vider tous les quartiers de ${currentCity.name} ? Cette action prépare la liste pour votre nouvel import Excel.`)) {
+    if (!confirm(`Voulez-vous vraiment vider tous les quartiers de ${currentCity?.name || 'la ville'} ? Cette action prépare la liste pour votre nouvel import Excel.`)) {
       return;
     }
     try {
-      await api.clearCityNeighborhoods(currentCity.id);
-      onRefresh();
+      if (currentCity?.id) {
+        await api.clearCityNeighborhoods(currentCity.id);
+        onRefresh();
+      }
     } catch (err: any) {
       alert(err.message || 'Erreur lors du nettoyage de la liste.');
     }
@@ -117,7 +130,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     setIsSubmitting(true);
     try {
       await api.createNeighborhood({
-        cityId: currentCity.id,
+        cityId: currentCity?.id || 'city_douala',
         name: newNbName.trim(),
         lat: parseFloat(newNbLat),
         lng: parseFloat(newNbLng),
@@ -281,7 +294,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Reload Douala official full-address neighborhoods */}
-          {currentCity.id === 'city_douala' && (
+          {currentCity?.id === 'city_douala' && (
             <button
               onClick={handleReloadOfficialDouala}
               disabled={isLoadingOfficial}
@@ -298,17 +311,17 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
             <button
               onClick={handleClearAllCityNeighborhoods}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
-              title={`Supprimer tous les quartiers de ${currentCity.name}`}
+              title={`Supprimer tous les quartiers de ${currentCity?.name || 'la ville'}`}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Vider {currentCity.name} ({cityNeighborhoods.length})</span>
+              <span>Vider {currentCity?.name || 'la ville'} ({cityNeighborhoods.length})</span>
             </button>
           )}
 
           {/* Import Excel Button */}
           <button
             onClick={() => {
-              setImportCityId(currentCity.id);
+              setImportCityId(currentCity?.id || 'city_douala');
               setShowImportModal(true);
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#1F4F4A] bg-white hover:bg-[#F0FAFA] border border-[#3D8B85]/20 shadow-sm transition cursor-pointer"
@@ -329,7 +342,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
       </div>
 
       {/* Banner if Douala is currently empty */}
-      {currentCity.id === 'city_douala' && cityNeighborhoods.length === 0 && (
+      {currentCity?.id === 'city_douala' && cityNeighborhoods.length === 0 && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-emerald-900 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
@@ -366,14 +379,14 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
             onChange={(e) => onSelectCityId(e.target.value)}
             className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-[#1F4F4A] focus:outline-none focus:border-[#3D8B85]"
           >
-            {cities.map((city) => (
+            {(cities.length > 0 ? cities : INITIAL_CITIES).map((city) => (
               <option key={city.id} value={city.id}>
                 {city.name}
               </option>
             ))}
           </select>
 
-          {currentCity.id === 'city_douala' && (
+          {currentCity?.id === 'city_douala' && (
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-slate-500 font-medium">Arrondissement :</span>
               <select

@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { DataTable, Column } from './DataTable';
 import { YangoResponseInspectorModal } from './YangoResponseInspectorModal';
+import { INITIAL_CITIES } from '../data/seedData';
 import {
   Play,
   RotateCw,
@@ -98,8 +99,18 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     }
   };
 
-  // Current selected city
-  const currentCity = cities.find((c) => c.id === selectedCityId) || cities[0];
+  // Current selected city with resilient fallback
+  const fallbackCity: City = INITIAL_CITIES[0] || {
+    id: 'city_douala',
+    name: 'Douala',
+    country: 'Cameroun',
+    currency: 'XAF',
+    currencySymbol: 'FCFA',
+    active: true,
+    center: { lat: 4.0511, lng: 9.7679 },
+    autoSchedule: { enabled: false, slots: [] }
+  };
+  const currentCity = cities.find((c) => c.id === selectedCityId) || cities[0] || fallbackCity;
 
   // Active neighborhoods in selected city
   const cityActiveNeighborhoods = useMemo(
@@ -675,7 +686,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
             Tarification & Benchmark Multi-Classes
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Collecte simultanée des prix <strong>Yango</strong> (4 classes) et <strong>Hero Cab</strong> (2 classes) pour {currentCity.name}.
+            Collecte simultanée des prix <strong>Yango</strong> (4 classes) et <strong>Hero Cab</strong> (2 classes) pour {currentCity?.name || 'Douala'}.
           </p>
         </div>
 
@@ -705,7 +716,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                 onChange={(e) => onSelectCityId(e.target.value)}
                 className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer"
               >
-                {cities.map((city) => (
+                {(cities.length > 0 ? cities : INITIAL_CITIES).map((city) => (
                   <option key={city.id} value={city.id}>
                     {city.name}
                   </option>

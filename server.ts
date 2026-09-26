@@ -892,6 +892,10 @@ app.get('/api/cities', async (_req: Request, res: Response) => {
     }
   }
 
+  if (cities.length === 0) {
+    cities = [...INITIAL_CITIES];
+  }
+
   const enriched = cities.map(city => {
     const cityNbs = neighborhoods.filter(n => n.cityId === city.id);
     const activeNbs = cityNbs.filter(n => n.active);
@@ -1023,6 +1027,10 @@ app.get('/api/neighborhoods', async (req: Request, res: Response) => {
     } catch (e) {
       console.warn('[Firestore] get neighborhoods error:', e);
     }
+  }
+
+  if (neighborhoods.length === 0) {
+    neighborhoods = [...INITIAL_NEIGHBORHOODS];
   }
 
   if (cityId) {
