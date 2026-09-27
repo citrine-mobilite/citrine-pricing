@@ -23,7 +23,7 @@ import {
   calculateDistanceKm,
   estimateUrbanTrip,
   generateInitialCampaigns
-} from './src/data/seedData';
+} from './src/data/seedData.js';
 import {
   City,
   Neighborhood,
@@ -35,7 +35,7 @@ import {
   HeroQuote,
   HeroDriver,
   CampaignLog
-} from './src/types/index';
+} from './src/types/index.js';
 
 dotenv.config();
 
