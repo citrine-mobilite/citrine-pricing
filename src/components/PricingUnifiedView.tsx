@@ -582,96 +582,62 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     );
   };
 
-  const getDynamicAggregatorClassesText = (t: TripResult, provider: 'yango' | 'hero' | 'tripmaster'): string => {
-    if (provider === 'yango') {
-      let priceEco = t.priceEconom || t.classes?.econom?.price || null;
-      let priceConf = t.priceConfort || t.classes?.business?.price || null;
-      let priceMoto = t.priceMoto || t.classes?.moto?.price || null;
-      if (!priceEco && t.classes) {
-        priceEco = Object.values(t.classes).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || null;
-      }
-      return `${priceEco ? priceEco.toLocaleString('fr-FR') + ' F' : '—'} / ${priceConf ? priceConf.toLocaleString('fr-FR') + ' F' : '—'} / ${priceMoto ? priceMoto.toLocaleString('fr-FR') + ' F' : '—'}`;
-    } else if (provider === 'hero') {
-      const hQ = t.heroQuote as any;
-      let priceStd = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || null;
-      let priceConf = t.priceHeroConfort || hQ?.priceConfort || null;
-      let pricePerKm = hQ?.priceVip || hQ?.priceSuv || null;
-      if (hQ?.classes) {
-        const stdClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco');
-        if (stdClass) priceStd = (stdClass as any).price;
-        const confClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort');
-        if (confClass) priceConf = (confClass as any).price;
-        const perKmClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'perkm' || c.className?.toLowerCase() === 'vip' || c.className?.toLowerCase() === 'suv');
-        if (perKmClass) pricePerKm = (perKmClass as any).price;
-      }
-      return `${priceStd ? priceStd.toLocaleString('fr-FR') + ' F' : '—'} / ${priceConf ? priceConf.toLocaleString('fr-FR') + ' F' : '—'} / ${pricePerKm ? pricePerKm.toLocaleString('fr-FR') + ' F' : '—'}`;
-    } else if (provider === 'tripmaster') {
-      const tmQ = t.tripMasterQuote as any;
-      const priceEco = t.priceTripMaster || tmQ?.priceEco || null;
-      const priceConf = t.priceTripMasterConfort || tmQ?.priceConfort || null;
-      const priceMoto = t.priceTripMasterMoto || tmQ?.priceMoto || null;
-      return `${priceEco ? priceEco.toLocaleString('fr-FR') + ' F' : '—'} / ${priceConf ? priceConf.toLocaleString('fr-FR') + ' F' : '—'} / ${priceMoto ? priceMoto.toLocaleString('fr-FR') + ' F' : '—'}`;
-    }
-    return '—';
+  const getYangoPrice = (t: TripResult, className: 'econom' | 'business' | 'comfortplus' | 'moto') => {
+    if (className === 'econom') return t.priceEconom || t.classes?.econom?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || null;
+    if (className === 'business') return t.priceConfort || t.classes?.business?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort')?.price || null;
+    if (className === 'comfortplus') return t.priceConfortPlus || t.classes?.comfortplus?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'comfortplus' || c.className?.toLowerCase() === 'confort+')?.price || null;
+    if (className === 'moto') return t.priceMoto || t.classes?.moto?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'moto')?.price || null;
+    return null;
   };
 
-  const renderSubCellsPricesYango = (t: TripResult) => {
-    let priceEco = t.priceEconom || t.classes?.econom?.price || null;
-    let priceConf = t.priceConfort || t.classes?.business?.price || null;
-    let priceMoto = t.priceMoto || t.classes?.moto?.price || null;
-    
-    if (!priceEco && t.classes) {
-      priceEco = Object.values(t.classes).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || null;
-    }
-    
-    return (
-      <div className="grid grid-cols-3 w-full min-w-[150px] divide-x divide-slate-200/40 text-center font-mono text-[11px] py-1">
-        <div className="px-1 text-slate-800 font-semibold">{priceEco ? `${priceEco.toLocaleString('fr-FR')}` : '—'}</div>
-        <div className="px-1 text-slate-800 font-semibold">{priceConf ? `${priceConf.toLocaleString('fr-FR')}` : '—'}</div>
-        <div className="px-1 text-slate-800 font-semibold">{priceMoto ? `${priceMoto.toLocaleString('fr-FR')}` : '—'}</div>
-      </div>
-    );
-  };
-
-  const renderSubCellsPricesHero = (t: TripResult) => {
+  const getHeroPrice = (t: TripResult, className: 'eco' | 'confort' | 'suv' | 'perkm') => {
     const hQ = t.heroQuote as any;
-    let priceStd = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || null;
-    let priceConf = t.priceHeroConfort || hQ?.priceConfort || null;
-    let pricePerKm = hQ?.priceVip || hQ?.priceSuv || null;
-    
-    if (hQ?.classes) {
-      const stdClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco');
-      if (stdClass) priceStd = (stdClass as any).price;
-      
-      const confClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort');
-      if (confClass) priceConf = (confClass as any).price;
-      
-      const perKmClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'perkm' || c.className?.toLowerCase() === 'vip' || c.className?.toLowerCase() === 'suv');
-      if (perKmClass) pricePerKm = (perKmClass as any).price;
+    if (className === 'eco') {
+      let p = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco')?.price || null;
+      }
+      return p;
     }
-    
-    return (
-      <div className="grid grid-cols-3 w-full min-w-[150px] divide-x divide-slate-200/40 text-center font-mono text-[11px] py-1">
-        <div className="px-1 text-slate-800 font-semibold">{priceStd ? `${priceStd.toLocaleString('fr-FR')}` : '—'}</div>
-        <div className="px-1 text-slate-800 font-semibold">{priceConf ? `${priceConf.toLocaleString('fr-FR')}` : '—'}</div>
-        <div className="px-1 text-slate-800 font-semibold">{pricePerKm ? `${pricePerKm.toLocaleString('fr-FR')}` : '—'}</div>
-      </div>
-    );
+    if (className === 'confort') {
+      let p = t.priceHeroConfort || hQ?.priceConfort || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort')?.price || null;
+      }
+      return p;
+    }
+    if (className === 'suv') {
+      let p = hQ?.priceSuv || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'suv')?.price || null;
+      }
+      return p;
+    }
+    if (className === 'perkm') {
+      let p = hQ?.priceVip || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'perkm' || c.className?.toLowerCase() === 'vip')?.price || null;
+      }
+      return p;
+    }
+    return null;
   };
 
-  const renderSubCellsPricesTripMaster = (t: TripResult) => {
+  const getTripMasterPrice = (t: TripResult, className: 'eco' | 'confort' | 'moto') => {
     const tmQ = t.tripMasterQuote as any;
-    const priceEco = t.priceTripMaster || tmQ?.priceEco || null;
-    const priceConf = t.priceTripMasterConfort || tmQ?.priceConfort || null;
-    const priceMoto = t.priceTripMasterMoto || tmQ?.priceMoto || null;
-    
-    return (
-      <div className="grid grid-cols-3 w-full min-w-[150px] divide-x divide-slate-200/40 text-center font-mono text-[11px] py-1">
-        <div className="px-1 text-slate-800 font-semibold">{priceEco ? `${priceEco.toLocaleString('fr-FR')}` : '—'}</div>
-        <div className="px-1 text-slate-800 font-semibold">{priceConf ? `${priceConf.toLocaleString('fr-FR')}` : '—'}</div>
-        <div className="px-1 text-slate-800 font-semibold">{priceMoto ? `${priceMoto.toLocaleString('fr-FR')}` : '—'}</div>
-      </div>
-    );
+    if (className === 'eco') return t.priceTripMaster || tmQ?.priceEco || null;
+    if (className === 'confort') return t.priceTripMasterConfort || tmQ?.priceConfort || null;
+    if (className === 'moto') return t.priceTripMasterMoto || tmQ?.priceMoto || null;
+    return null;
+  };
+
+  const cleanNeighborhoodName = (name: string | null | undefined): string => {
+    if (!name) return '—';
+    const commaIndex = name.indexOf(',');
+    if (commaIndex !== -1) {
+      return name.substring(0, commaIndex).trim();
+    }
+    return name.trim();
   };
 
   // Dynamic Table Columns
@@ -681,13 +647,15 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         key: 'startNeighborhoodName',
         label: 'Départ',
         sortable: true,
-        render: (t) => <span className="font-medium text-slate-900">{t.startNeighborhoodName}</span>
+        render: (t) => <span className="font-medium text-slate-900 block truncate max-w-[130px]" title={t.startNeighborhoodName}>{cleanNeighborhoodName(t.startNeighborhoodName)}</span>,
+        exportValue: (t) => cleanNeighborhoodName(t.startNeighborhoodName)
       },
       {
         key: 'endNeighborhoodName',
         label: 'Destination',
         sortable: true,
-        render: (t) => <span className="font-medium text-slate-900">{t.endNeighborhoodName}</span>
+        render: (t) => <span className="font-medium text-slate-900 block truncate max-w-[130px]" title={t.endNeighborhoodName}>{cleanNeighborhoodName(t.endNeighborhoodName)}</span>,
+        exportValue: (t) => cleanNeighborhoodName(t.endNeighborhoodName)
       },
       {
         key: 'distanceKm',
@@ -703,52 +671,81 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       return [
         ...baseCols,
         {
-          key: 'yangoClasses',
-          label: 'Yango',
-          headerRender: () => (
-            <div className="flex flex-col items-center w-full min-w-[150px] text-center select-none py-1">
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-700 border-b border-slate-200/60 pb-1.5 w-full block">Yango</span>
-              <div className="grid grid-cols-3 w-full text-[9px] text-[#3D8B85] font-extrabold divide-x divide-slate-200/60 pt-1.5 leading-none">
-                <div className="text-center uppercase tracking-tight">Éco</div>
-                <div className="text-center uppercase tracking-tight">Conf.</div>
-                <div className="text-center uppercase tracking-tight">Moto</div>
-              </div>
-            </div>
-          ),
-          render: (t) => renderSubCellsPricesYango(t),
-          exportValue: (t) => getDynamicAggregatorClassesText(t, 'yango')
+          key: 'yango_eco',
+          label: 'Yango Éco',
+          align: 'right',
+          render: (t) => renderCellPrice(getYangoPrice(t, 'econom')),
+          exportValue: (t) => getYangoPrice(t, 'econom') || ''
         },
         {
-          key: 'heroClasses',
-          label: 'Hero Cab',
-          headerRender: () => (
-            <div className="flex flex-col items-center w-full min-w-[150px] text-center select-none py-1">
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-700 border-b border-slate-200/60 pb-1.5 w-full block">Hero Cab</span>
-              <div className="grid grid-cols-3 w-full text-[9px] text-[#3D8B85] font-extrabold divide-x divide-slate-200/60 pt-1.5 leading-none">
-                <div className="text-center uppercase tracking-tight">Std</div>
-                <div className="text-center uppercase tracking-tight">Conf.</div>
-                <div className="text-center uppercase tracking-tight">PerKm</div>
-              </div>
-            </div>
-          ),
-          render: (t) => renderSubCellsPricesHero(t),
-          exportValue: (t) => getDynamicAggregatorClassesText(t, 'hero')
+          key: 'yango_confort',
+          label: 'Yango Confort',
+          align: 'right',
+          render: (t) => renderCellPrice(getYangoPrice(t, 'business')),
+          exportValue: (t) => getYangoPrice(t, 'business') || ''
         },
         {
-          key: 'tripMasterClasses',
-          label: 'Trip Master',
-          headerRender: () => (
-            <div className="flex flex-col items-center w-full min-w-[150px] text-center select-none py-1">
-              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-700 border-b border-slate-200/60 pb-1.5 w-full block">Trip Master</span>
-              <div className="grid grid-cols-3 w-full text-[9px] text-[#3D8B85] font-extrabold divide-x divide-slate-200/60 pt-1.5 leading-none">
-                <div className="text-center uppercase tracking-tight">Éco</div>
-                <div className="text-center uppercase tracking-tight">Conf.</div>
-                <div className="text-center uppercase tracking-tight">Moto</div>
-              </div>
-            </div>
-          ),
-          render: (t) => renderSubCellsPricesTripMaster(t),
-          exportValue: (t) => getDynamicAggregatorClassesText(t, 'tripmaster')
+          key: 'yango_confort_plus',
+          label: 'Yango Confort+',
+          align: 'right',
+          render: (t) => renderCellPrice(getYangoPrice(t, 'comfortplus')),
+          exportValue: (t) => getYangoPrice(t, 'comfortplus') || ''
+        },
+        {
+          key: 'yango_moto',
+          label: 'Yango Moto',
+          align: 'right',
+          render: (t) => renderCellPrice(getYangoPrice(t, 'moto')),
+          exportValue: (t) => getYangoPrice(t, 'moto') || ''
+        },
+        {
+          key: 'hero_eco',
+          label: 'Hero Éco',
+          align: 'right',
+          render: (t) => renderCellPrice(getHeroPrice(t, 'eco'), 'hero'),
+          exportValue: (t) => getHeroPrice(t, 'eco') || ''
+        },
+        {
+          key: 'hero_confort',
+          label: 'Hero Confort',
+          align: 'right',
+          render: (t) => renderCellPrice(getHeroPrice(t, 'confort'), 'hero'),
+          exportValue: (t) => getHeroPrice(t, 'confort') || ''
+        },
+        {
+          key: 'hero_suv',
+          label: 'Hero SUV',
+          align: 'right',
+          render: (t) => renderCellPrice(getHeroPrice(t, 'suv'), 'hero'),
+          exportValue: (t) => getHeroPrice(t, 'suv') || ''
+        },
+        {
+          key: 'hero_per_km',
+          label: 'Hero PerKm',
+          align: 'right',
+          render: (t) => renderCellPrice(getHeroPrice(t, 'perkm'), 'hero'),
+          exportValue: (t) => getHeroPrice(t, 'perkm') || ''
+        },
+        {
+          key: 'tripmaster_eco',
+          label: 'Trip Master Éco',
+          align: 'right',
+          render: (t) => renderCellPrice(getTripMasterPrice(t, 'eco')),
+          exportValue: (t) => getTripMasterPrice(t, 'eco') || ''
+        },
+        {
+          key: 'tripmaster_confort',
+          label: 'Trip Master Confort',
+          align: 'right',
+          render: (t) => renderCellPrice(getTripMasterPrice(t, 'confort')),
+          exportValue: (t) => getTripMasterPrice(t, 'confort') || ''
+        },
+        {
+          key: 'tripmaster_moto',
+          label: 'Trip Master Moto',
+          align: 'right',
+          render: (t) => renderCellPrice(getTripMasterPrice(t, 'moto')),
+          exportValue: (t) => getTripMasterPrice(t, 'moto') || ''
         },
         {
           key: 'source',
@@ -1552,6 +1549,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           defaultPageSize={25}
           isLoading={isLoadingTrips}
           emptyMessage="Aucun relevé pour cette campagne. Cliquez sur « Lancer la tarification » pour exécuter la collecte en direct."
+          hasGroupedHeaders={viewMode === 'all'}
         />
 
       </div>

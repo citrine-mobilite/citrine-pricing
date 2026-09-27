@@ -15,7 +15,6 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import firebaseConfigJson from './firebase-applet-config.json';
 import {
   INITIAL_CITIES,
   INITIAL_NEIGHBORHOODS,
@@ -42,21 +41,22 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// IMPORTANT: la config Firebase est chargée via un import ES statique
-// (traçable et bundlé de façon fiable par le compilateur serverless de Vercel),
-// au lieu d'un `createRequire(...)` dynamique qui n'était pas toujours détecté
-// par l'analyseur de dépendances de Vercel et pouvait provoquer un plantage
-// silencieux (ou l'exclusion du fichier du bundle) en production.
-let firebaseConfigData: any = (firebaseConfigJson as any) || null;
-if (!firebaseConfigData || !firebaseConfigData.apiKey) {
-  try {
-    const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
+// Charger la config Firebase de manière synchrone et sécurisée pour éviter les erreurs d'importation de modules ES sur Vercel
+let firebaseConfigData: any = null;
+try {
+  const pathsToTry = [
+    path.join(process.cwd(), 'firebase-applet-config.json'),
+    path.join(__dirname, 'firebase-applet-config.json'),
+    path.join(__dirname, '../firebase-applet-config.json'),
+  ];
+  for (const cfgPath of pathsToTry) {
     if (fs.existsSync(cfgPath)) {
       firebaseConfigData = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      break;
     }
-  } catch (e) {
-    console.warn('[Firestore] Failed to read firebase-applet-config.json from disk:', e);
   }
+} catch (e) {
+  console.warn('[Firestore] Failed to read firebase-applet-config.json from disk:', e);
 }
 
 const app = express();

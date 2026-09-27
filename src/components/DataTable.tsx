@@ -38,6 +38,7 @@ interface DataTableProps<T extends Record<string, any>> {
   emptyMessage?: string;
   actions?: React.ReactNode;
   isLoading?: boolean;
+  hasGroupedHeaders?: boolean;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -52,7 +53,8 @@ export function DataTable<T extends Record<string, any>>({
   defaultPageSize = 10,
   emptyMessage = 'Aucune donnée disponible.',
   actions,
-  isLoading = false
+  isLoading = false,
+  hasGroupedHeaders = false
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -124,14 +126,14 @@ export function DataTable<T extends Record<string, any>>({
 
   // Handlers for export
   const handleExportExcel = () => {
-    // Generate clean flat objects using column definitions
+    // Generate clean flat objects using column definitions (excluding Details column 'source')
+    const exportColumns = columns.filter((col) => col.key !== 'source');
     const exportRows = sortedData.map((row) => {
       const obj: Record<string, any> = {};
-      columns.forEach((col) => {
+      exportColumns.forEach((col) => {
         if (col.exportValue) {
           const val = col.exportValue(row);
           if (typeof val === 'string' && val.includes('<div')) {
-            // Strip HTML elements and format as simple slashes for Excel spreadsheet cells
             const textOnly = val
               .replace(/<[^>]*>/g, ' ')
               .replace(/\s+/g, ' ')
@@ -154,9 +156,11 @@ export function DataTable<T extends Record<string, any>>({
   };
 
   const handleExportPdf = () => {
-    const headers = columns.map((c) => c.label);
+    // Exclude details column from export
+    const exportColumns = columns.filter((col) => col.key !== 'source');
+    const headers = exportColumns.map((c) => c.label);
     const rows = sortedData.map((row) =>
-      columns.map((col) => {
+      exportColumns.map((col) => {
         if (col.exportValue) return col.exportValue(row);
         const val = row[col.key];
         return val !== undefined && val !== null ? val : '';
@@ -164,34 +168,32 @@ export function DataTable<T extends Record<string, any>>({
     );
 
     let customTheadHtml: string | undefined = undefined;
-    const hasSubheaders = columns.some((col) => col.key === 'yangoClasses' || col.key === 'heroClasses' || col.key === 'tripMasterClasses');
-    if (hasSubheaders) {
+    if (hasGroupedHeaders) {
       customTheadHtml = `
         <thead>
-          <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1;">
-            <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left;">Départ</th>
-            <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left;">Destination</th>
-            <th rowspan="2" style="padding: 10px; text-align: right; border-bottom: 1.5px solid #cbd5e1; width: 60px;">Dist.</th>
-            <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1e293b; font-size: 10px; padding: 6px;">Yango</th>
-            <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1e293b; font-size: 10px; padding: 6px;">Hero Cab</th>
-            <th colspan="3" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1e293b; font-size: 10px; padding: 6px;">Trip Master</th>
-            <th rowspan="2" style="text-align: center; border-bottom: 1.5px solid #cbd5e1; width: 50px;">Détails</th>
+          <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1; font-size: 10px;">
+            <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left; font-weight: 700; color: #1e293b; width: 120px; max-width: 120px;">Départ</th>
+            <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left; font-weight: 700; color: #1e293b; width: 120px; max-width: 120px;">Destination</th>
+            <th rowspan="2" style="padding: 10px; text-align: right; border-bottom: 1.5px solid #cbd5e1; font-weight: 700; color: #1e293b; width: 50px;">Dist.</th>
+            <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #3d8b85; background-color: #f1f5f9; padding: 6px;">Yango</th>
+            <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #3d8b85; background-color: #f1f5f9; padding: 6px;">Hero Cab</th>
+            <th colspan="3" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #3d8b85; background-color: #f1f5f9; padding: 6px;">Trip Master</th>
           </tr>
           <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1; font-size: 8px; color: #475569;">
             <!-- Yango -->
             <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
-            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.</th>
-            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.+</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort+</th>
             <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px; width: 45px;">Moto</th>
             <!-- Hero Cab -->
-            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Std</th>
-            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort</th>
             <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">SUV</th>
             <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px; width: 45px;">PerKm</th>
             <!-- Trip Master -->
             <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
-            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.</th>
-            <th style="text-align: center; text-transform: uppercase; font-weight: 700; padding: 4px; width: 45px;">Moto</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort</th>
+            <th style="text-align: center; text-transform: uppercase; padding: 4px; width: 45px;">Moto</th>
           </tr>
         </thead>
       `;
@@ -264,50 +266,80 @@ export function DataTable<T extends Record<string, any>>({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs text-slate-700 border-collapse">
           <thead>
-            <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              {columns.map((col) => {
-                const isSorted = sortKey === col.key;
-                return (
-                  <th
-                    key={col.key}
-                    style={{ width: col.width }}
-                    className={`py-3 px-4 select-none ${
-                      col.align === 'right'
-                        ? 'text-right'
-                        : col.align === 'center'
-                        ? 'text-center'
-                        : 'text-left'
-                    } ${col.sortable ? 'cursor-pointer hover:text-slate-900 group' : ''}`}
-                    onClick={() => col.sortable && handleSort(col.key)}
-                  >
-                    <div
-                      className={`inline-flex items-center gap-1.5 w-full ${
+            {hasGroupedHeaders ? (
+              <>
+                <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  <th rowSpan={2} className="py-3 px-4 text-left border-r border-slate-200/60 font-bold">Départ</th>
+                  <th rowSpan={2} className="py-3 px-4 text-left border-r border-slate-200/60 font-bold">Destination</th>
+                  <th rowSpan={2} className="py-3 px-4 text-right border-r border-slate-200/60 font-bold w-[60px]">Dist.</th>
+                  <th colSpan={4} className="py-2 px-2 text-center border-r border-slate-200 font-bold text-[#3D8B85] bg-slate-100/50">Yango</th>
+                  <th colSpan={4} className="py-2 px-2 text-center border-r border-slate-200 font-bold text-[#3D8B85] bg-slate-100/50">Hero Cab</th>
+                  <th colSpan={3} className="py-2 px-2 text-center border-r border-slate-200 font-bold text-[#3D8B85] bg-slate-100/50">Trip Master</th>
+                  <th rowSpan={2} className="py-3 px-4 text-center font-bold w-[50px]">Détails</th>
+                </tr>
+                <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-tight">
+                  {/* Yango */}
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('yango_eco')}>Éco</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('yango_confort')}>Confort</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('yango_confort_plus')}>Confort+</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-200 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('yango_moto')}>Moto</th>
+                  {/* Hero Cab */}
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('hero_eco')}>Éco</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('hero_confort')}>Confort</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('hero_suv')}>SUV</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-200 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('hero_per_km')}>PerKm</th>
+                  {/* Trip Master */}
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('tripmaster_eco')}>Éco</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-100 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('tripmaster_confort')}>Confort</th>
+                  <th className="py-2 px-2 text-center border-r border-slate-200 cursor-pointer hover:bg-slate-100/40 hover:text-slate-900" onClick={() => handleSort('tripmaster_moto')}>Moto</th>
+                </tr>
+              </>
+            ) : (
+              <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                {columns.map((col) => {
+                  const isSorted = sortKey === col.key;
+                  return (
+                    <th
+                      key={col.key}
+                      style={{ width: col.width }}
+                      className={`py-3 px-4 select-none ${
                         col.align === 'right'
-                          ? 'justify-end'
+                          ? 'text-right'
                           : col.align === 'center'
-                          ? 'justify-center'
-                          : 'justify-start'
-                      }`}
+                          ? 'text-center'
+                          : 'text-left'
+                      } ${col.sortable ? 'cursor-pointer hover:text-slate-900 group' : ''}`}
+                      onClick={() => col.sortable && handleSort(col.key)}
                     >
-                      {col.headerRender ? col.headerRender() : <span>{col.label}</span>}
-                      {col.sortable && (
-                        <span className="text-slate-400 group-hover:text-slate-600 transition">
-                          {isSorted ? (
-                            sortOrder === 'asc' ? (
-                              <ArrowUp className="w-3 h-3 text-amber-600" />
+                      <div
+                        className={`inline-flex items-center gap-1.5 w-full ${
+                          col.align === 'right'
+                            ? 'justify-end'
+                            : col.align === 'center'
+                            ? 'justify-center'
+                            : 'justify-start'
+                        }`}
+                      >
+                        {col.headerRender ? col.headerRender() : <span>{col.label}</span>}
+                        {col.sortable && (
+                          <span className="text-slate-400 group-hover:text-slate-600 transition">
+                            {isSorted ? (
+                              sortOrder === 'asc' ? (
+                                <ArrowUp className="w-3 h-3 text-amber-600" />
+                              ) : (
+                                <ArrowDown className="w-3 h-3 text-amber-600" />
+                              )
                             ) : (
-                              <ArrowDown className="w-3 h-3 text-amber-600" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="w-3 h-3 opacity-30 group-hover:opacity-80" />
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                );
-              })}
-            </tr>
+                              <ArrowUpDown className="w-3 h-3 opacity-30 group-hover:opacity-80" />
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            )}
           </thead>
           <tbody className="divide-y divide-slate-100">
             {isLoading ? (
