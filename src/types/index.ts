@@ -45,7 +45,7 @@ export interface Neighborhood {
   updatedAt?: string;
 }
 
-export type CampaignStatus = 'pending' | 'in_progress' | 'completed' | 'error' | 'cancelled';
+export type CampaignStatus = 'pending' | 'in_progress' | 'completed' | 'error' | 'failed' | 'cancelled';
 export type TriggerType = 'manual' | 'scheduled';
 
 export interface CampaignLog {
@@ -128,6 +128,8 @@ export interface PricingCampaign {
   avgDistanceKm?: number;
   avgPricePerKm?: number;
   errorCount?: number;
+  lastError?: string;
+  errorMessage?: string;
   logs?: CampaignLog[];
   // Test sample properties
   sampleLimit?: number;
@@ -147,6 +149,7 @@ export interface PricingCampaign {
     maxPrice: number;
     count: number;
   }>;
+  classesStats?: Record<string, any>;
   // Hero Statistics & Benchmark Comparison
   heroStats?: {
     avgPrice: number;

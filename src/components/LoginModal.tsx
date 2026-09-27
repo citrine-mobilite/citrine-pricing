@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Gem, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { HeroLogo } from './HeroLogo';
+import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 
 interface LoginModalProps {
   onClose: () => void;
@@ -43,14 +44,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 space-y-5">
         
-        {/* Header */}
-        <div className="text-center space-y-1.5">
-          <div className="w-10 h-10 rounded-xl bg-[#3D8B85] mx-auto flex items-center justify-center shadow-md shadow-[#3D8B85]/20">
-            <Gem className="w-5 h-5 text-[#D4A82F] font-bold" />
-          </div>
-          <h2 className="text-base font-bold text-[#1F4F4A] tracking-tight">
-            Citrine Pricing
-          </h2>
+        {/* Header with Hero Cab Logo */}
+        <div className="text-center space-y-2 flex flex-col items-center">
+          <HeroLogo size="lg" showSubtitle={true} />
           <p className="text-xs text-[#3D8B85]">
             Connexion à l'espace VTC Cameroun
           </p>

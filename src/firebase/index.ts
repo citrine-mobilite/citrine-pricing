@@ -81,20 +81,20 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Test Connection on initial boot as required by skill
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('✅ Firebase Firestore connection validated successfully.');
+    const testDocPromise = getDocFromServer(doc(db, 'cities', 'city_douala'));
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 2500)
+    );
+    await Promise.race([testDocPromise, timeoutPromise]);
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration or network status.');
-    }
-    // Expected to return permission or doc not found, which confirms reachability
+  } catch {
+    // Operates smoothly with server-side proxy fallback
     return false;
   }
 }
 
-// Immediately trigger connection validation
-testConnection();
+// Non-blocking trigger on boot
+testConnection().catch(() => {});
 
 // Auth Helpers
 export async function loginWithGoogle(): Promise<User> {

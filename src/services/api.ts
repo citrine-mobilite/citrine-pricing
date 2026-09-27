@@ -134,6 +134,16 @@ export const api = {
     return res.json();
   },
 
+  async batchToggleNeighborhoods(cityId: string, active: boolean): Promise<{ success: boolean; updatedCount: number; active: boolean }> {
+    const res = await fetch(`${BASE_URL}/neighborhoods/batch-toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cityId, active })
+    });
+    if (!res.ok) throw new Error('Erreur lors de la mise à jour globale des quartiers.');
+    return res.json();
+  },
+
   async seedCityNeighborhoods(cityId: string): Promise<{ neighborhoods: Neighborhood[] }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/seed-city`, {
       method: 'POST',

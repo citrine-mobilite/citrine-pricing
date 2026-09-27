@@ -167,7 +167,7 @@ export function DataTable<T extends Record<string, any>>({
               setSearch(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-600 focus:bg-white focus:ring-1 focus:ring-amber-500/20 transition"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#3D8B85] focus:bg-white focus:ring-2 focus:ring-[#3D8B85]/20 transition"
           />
           {search && (
             <button

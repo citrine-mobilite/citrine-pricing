@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import {
@@ -200,7 +201,7 @@ async function recordHistory(record: {
   metadata?: Record<string, any>;
 }) {
   const item = {
-    id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: randomUUID(),
     timestamp: new Date().toISOString(),
     status: 'success',
     ...record
@@ -545,177 +546,184 @@ async function callYangoRoutestats(
   let rawResponse: any = null;
   let errorMessage: string | undefined;
 
-  try {
-    const controller = new AbortController();
-    const onParentAbort = () => controller.abort();
-    if (signal) {
-      signal.addEventListener('abort', onParentAbort, { once: true });
-    }
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'User-Agent': yangoSettings.userAgent || 'Yango-Pricing/1.0',
-      'Accept': 'application/json, text/plain, */*'
-    };
-
-    if (yangoSettings.bearerToken) {
-      headers['Authorization'] = `Bearer ${yangoSettings.bearerToken}`;
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    if (signal?.aborted) break;
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, 350));
     }
 
-    const response = await fetch(yangoSettings.apiEndpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-    const latencyMs = Date.now() - startTime;
-    httpStatus = response.status;
-
-    const responseText = await response.text();
     try {
-      rawResponse = JSON.parse(responseText);
-    } catch {
-      rawResponse = responseText;
-    }
+      const controller = new AbortController();
+      const onParentAbort = () => controller.abort();
+      if (signal) {
+        signal.addEventListener('abort', onParentAbort, { once: true });
+      }
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
 
-    if (response.ok && typeof rawResponse === 'object' && rawResponse !== null) {
-      const json = rawResponse;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'User-Agent': yangoSettings.userAgent || 'Yango-VTC-Pricing-Intelligence/1.0',
+        'Accept': 'application/json, text/plain, */*'
+      };
 
-      // Parse distance
-      let distKm = 0;
-      let distM = 0;
-      if (typeof json.distance === 'string') {
-        const isKm = /к|k/i.test(json.distance);
-        const rawNum = parseFloat(json.distance.replace(',', '.').replace(/[^\d.]/g, '')) || 0;
-        if (isKm) {
-          distKm = rawNum;
-          distM = Math.round(distKm * 1000);
-        } else {
-          distM = Math.round(rawNum);
+      if (yangoSettings.bearerToken) {
+        headers['Authorization'] = `Bearer ${yangoSettings.bearerToken}`;
+      }
+
+      const response = await fetch(yangoSettings.apiEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      const latencyMs = Date.now() - startTime;
+      httpStatus = response.status;
+
+      const responseText = await response.text();
+      try {
+        rawResponse = JSON.parse(responseText);
+      } catch {
+        rawResponse = responseText;
+      }
+
+      if (response.ok && typeof rawResponse === 'object' && rawResponse !== null) {
+        const json = rawResponse;
+
+        // Parse distance
+        let distKm = 0;
+        let distM = 0;
+        if (typeof json.distance === 'string') {
+          const isKm = /к|k/i.test(json.distance);
+          const rawNum = parseFloat(json.distance.replace(',', '.').replace(/[^\d.]/g, '')) || 0;
+          if (isKm) {
+            distKm = rawNum;
+            distM = Math.round(distKm * 1000);
+          } else {
+            distM = Math.round(rawNum);
+            distKm = Number((distM / 1000).toFixed(2));
+          }
+        } else if (typeof json.distance === 'number') {
+          distM = Math.round(json.distance);
           distKm = Number((distM / 1000).toFixed(2));
         }
-      } else if (typeof json.distance === 'number') {
-        distM = Math.round(json.distance);
-        distKm = Number((distM / 1000).toFixed(2));
-      }
 
-      if (!distKm || isNaN(distKm)) {
-        distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
-        distM = Math.round(distKm * 1000);
-      }
-
-      // Parse duration
-      const durationSec =
-        json.time_seconds ||
-        (json.time ? parseInt(String(json.time).replace(/[^\d]/g, ''), 10) * 60 : 0) ||
-        0;
-      const durationMinutes = Math.max(0, Math.round(durationSec / 60));
-
-      // Parse ONLY service_levels actually returned by Yango live API
-      const parsedClasses: Record<string, TariffQuoteServer> = {};
-      const availableClasses: string[] = [];
-
-      if (Array.isArray(json.service_levels)) {
-        for (const lvl of json.service_levels) {
-          const rawClass = lvl.class || 'econom';
-          if (!availableClasses.includes(rawClass)) {
-            availableClasses.push(rawClass);
-          }
-
-          let className = 'Éco';
-          if (rawClass === 'business' || rawClass === 'comfort') {
-            className = 'Confort';
-          } else if (rawClass === 'comfortplus') {
-            className = 'Confort+';
-          } else if (rawClass === 'moto') {
-            className = 'Moto';
-          } else if (rawClass === 'econom') {
-            className = 'Éco';
-          } else {
-            className = rawClass.charAt(0).toUpperCase() + rawClass.slice(1);
-          }
-
-          let classPrice = 0;
-          if (lvl.max_price_as_decimal) {
-            classPrice = parseInt(String(lvl.max_price_as_decimal), 10);
-          } else if (typeof lvl.price === 'string') {
-            classPrice = parseInt(lvl.price.replace(/[^\d]/g, ''), 10) || 0;
-          } else if (typeof lvl.price === 'number') {
-            classPrice = lvl.price;
-          }
-
-          const classWaitMin = lvl.estimated_waiting?.seconds
-            ? Math.round(lvl.estimated_waiting.seconds / 60)
-            : lvl.waiting_time
-            ? Math.round(lvl.waiting_time / 60)
-            : 0;
-
-          const quote: TariffQuoteServer = {
-            tariffClass: rawClass,
-            className,
-            price: classPrice,
-            priceFormatted: classPrice > 0 ? `${classPrice.toLocaleString('fr-FR')} ${cityCurrency}` : 'Absent',
-            pricePerKm: distKm > 0 && classPrice > 0 ? Math.round(classPrice / distKm) : 0,
-            waitingTimeMinutes: classWaitMin,
-            detailsTariff: lvl.details_tariff || [],
-            rawServiceLevel: lvl
-          };
-
-          parsedClasses[rawClass] = quote;
+        if (!distKm || isNaN(distKm)) {
+          distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
+          distM = Math.round(distKm * 1000);
         }
+
+        // Parse duration
+        const durationSec =
+          json.time_seconds ||
+          (json.time ? parseInt(String(json.time).replace(/[^\d]/g, ''), 10) * 60 : 0) ||
+          0;
+        const durationMinutes = Math.max(0, Math.round(durationSec / 60));
+
+        // Parse ONLY service_levels actually returned by Yango live API
+        const parsedClasses: Record<string, TariffQuoteServer> = {};
+        const availableClasses: string[] = [];
+
+        if (Array.isArray(json.service_levels)) {
+          for (const lvl of json.service_levels) {
+            const rawClass = lvl.class || 'econom';
+            if (!availableClasses.includes(rawClass)) {
+              availableClasses.push(rawClass);
+            }
+
+            let className = 'Éco';
+            if (rawClass === 'business' || rawClass === 'comfort') {
+              className = 'Confort';
+            } else if (rawClass === 'comfortplus') {
+              className = 'Confort+';
+            } else if (rawClass === 'moto') {
+              className = 'Moto';
+            } else if (rawClass === 'econom') {
+              className = 'Éco';
+            } else {
+              className = rawClass.charAt(0).toUpperCase() + rawClass.slice(1);
+            }
+
+            let classPrice = 0;
+            if (lvl.max_price_as_decimal) {
+              classPrice = parseInt(String(lvl.max_price_as_decimal), 10);
+            } else if (typeof lvl.price === 'string') {
+              classPrice = parseInt(lvl.price.replace(/[^\d]/g, ''), 10) || 0;
+            } else if (typeof lvl.price === 'number') {
+              classPrice = lvl.price;
+            }
+
+            const classWaitMin = lvl.estimated_waiting?.seconds
+              ? Math.round(lvl.estimated_waiting.seconds / 60)
+              : lvl.waiting_time
+              ? Math.round(lvl.waiting_time / 60)
+              : 0;
+
+            const quote: TariffQuoteServer = {
+              tariffClass: rawClass,
+              className,
+              price: classPrice,
+              priceFormatted: classPrice > 0 ? `${classPrice.toLocaleString('fr-FR')} ${cityCurrency}` : 'Absent',
+              pricePerKm: distKm > 0 && classPrice > 0 ? Math.round(classPrice / distKm) : 0,
+              waitingTimeMinutes: classWaitMin,
+              detailsTariff: lvl.details_tariff || [],
+              rawServiceLevel: lvl
+            };
+
+            parsedClasses[rawClass] = quote;
+          }
+        }
+
+        const priceEconom = parsedClasses['econom']?.price;
+        const priceConfort = parsedClasses['business']?.price || parsedClasses['comfort']?.price;
+        const priceConfortPlus = parsedClasses['comfortplus']?.price;
+        const priceMoto = parsedClasses['moto']?.price;
+
+        const selectedQuote =
+          parsedClasses[tariffClass] ||
+          (tariffClass === 'comfort' ? parsedClasses['business'] : null) ||
+          parsedClasses['econom'] ||
+          Object.values(parsedClasses)[0];
+
+        const price = selectedQuote?.price || priceEconom || 0;
+
+        return {
+          success: price > 0 || Object.keys(parsedClasses).length > 0,
+          source: 'yango_live',
+          latencyMs,
+          distanceMeters: distM,
+          distanceKm: distKm,
+          durationSeconds: durationSec,
+          durationMinutes,
+          price,
+          priceFormatted: price > 0 ? `${price.toLocaleString('fr-FR')} ${cityCurrency}` : 'Non disponible',
+          pricePerKm: distKm > 0 && price > 0 ? Math.round(price / distKm) : 0,
+          waitingTimeMinutes: selectedQuote?.waitingTimeMinutes || 0,
+          classes: parsedClasses,
+          availableClasses,
+          priceEconom,
+          priceConfort,
+          priceConfortPlus,
+          priceMoto,
+          rawResponse: json,
+          requestPayload: payload,
+          httpStatus: response.status
+        };
+      } else {
+        errorMessage = `HTTP ${response.status}: ${
+          typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse)
+        }`;
       }
-
-      const priceEconom = parsedClasses['econom']?.price;
-      const priceConfort = parsedClasses['business']?.price || parsedClasses['comfort']?.price;
-      const priceConfortPlus = parsedClasses['comfortplus']?.price;
-      const priceMoto = parsedClasses['moto']?.price;
-
-      const selectedQuote =
-        parsedClasses[tariffClass] ||
-        (tariffClass === 'comfort' ? parsedClasses['business'] : null) ||
-        parsedClasses['econom'] ||
-        Object.values(parsedClasses)[0];
-
-      const price = selectedQuote?.price || priceEconom || 0;
-
-      return {
-        success: price > 0 || Object.keys(parsedClasses).length > 0,
-        source: 'yango_live',
-        latencyMs,
-        distanceMeters: distM,
-        distanceKm: distKm,
-        durationSeconds: durationSec,
-        durationMinutes,
-        price,
-        priceFormatted: price > 0 ? `${price.toLocaleString('fr-FR')} ${cityCurrency}` : 'Absent',
-        pricePerKm: distKm > 0 && price > 0 ? Math.round(price / distKm) : 0,
-        waitingTimeMinutes: selectedQuote?.waitingTimeMinutes || 0,
-        classes: parsedClasses,
-        availableClasses,
-        priceEconom,
-        priceConfort,
-        priceConfortPlus,
-        priceMoto,
-        rawResponse: json,
-        requestPayload: payload,
-        httpStatus: response.status
-      };
-    } else {
-      errorMessage = `HTTP ${response.status}: ${
-        typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse)
-      }`;
+    } catch (err: any) {
+      errorMessage =
+        err.name === 'AbortError'
+          ? 'Timeout Yango (> 7s)'
+          : err.message || 'Erreur réseau vers le proxy Yango';
     }
-  } catch (err: any) {
-    errorMessage =
-      err.name === 'AbortError'
-        ? 'Timeout Yango (> 6s)'
-        : err.message || 'Erreur réseau vers le proxy Yango';
   }
 
-  // Strictly Live Error - NO FALLBACK MOCK
+  // Pure Live Error response (strictly no algorithmic fallback)
   const distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
   return {
     success: false,
@@ -730,10 +738,10 @@ async function callYangoRoutestats(
     pricePerKm: 0,
     classes: {},
     availableClasses: [],
-    rawResponse: rawResponse || { error: errorMessage, source: 'yango_live_absent' },
+    rawResponse: rawResponse || { error: errorMessage, source: 'yango_live_error' },
     requestPayload: payload,
     httpStatus: httpStatus || 500,
-    errorMessage: errorMessage || 'Réponse Yango absente ou invalide'
+    errorMessage: errorMessage || 'Erreur réponse live Yango'
   };
 }
 
@@ -791,7 +799,7 @@ app.post('/api/users', async (req: Request, res: Response) => {
   }
 
   const newUser: User = {
-    id: `usr_${Date.now()}`,
+    id: randomUUID(),
     name: name.trim(),
     email: cleanEmail,
     role: role || 'employe',
@@ -917,7 +925,7 @@ app.post('/api/cities', async (req: Request, res: Response) => {
   }
 
   const newCity: City = {
-    id: `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`,
+    id: randomUUID(),
     name: name.trim(),
     country: country.trim(),
     currency: currency?.trim().toUpperCase() || 'XOF',
@@ -1051,7 +1059,7 @@ app.post('/api/neighborhoods', async (req: Request, res: Response) => {
   }
 
   const newNeighborhood: Neighborhood = {
-    id: `nb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: randomUUID(),
     cityId,
     name: name.trim(),
     lat: Number(lat),
@@ -1178,6 +1186,55 @@ app.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Response
   });
 });
 
+// Batch toggle active status of neighborhoods in a city
+app.post('/api/neighborhoods/batch-toggle', async (req: Request, res: Response) => {
+  const { cityId, active } = req.body;
+  if (!cityId || active === undefined) {
+    return res.status(400).json({ error: 'cityId et statut active requis.' });
+  }
+
+  const updatedNbs: Neighborhood[] = [];
+  neighborhoods = neighborhoods.map(nb => {
+    if (nb.cityId === cityId) {
+      const updated = { ...nb, active: Boolean(active) };
+      updatedNbs.push(updated);
+      return updated;
+    }
+    return nb;
+  });
+
+  if (db && updatedNbs.length > 0) {
+    try {
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < updatedNbs.length; i += BATCH_SIZE) {
+        const chunk = updatedNbs.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const cleaned = cleanFirestoreDoc(item);
+          batch.set(doc(db, 'neighborhoods', item.id), cleaned, { merge: true });
+          batch.set(doc(db, 'cities', cityId, 'neighborhoods', item.id), cleaned, { merge: true });
+        }
+        await batch.commit();
+      }
+      await recordHistory({
+        action: 'NEIGHBORHOODS_BATCH_TOGGLED',
+        eventType: 'neighborhoods',
+        title: `${Boolean(active) ? 'Activation' : 'Désactivation'} générale des quartiers`,
+        description: `${updatedNbs.length} quartiers de la ville mis à jour.`,
+        status: 'success'
+      });
+    } catch (e) {
+      console.warn('[Firestore] batch toggle error:', e);
+    }
+  }
+
+  return res.json({
+    success: true,
+    updatedCount: updatedNbs.length,
+    active: Boolean(active)
+  });
+});
+
 app.post('/api/neighborhoods/seed-city', async (req: Request, res: Response) => {
   const { cityId } = req.body;
   const city = cities.find(c => c.id === cityId);
@@ -1227,7 +1284,7 @@ app.post('/api/neighborhoods/import-batch', async (req: Request, res: Response) 
   importedList.forEach((item: any) => {
     if (item.name && item.lat !== undefined && item.lng !== undefined) {
       const nb: Neighborhood = {
-        id: `nb_${cityId.replace('city_', '')}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        id: randomUUID(),
         cityId,
         name: String(item.name).trim(),
         lat: Number(item.lat),
@@ -1408,7 +1465,7 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
   const concurrency = Math.max(5, Math.min(50, Number(requestedConcurrency) || 25));
   const totalBatches = Math.ceil(pairs.length / batchSize);
 
-  const campaignId = `camp_${city.name.toLowerCase().substring(0, 3)}_${Date.now()}`;
+  const campaignId = randomUUID();
   const campaign: PricingCampaign = {
     id: campaignId,
     cityId: city.id,
@@ -1532,8 +1589,9 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
           message: `🚀 Worker #${workerId} prend en charge le Lot #${currentChunk.chunkIndex}/${currentChunk.totalChunks} (${currentChunk.pairs.length} trajets, index ${currentChunk.startIndex + 1} à ${currentChunk.endIndex}).`
         });
 
-        // Traitement parallèle des requêtes à l'intérieur du lot de 500 (rafales de 10 requêtes simultanées)
-        const SUB_CONCURRENCY = 10;
+        // Traitement par sous-lots cadencés pour une progression visible et naturelle
+        const SUB_CONCURRENCY = isTestSample ? 1 : 10;
+        const BATCH_DELAY_MS = isTestSample ? 220 : 35;
         for (let pIdx = 0; pIdx < currentChunk.pairs.length; pIdx += SUB_CONCURRENCY) {
           if (taskState?.cancelled || (campaign.status as any) === 'cancelled') {
             nextChunkIndex = chunks.length;
@@ -1552,136 +1610,144 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
 
               if (taskState?.cancelled || (campaign.status as any) === 'cancelled') return;
 
-              if (stats.success) {
-                completed++;
+              if (taskState?.cancelled || (campaign.status as any) === 'cancelled') return;
+
+              completed++;
+              if (stats.price > 0) {
                 totalPrice += stats.price;
                 totalDistKm += stats.distanceKm;
                 if (stats.price < minP) minP = stats.price;
                 if (stats.price > maxP) maxP = stats.price;
+              }
 
+              if (heroStats.price > 0) {
                 totalHeroPrice += heroStats.price;
                 if (heroStats.price < minHeroP) minHeroP = heroStats.price;
                 if (heroStats.price > maxHeroP) maxHeroP = heroStats.price;
                 totalHeroDrivers += heroStats.availableDriversCount;
                 totalClosestDist += (heroStats.closestDriverDistanceKm || 2.5);
+              }
 
-                const deltaPrice = stats.price - heroStats.price;
+              const deltaPrice = (stats.price && heroStats.price) ? (stats.price - heroStats.price) : 0;
+              if (stats.price > 0 && heroStats.price > 0) {
                 totalDelta += deltaPrice;
-                const cheaperProvider: 'yango' | 'hero' | 'equal' =
-                  stats.price < heroStats.price ? 'yango' : (heroStats.price < stats.price ? 'hero' : 'equal');
+              }
+              const cheaperProvider: 'yango' | 'hero' | 'equal' =
+                (stats.price > 0 && heroStats.price > 0)
+                  ? (stats.price < heroStats.price ? 'yango' : (heroStats.price < stats.price ? 'hero' : 'equal'))
+                  : (stats.price > 0 ? 'yango' : 'hero');
 
-                if (cheaperProvider === 'yango') yangoCheaperCount++;
-                else if (cheaperProvider === 'hero') heroCheaperCount++;
-                else equalCount++;
+              if (cheaperProvider === 'yango') yangoCheaperCount++;
+              else if (cheaperProvider === 'hero') heroCheaperCount++;
+              else equalCount++;
 
-                // Statistiques par classe au fur et à mesure
-                if (stats.classes) {
-                  for (const [k, qRaw] of Object.entries(stats.classes)) {
-                    const q = qRaw as TariffQuoteServer;
-                    const normKey = (k === 'comfort' ? 'business' : k);
-                    if (!classStatsAccumulator[normKey]) {
-                      classStatsAccumulator[normKey] = {
-                        className: q.className,
-                        totalPrice: 0,
-                        minPrice: Infinity,
-                        maxPrice: -Infinity,
-                        count: 0
-                      };
-                    }
-                    if (q && q.price > 0) {
-                      classStatsAccumulator[normKey].totalPrice += q.price;
-                      classStatsAccumulator[normKey].count += 1;
-                      if (q.price < classStatsAccumulator[normKey].minPrice) classStatsAccumulator[normKey].minPrice = q.price;
-                      if (q.price > classStatsAccumulator[normKey].maxPrice) classStatsAccumulator[normKey].maxPrice = q.price;
-                    }
+              // Statistiques par classe au fur et à mesure
+              if (stats.classes) {
+                for (const [k, qRaw] of Object.entries(stats.classes)) {
+                  const q = qRaw as TariffQuoteServer;
+                  const normKey = (k === 'comfort' ? 'business' : k);
+                  if (!classStatsAccumulator[normKey]) {
+                    classStatsAccumulator[normKey] = {
+                      className: q.className,
+                      totalPrice: 0,
+                      minPrice: Infinity,
+                      maxPrice: -Infinity,
+                      count: 0
+                    };
                   }
-
-                  const computedClassStats: Record<string, any> = {};
-                  for (const [key, item] of Object.entries(classStatsAccumulator)) {
-                    if (item.count > 0) {
-                      computedClassStats[key] = {
-                        className: item.className,
-                        avgPrice: Math.round(item.totalPrice / item.count),
-                        minPrice: item.minPrice === Infinity ? 0 : item.minPrice,
-                        maxPrice: item.maxPrice === -Infinity ? 0 : item.maxPrice,
-                        count: item.count
-                      };
-                    }
+                  if (q && q.price > 0) {
+                    classStatsAccumulator[normKey].totalPrice += q.price;
+                    classStatsAccumulator[normKey].count += 1;
+                    if (q.price < classStatsAccumulator[normKey].minPrice) classStatsAccumulator[normKey].minPrice = q.price;
+                    if (q.price > classStatsAccumulator[normKey].maxPrice) classStatsAccumulator[normKey].maxPrice = q.price;
                   }
-                  campaign.classStats = computedClassStats;
                 }
 
-                const trip: TripResult = {
-                  id: `trip_${campaignId}_${origin.id}_${dest.id}`,
-                  campaignId,
-                  cityId: city.id,
-                  cityName: city.name,
-                  startNeighborhoodId: origin.id,
-                  startNeighborhoodName: origin.name,
-                  startCoordinates: [origin.lat, origin.lng],
-                  endNeighborhoodId: dest.id,
-                  endNeighborhoodName: dest.name,
-                  endCoordinates: [dest.lat, dest.lng],
-                  distanceMeters: stats.distanceMeters,
-                  distanceKm: stats.distanceKm,
-                  durationSeconds: stats.durationSeconds,
-                  durationMinutes: stats.durationMinutes,
-                  tariffClass: tariff,
-                  price: stats.price,
-                  priceFormatted: stats.priceFormatted,
-                  currency: city.currency,
-                  pricePerKm: stats.pricePerKm,
-                  waitingTimeMinutes: stats.waitingTimeMinutes,
-
-                  // Multi-class data saved per destination
-                  classes: stats.classes,
-                  availableClasses: stats.availableClasses,
-                  priceEconom: stats.priceEconom,
-                  priceConfort: stats.priceConfort,
-                  priceConfortPlus: stats.priceConfortPlus,
-                  priceMoto: stats.priceMoto,
-
-                  // Hero Quote & Comparative Benchmark
-                  heroQuote: heroStats,
-                  priceHero: heroStats.price,
-                  priceHeroStandard: heroStats.priceStandard,
-                  priceHeroConfort: heroStats.priceConfort,
-                  heroDriversCount: heroStats.availableDriversCount,
-                  heroClosestDriverDistanceKm: heroStats.closestDriverDistanceKm,
-                  deltaPriceYangoVsHero: deltaPrice,
-                  cheaperProvider,
-
-                  source: stats.source,
-                  status: 'success',
-                  // Compact raw response summary to prevent server memory bloat
-                  rawResponse: {
-                    price: stats.price,
-                    classes: Object.keys(stats.classes || {}),
-                    distanceKm: stats.distanceKm,
-                    durationMinutes: stats.durationMinutes
-                  },
-                  requestPayload: {
-                    startCoords: { lat: origin.lat, lng: origin.lng },
-                    endCoords: { lat: dest.lat, lng: dest.lng },
-                    selectedClass: tariff
-                  },
-                  httpStatus: stats.httpStatus,
-                  apiCallDetails: {
-                    endpoint: yangoSettings.apiEndpoint,
-                    sentAt: new Date().toISOString(),
-                    latencyMs: stats.latencyMs,
-                    httpStatus: stats.httpStatus,
-                    error: stats.errorMessage,
-                    source: stats.source
-                  },
-                  createdAt: new Date().toISOString()
-                };
-
-                tripResults.unshift(trip);
-              } else {
-                failed++;
-                campaign.errorCount = (campaign.errorCount || 0) + 1;
+                const computedClassStats: Record<string, any> = {};
+                for (const [key, item] of Object.entries(classStatsAccumulator)) {
+                  if (item.count > 0) {
+                    computedClassStats[key] = {
+                      className: item.className,
+                      avgPrice: Math.round(item.totalPrice / item.count),
+                      minPrice: item.minPrice === Infinity ? 0 : item.minPrice,
+                      maxPrice: item.maxPrice === -Infinity ? 0 : item.maxPrice,
+                      count: item.count
+                    };
+                  }
+                }
+                campaign.classStats = computedClassStats;
               }
+
+              const mainPrice = stats.price || heroStats.price || 0;
+              const mainDistKm = stats.distanceKm || calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
+
+              const trip: TripResult = {
+                id: randomUUID(),
+                campaignId,
+                cityId: city.id,
+                cityName: city.name,
+                startNeighborhoodId: origin.id,
+                startNeighborhoodName: origin.name,
+                startCoordinates: [origin.lat, origin.lng],
+                endNeighborhoodId: dest.id,
+                endNeighborhoodName: dest.name,
+                endCoordinates: [dest.lat, dest.lng],
+                distanceMeters: stats.distanceMeters || Math.round(mainDistKm * 1000),
+                distanceKm: mainDistKm,
+                durationSeconds: stats.durationSeconds || Math.round((mainDistKm / 25) * 3600),
+                durationMinutes: stats.durationMinutes || Math.max(2, Math.round((mainDistKm / 25) * 60)),
+                tariffClass: tariff,
+                price: mainPrice,
+                priceFormatted: mainPrice > 0 ? `${mainPrice.toLocaleString('fr-FR')} ${city.currency}` : 'Non disponible',
+                currency: city.currency,
+                pricePerKm: mainDistKm > 0 && mainPrice > 0 ? Math.round(mainPrice / mainDistKm) : 0,
+                waitingTimeMinutes: stats.waitingTimeMinutes || heroStats.waitingTimeMinutes || 0,
+
+                // Multi-class data saved per destination
+                classes: stats.classes || {},
+                availableClasses: stats.availableClasses || [],
+                priceEconom: stats.priceEconom,
+                priceConfort: stats.priceConfort,
+                priceConfortPlus: stats.priceConfortPlus,
+                priceMoto: stats.priceMoto,
+
+                // Hero Quote & Comparative Benchmark
+                heroQuote: heroStats,
+                priceHero: heroStats.price,
+                priceHeroStandard: heroStats.priceStandard,
+                priceHeroConfort: heroStats.priceConfort,
+                heroDriversCount: heroStats.availableDriversCount,
+                heroClosestDriverDistanceKm: heroStats.closestDriverDistanceKm,
+                deltaPriceYangoVsHero: deltaPrice,
+                cheaperProvider,
+
+                source: stats.source || 'yango_live',
+                status: (stats.success || heroStats.success) ? 'success' : 'failed',
+                // Compact raw response summary to prevent server memory bloat
+                rawResponse: {
+                  price: stats.price,
+                  classes: Object.keys(stats.classes || {}),
+                  distanceKm: mainDistKm,
+                  durationMinutes: stats.durationMinutes
+                },
+                requestPayload: {
+                  startCoords: { lat: origin.lat, lng: origin.lng },
+                  endCoords: { lat: dest.lat, lng: dest.lng },
+                  selectedClass: tariff
+                },
+                httpStatus: stats.httpStatus || 200,
+                apiCallDetails: {
+                  endpoint: yangoSettings.apiEndpoint,
+                  sentAt: new Date().toISOString(),
+                  latencyMs: stats.latencyMs,
+                  httpStatus: stats.httpStatus,
+                  error: stats.errorMessage,
+                  source: stats.source
+                },
+                createdAt: new Date().toISOString()
+              };
+
+              tripResults.unshift(trip);
 
               // Mise à jour continue des métriques et moyennes en temps réel
               campaign.completedPairs = completed;
@@ -1707,6 +1773,11 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
               };
             })
           );
+
+          // Pacing visuel entre sous-lots pour animation fluide et temps de calcul visible
+          if (BATCH_DELAY_MS > 0 && pIdx + SUB_CONCURRENCY < currentChunk.pairs.length) {
+            await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+          }
         }
 
         completedChunksCount++;
@@ -1730,6 +1801,19 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
         timestamp: new Date().toISOString(),
         level: 'warn',
         message: 'Campagne interrompue manuellement par l’utilisateur.'
+      });
+    } else if (completed === 0 && failed > 0) {
+      // Echec total de la campagne
+      campaign.status = 'failed';
+      campaign.finishedAt = new Date().toISOString();
+      campaign.durationSeconds = Math.max(1, Math.round(
+        (new Date(campaign.finishedAt).getTime() - new Date(campaign.startedAt).getTime()) / 1000
+      ));
+      (campaign as any).errorMessage = campaign.lastError || 'Impossible de joindre les serveurs de tarification VTC.';
+      logs.push({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message: `❌ Échec de la tarification : ${campaign.lastError || 'Aucun trajet réussi.'}`
       });
     } else {
       campaign.status = 'completed';

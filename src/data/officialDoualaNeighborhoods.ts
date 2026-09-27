@@ -1,4 +1,4 @@
-import { Neighborhood } from '../types';
+import type { Neighborhood } from '../types/index.ts';
 
 /**
  * Données officielles exactes issues du document cartographique de Douala

@@ -59,22 +59,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center gap-3">
-        
-        {/* Firebase Connected Indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Firebase: citrine-pricing</span>
-        </div>
-
-        {/* Mode Tarification Manuelle Indicator */}
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/80 text-amber-900 text-xs font-medium">
-          <span className="w-2 h-2 rounded-full bg-amber-600" />
-          <span>Mode : Tarification Manuelle</span>
-        </div>
-
-        {/* Separator */}
-        <div className="h-4 w-px bg-slate-200" />
-
         {/* User email & Logout */}
         <div className="flex items-center gap-2">
           <div className="text-right hidden sm:block">

@@ -16,7 +16,10 @@ import {
   X,
   AlertCircle,
   HelpCircle,
-  FileCheck
+  FileCheck,
+  Edit3,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 
 interface NeighborhoodsViewProps {
@@ -57,6 +60,62 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const [newNbLng, setNewNbLng] = useState('9.7028');
   const [newNbZone, setNewNbZone] = useState<any>('commercial');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Edit Modal State
+  const [editingNb, setEditingNb] = useState<Neighborhood | null>(null);
+  const [editNbName, setEditNbName] = useState('');
+  const [editNbLat, setEditNbLat] = useState('4.0531');
+  const [editNbLng, setEditNbLng] = useState('9.7028');
+  const [editNbZone, setEditNbZone] = useState<any>('commercial');
+  const [editNbActive, setEditNbActive] = useState(true);
+  const [editNbCityId, setEditNbCityId] = useState(currentCity?.id || 'city_douala');
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const openEditModal = (nb: Neighborhood) => {
+    setEditingNb(nb);
+    setEditNbName(nb.name);
+    setEditNbLat(nb.lat.toString());
+    setEditNbLng(nb.lng.toString());
+    setEditNbZone(nb.zoneType || 'commercial');
+    setEditNbActive(nb.active ?? true);
+    setEditNbCityId(nb.cityId || currentCity?.id || 'city_douala');
+    setEditError(null);
+  };
+
+  const handleUpdateNeighborhood = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNb || !editNbName.trim()) return;
+
+    setIsSubmitting(true);
+    setEditError(null);
+
+    try {
+      await api.updateNeighborhood(editingNb.id, {
+        name: editNbName.trim(),
+        lat: parseFloat(editNbLat) || editingNb.lat,
+        lng: parseFloat(editNbLng) || editingNb.lng,
+        zoneType: editNbZone,
+        active: editNbActive,
+        cityId: editNbCityId
+      });
+      setEditingNb(null);
+      onRefresh();
+    } catch (err: any) {
+      setEditError(err.message || 'Erreur lors de la modification du quartier.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBatchToggle = async (activeState: boolean) => {
+    if (!currentCity?.id) return;
+    try {
+      await api.batchToggleNeighborhoods(currentCity.id, activeState);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Erreur lors de la mise à jour globale.');
+    }
+  };
 
   // Filter by Arrondissement (Douala 1er à 5e)
   const [selectedArrondissement, setSelectedArrondissement] = useState<string>('all');
@@ -271,13 +330,22 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
       label: 'Actions',
       align: 'right',
       render: (nb) => (
-        <button
-          onClick={() => handleDelete(nb.id)}
-          className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-          title="Supprimer le quartier"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={() => openEditModal(nb)}
+            className="p-1 text-slate-400 hover:text-[#1F4F4A] hover:bg-slate-100 rounded transition cursor-pointer"
+            title={`Modifier le quartier ${nb.name}`}
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => handleDelete(nb.id)}
+            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+            title="Supprimer le quartier"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       ),
       exportValue: () => ''
     }
@@ -293,6 +361,28 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         </h1>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Batch Activate / Deactivate all */}
+          {cityNeighborhoods.length > 0 && (
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+              <button
+                onClick={() => handleBatchToggle(true)}
+                className="px-2.5 py-1 font-semibold text-emerald-800 hover:bg-white rounded transition cursor-pointer flex items-center gap-1"
+                title="Activer tous les quartiers de cette ville"
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                <span>Tout activer</span>
+              </button>
+              <button
+                onClick={() => handleBatchToggle(false)}
+                className="px-2.5 py-1 font-semibold text-slate-700 hover:bg-white rounded transition cursor-pointer flex items-center gap-1"
+                title="Désactiver tous les quartiers de cette ville"
+              >
+                <XCircle className="w-3 h-3 text-slate-500" />
+                <span>Tout exclure</span>
+              </button>
+            </div>
+          )}
+
           {/* Reload Douala official full-address neighborhoods */}
           {currentCity?.id === 'city_douala' && (
             <button
@@ -577,7 +667,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
 
       {/* Add Single Neighborhood Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-sm font-bold text-slate-900">
@@ -585,7 +675,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
               </h2>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -602,7 +692,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
                   placeholder="ex: Bastos, Bonanjo, Akwa..."
                   value={newNbName}
                   onChange={(e) => setNewNbName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white"
                 />
               </div>
 
@@ -613,7 +703,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
                 <select
                   value={newNbZone}
                   onChange={(e) => setNewNbZone(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white cursor-pointer"
                 >
                   <option value="commercial">Affaires / Commercial</option>
                   <option value="residential">Résidentiel</option>
@@ -634,7 +724,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
                     required
                     value={newNbLat}
                     onChange={(e) => setNewNbLat(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-600 focus:bg-white font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white font-mono"
                   />
                 </div>
                 <div>
@@ -647,7 +737,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
                     required
                     value={newNbLng}
                     onChange={(e) => setNewNbLng(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-600 focus:bg-white font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white font-mono"
                   />
                 </div>
               </div>
@@ -656,16 +746,170 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition disabled:opacity-50"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#183F3B] rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Ajout...' : 'Ajouter le quartier'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Neighborhood Modal */}
+      {editingNb && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-[#1F4F4A]" />
+                <h2 className="text-sm font-bold text-slate-900">
+                  Modifier le quartier : {editingNb.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setEditingNb(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {editError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateNeighborhood} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nom du quartier / repère
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editNbName}
+                  onChange={(e) => setEditNbName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Ville de rattachement
+                </label>
+                <select
+                  value={editNbCityId}
+                  onChange={(e) => setEditNbCityId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white cursor-pointer"
+                >
+                  {cities.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} (Cameroun)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Typologie urbaine
+                </label>
+                <select
+                  value={editNbZone}
+                  onChange={(e) => setEditNbZone(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white cursor-pointer"
+                >
+                  <option value="commercial">Affaires / Commercial</option>
+                  <option value="residential">Résidentiel</option>
+                  <option value="popular">Populaire / Haute densité</option>
+                  <option value="center">Centre Administratif</option>
+                  <option value="airport">Aéroportuaire</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Latitude GPS
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={editNbLat}
+                    onChange={(e) => setEditNbLat(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Longitude GPS
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={editNbLng}
+                    onChange={(e) => setEditNbLng(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85] focus:bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Status Toggle in edit modal */}
+              <div className="pt-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Statut du quartier
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setEditNbActive(!editNbActive)}
+                  className={`w-full p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                    editNbActive
+                      ? 'bg-emerald-50/70 border-emerald-300 text-emerald-900'
+                      : 'bg-slate-100 border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {editNbActive ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-slate-400" />
+                    )}
+                    <span className="text-xs font-bold">
+                      {editNbActive ? 'Actif (Inclus dans les calculs de tarifs)' : 'Exclu (Non tarifé)'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-semibold underline">
+                    {editNbActive ? 'Exclure' : 'Activer'}
+                  </span>
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingNb(null)}
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#183F3B] rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmitting ? 'Enregistrement...' : 'Enregistrer'}
                 </button>
               </div>
             </form>

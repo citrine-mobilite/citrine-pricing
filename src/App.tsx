@@ -102,7 +102,7 @@ function AppContent() {
       } catch (err) {
         console.error('Error polling active campaigns:', err);
       }
-    }, 1000);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [campaigns]);

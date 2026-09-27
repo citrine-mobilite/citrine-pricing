@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import Swal from 'sweetalert2';
 import { City, Neighborhood, PricingCampaign, TripResult } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +21,9 @@ import {
   SlidersHorizontal,
   ChevronDown,
   StopCircle,
-  Activity
+  Activity,
+  CheckCircle2,
+  Check
 } from 'lucide-react';
 
 interface PricingUnifiedViewProps {
@@ -63,30 +66,24 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     return cityCampaigns[0]?.id || campaigns[0]?.id || '';
   });
 
-  // Keep internal state in sync with parent prop or available campaigns
+  // Keep internal state in sync with parent prop or available campaigns for current city
   useEffect(() => {
     if (propSelectedCampaignId && campaigns.some((c) => c.id === propSelectedCampaignId)) {
       setInternalCampaignId(propSelectedCampaignId);
-    } else if (!campaigns.some((c) => c.id === internalCampaignId)) {
-      const nextId = cityCampaigns[0]?.id || campaigns[0]?.id || '';
-      setInternalCampaignId(nextId);
-      if (onSelectCampaignId && nextId) {
-        onSelectCampaignId(nextId);
+    } else {
+      const activeForCity = campaigns.filter(c => c.cityId === selectedCityId);
+      if (activeForCity.length > 0) {
+        if (!activeForCity.some(c => c.id === internalCampaignId)) {
+          setInternalCampaignId(activeForCity[0].id);
+        }
       }
     }
-  }, [propSelectedCampaignId, campaigns, cityCampaigns, internalCampaignId, onSelectCampaignId]);
+  }, [propSelectedCampaignId, campaigns, selectedCityId, internalCampaignId]);
 
   const activeCampaignId = internalCampaignId;
 
   // Active campaign object
   const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
-
-  // Sync selectedCityId if activeCampaign has a different city
-  useEffect(() => {
-    if (activeCampaign && activeCampaign.cityId !== selectedCityId) {
-      onSelectCityId(activeCampaign.cityId);
-    }
-  }, [activeCampaign, selectedCityId, onSelectCityId]);
 
   const handleCampaignChange = (newCampaignId: string) => {
     setInternalCampaignId(newCampaignId);
@@ -195,14 +192,14 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     setIsLoadingTrips(true);
     fetchTrips();
 
-    // Polling actif toutes les 1 secondes si la campagne est en cours d'exécution
+    // Polling actif toutes les 400ms si la campagne est en cours d'exécution
     const activeCamp = campaigns.find(c => c.id === activeCampaignId);
     let intervalId: any = null;
     if (activeCamp?.status === 'in_progress') {
       intervalId = setInterval(() => {
         fetchTrips();
         if (onRefresh) onRefresh();
-      }, 1000);
+      }, 400);
     }
 
     return () => {
@@ -211,12 +208,71 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     };
   }, [activeCampaignId, campaigns, onRefresh]);
 
+  // Track status transitions to display SweetAlert2 on completion or failure
+  const prevCampaignStatusRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!activeCampaignId) return;
+    const currentCamp = campaigns.find((c) => c.id === activeCampaignId);
+    if (!currentCamp) return;
+
+    const prevStatus = prevCampaignStatusRef.current[activeCampaignId];
+    const currentStatus = currentCamp.status;
+    prevCampaignStatusRef.current[activeCampaignId] = currentStatus;
+
+    // Transition from in_progress to completed
+    if (prevStatus === 'in_progress' && currentStatus === 'completed') {
+      Swal.fire({
+        icon: 'success',
+        title: 'Tarification terminée avec succès !',
+        html: `
+          <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+              <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte comparative terminée</p>
+            </div>
+            <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${currentCamp.cityName}</p>
+            <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${currentCamp.completedPairs} / ${currentCamp.totalPairs}</p>
+            <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(currentCamp.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+            <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(currentCamp.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+            <p style="margin-bottom: 5px;"><strong>Chauffeurs HERO dispos :</strong> ${currentCamp.heroStats?.avgDriversCount || 0} par secteur</p>
+            <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${currentCamp.durationSeconds || 1} seconde(s)</p>
+          </div>
+        `,
+        confirmButtonColor: '#1F4F4A',
+        confirmButtonText: 'Consulter les résultats'
+      });
+    } else if (prevStatus === 'in_progress' && currentStatus === 'failed') {
+      // Transition from in_progress to failed
+      Swal.fire({
+        icon: 'error',
+        title: 'Échec de la tarification',
+        html: `
+          <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #1e293b;">
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+              <p style="margin: 0; font-weight: 700; color: #991b1b;">❌ La tarification a échoué</p>
+            </div>
+            <p style="margin-bottom: 8px;"><strong>Cause :</strong> ${(currentCamp as any).errorMessage || currentCamp.lastError || 'Impossible de joindre les serveurs de tarification ou données introuvables.'}</p>
+            <p style="margin-bottom: 0; color: #64748b; font-size: 12px;">Vérifiez vos paramètres API ou les coordonnées des quartiers.</p>
+          </div>
+        `,
+        confirmButtonColor: '#DC2626',
+        confirmButtonText: 'Compris'
+      });
+    }
+  }, [campaigns, activeCampaignId]);
+
   // Launch pricing handler (executes Yango and Hero in parallel)
   const handleLaunch = async (overrideLimit: number | 'all') => {
     if (totalCombinations === 0) {
       setLaunchError(
         'Il faut au minimum 2 quartiers actifs dans cette ville pour générer des combinaisons.'
       );
+      Swal.fire({
+        icon: 'warning',
+        title: 'Quartiers insuffisants',
+        text: 'Il faut au minimum 2 quartiers actifs dans cette ville pour générer des combinaisons.',
+        confirmButtonColor: '#1F4F4A'
+      });
       return;
     }
 
@@ -236,11 +292,20 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
 
       if (result && result.campaign) {
+        // Enregistrer le statut initial pour la détection
+        prevCampaignStatusRef.current[result.campaign.id] = 'in_progress';
         onCampaignStarted(result.campaign.id);
         handleCampaignChange(result.campaign.id);
       }
     } catch (err: any) {
-      setLaunchError(err.message || 'Erreur lors du lancement du pricing en parallèle.');
+      const msg = err.message || 'Erreur lors du lancement du pricing en parallèle.';
+      setLaunchError(msg);
+      Swal.fire({
+        icon: 'error',
+        title: 'Erreur au démarrage',
+        text: msg,
+        confirmButtonColor: '#DC2626'
+      });
     } finally {
       setLaunchingTarget(null);
     }
@@ -682,126 +747,151 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       {/* 1. Header & Quick Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
             Tarification & Benchmark Multi-Classes
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Collecte simultanée des prix <strong>Yango</strong> (4 classes) et <strong>Hero Cab</strong> (2 classes) pour {currentCity?.name || 'Douala'}.
+            Analyse comparative des tarifs de transport urbain pour {currentCity?.name || 'Douala'}.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setShowSingleTester(!showSingleTester)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition cursor-pointer"
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border transition cursor-pointer ${
+              showSingleTester
+                ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-300 shadow-xs'
+            }`}
           >
-            <Zap className="w-3.5 h-3.5 text-slate-500" />
-            <span>{showSingleTester ? 'Masquer test direct' : 'Tester un trajet'}</span>
+            <Zap className={`w-3.5 h-3.5 ${showSingleTester ? 'text-amber-400' : 'text-slate-500'}`} />
+            <span>{showSingleTester ? 'Masquer le test direct' : 'Tester un trajet direct'}</span>
           </button>
         </div>
       </div>
 
+      {/* Inactive City Notice */}
+      {!currentCity?.active && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300/80 text-amber-900 text-xs flex items-center gap-2.5 shadow-xs">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <span className="font-bold">Ville désactivée :</span> La ville <strong>{currentCity?.name}</strong> est actuellement inactive. La tarification est verrouillée. Activez cette ville dans l'onglet <strong>Villes</strong> pour lancer des relevés de prix.
+          </div>
+        </div>
+      )}
+
       {/* 2. Unified Setup & Execution Toolbar */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4">
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4 sm:p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           
-          {/* Controls: City, Slot, Sample Count */}
+          {/* Controls: City Selector & Sample Choice Switch */}
           <div className="flex flex-wrap items-center gap-3">
-            
             {/* City Selector */}
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[11px] text-slate-400 font-medium">Ville :</span>
               <select
                 value={selectedCityId}
                 onChange={(e) => onSelectCityId(e.target.value)}
-                className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
               >
                 {(cities.length > 0 ? cities : INITIAL_CITIES).map((city) => (
                   <option key={city.id} value={city.id}>
-                    {city.name}
+                    {city.name} {!city.active ? '(Inactive)' : ''}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Mode Manuel Badge */}
-            <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-200/80 text-amber-900 rounded-lg px-2.5 py-1.5 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-              <span>Calcul Manuel Direct</span>
+            {/* Scope info indicator */}
+            <div className="text-xs text-slate-500 font-medium hidden sm:block">
+              <span>{cityActiveNeighborhoods.length} quartiers actifs</span>
+              <span className="mx-1.5 text-slate-300">•</span>
+              <span>{totalCombinations.toLocaleString('fr-FR')} paires possibles</span>
             </div>
-
-            {/* Divider */}
-            <div className="hidden sm:block h-6 w-px bg-slate-200" />
-
-            {/* Choix d'exécution : 2 options exclusives (Test 25 trajets OU Campagne Complète) */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs">
-              <button
-                key="25"
-                onClick={() => setSampleChoice('25')}
-                className={`px-3 py-1 font-medium rounded-md transition cursor-pointer whitespace-nowrap ${
-                  sampleChoice === '25'
-                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Test Rapide (25 trajets)
-              </button>
-              <button
-                key="all"
-                onClick={() => setSampleChoice('all')}
-                className={`px-3 py-1 font-medium rounded-md transition cursor-pointer whitespace-nowrap ${
-                  sampleChoice === 'all'
-                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Campagne Complète ({totalCombinations.toLocaleString('fr-FR')} trajets)
-              </button>
-            </div>
-
           </div>
 
-          {/* Execution Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Button 1: Test sample (25) */}
+          {/* Explicit Dual Launch Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => handleLaunch(25)}
-              disabled={launchingTarget !== null || totalCombinations === 0}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 shadow-2xs transition disabled:opacity-40 cursor-pointer"
-              title="Lancer un test rapide sur un échantillon de 25 trajets"
+              disabled={launchingTarget !== null || !currentCity?.active || totalCombinations === 0}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-800 bg-amber-50 hover:bg-amber-100/80 border border-amber-300/70 shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              title={!currentCity?.active ? 'Ville désactivée' : 'Lancer un test sur un échantillon rapide de 25 trajets'}
             >
-              {launchingTarget === '25' ? (
-                <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
-              ) : (
-                <Zap className="w-3.5 h-3.5 text-amber-600" />
-              )}
-              <span>{launchingTarget === '25' ? 'Lancement test (25)...' : 'Test Rapide (25 trajets)'}</span>
+              <Zap className="w-3.5 h-3.5 text-amber-600" />
+              <span>Test Rapide (25 trajets)</span>
             </button>
 
-            {/* Button 2: Launch for ALL combinations */}
             <button
               onClick={() => handleLaunch('all')}
-              disabled={launchingTarget !== null || totalCombinations === 0}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#183F3B] shadow-2xs transition disabled:opacity-40 cursor-pointer"
-              title={`Lancer la tarification complète sur l'ensemble des ${totalCombinations.toLocaleString('fr-FR')} combinaisons de ${currentCity.name}`}
+              disabled={launchingTarget !== null || !currentCity?.active || totalCombinations === 0}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#183F3B] shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              title={!currentCity?.active ? 'Ville désactivée' : `Lancer la collecte complète de tous les ${totalCombinations} trajets`}
             >
               {launchingTarget === 'all' ? (
                 <RotateCw className="w-3.5 h-3.5 animate-spin text-white" />
               ) : (
-                <Play className="w-3.5 h-3.5 fill-current" />
+                <Play className="w-3.5 h-3.5 fill-current text-white" />
               )}
-              <span>
-                {launchingTarget === 'all'
-                  ? 'Collecte en cours (TOUT)...'
-                  : `Lancer pour TOUS (${totalCombinations.toLocaleString('fr-FR')} trajets)`}
-              </span>
+              <span>Campagne Complète ({totalCombinations.toLocaleString('fr-FR')} trajets)</span>
             </button>
           </div>
 
         </div>
 
+        {/* Live Execution Progress Bar Banner with 24/25 Counter */}
+        {(activeCampaign?.status === 'in_progress' || launchingTarget !== null) && (
+          <div className="mt-4 pt-4 border-t border-amber-200/80 bg-amber-50/70 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 p-4 sm:p-5 rounded-b-xl space-y-2.5 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <RotateCw className="w-4 h-4 text-amber-700 animate-spin" />
+                <span className="text-xs font-bold text-slate-900">
+                  Collecte des tarifs en direct pour {activeCampaign?.cityName || currentCity.name}
+                </span>
+                <span className="text-[10px] font-semibold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
+                  Parallèle Yango & Hero
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-900 font-mono">
+                  {Math.max(activeCampaign?.completedPairs || 0, trips.length)} / {activeCampaign?.totalPairs || (sampleChoice === 'all' ? totalCombinations : 25)} destinations pricées ({Math.min(100, Math.round((Math.max(activeCampaign?.completedPairs || 0, trips.length) / (activeCampaign?.totalPairs || (sampleChoice === 'all' ? totalCombinations : 25) || 1)) * 100))}%)
+                </span>
+                {activeCampaignId && (
+                  <button
+                    onClick={() => handleCancelCampaign(activeCampaignId)}
+                    disabled={isCancelling}
+                    className="text-xs font-semibold text-rose-700 hover:text-rose-800 hover:underline cursor-pointer"
+                  >
+                    Arrêter
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Visual Animated Progress Bar */}
+            <div className="space-y-1">
+              <div className="w-full h-2.5 bg-amber-200/70 rounded-full overflow-hidden shadow-inner">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-300 rounded-full"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round(
+                        (Math.max(activeCampaign?.completedPairs || 0, trips.length) /
+                          (activeCampaign?.totalPairs || (sampleChoice === 'all' ? totalCombinations : 25) || 1)) *
+                          100
+                      )
+                    )}%`
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {launchError && (
-          <div className="mt-3 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+          <div className="mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
             <span>{launchError}</span>
           </div>
@@ -919,37 +1009,37 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         
         {/* Yango 4 Classes Overview */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+        <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-              <span className="text-xs font-semibold text-slate-900">Yango (4 Classes)</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">Moyennes Yango (4 Classes)</span>
             </div>
-            <span className="text-[11px] text-slate-400 font-mono">{stats.yango.eco.count} trajets</span>
+            <span className="text-[11px] text-slate-400 font-mono">{stats.yango.eco.count} trajets relevés</span>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 pt-3 text-center">
-            <div>
+          <div className="grid grid-cols-4 gap-2 pt-4 text-center divide-x divide-slate-100">
+            <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Éco</div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">
+              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.eco.avg > 0 ? `${stats.yango.eco.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
-            <div>
+            <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Confort</div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">
+              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.confort.avg > 0 ? `${stats.yango.confort.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
-            <div>
+            <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Confort+</div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">
+              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.confortPlus.avg > 0 ? `${stats.yango.confortPlus.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
-            <div>
+            <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Moto</div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">
+              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.moto.avg > 0 ? `${stats.yango.moto.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
@@ -957,27 +1047,27 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         </div>
 
         {/* Hero Cab 2 Classes Overview */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+        <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-teal-600" />
-              <span className="text-xs font-semibold text-slate-900">Hero Cab (2 Classes)</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-[#1F4F4A] shrink-0" />
+              <span className="text-xs font-bold text-[#1F4F4A] uppercase tracking-wide">Moyennes Hero Cab (2 Classes)</span>
             </div>
-            <span className="text-[11px] text-teal-700 font-medium">
-              {stats.heroWins > 0 ? `${stats.heroWins} fois moins cher` : 'Tarifs relevés'}
+            <span className="text-[11px] font-semibold text-[#1F4F4A] bg-[#F0FAFA] px-2 py-0.5 rounded border border-[#3D8B85]/20">
+              {stats.heroWins > 0 ? `${stats.heroWins} fois plus compétitif` : 'Tarifs relevés'}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-3 text-center">
-            <div>
+          <div className="grid grid-cols-2 gap-4 pt-4 text-center divide-x divide-slate-100">
+            <div className="px-2">
               <div className="text-[11px] text-slate-500 font-medium">Éco (Standard)</div>
-              <div className="text-sm font-bold text-teal-800 mt-0.5">
+              <div className="text-sm sm:text-base font-bold text-[#1F4F4A] mt-1 font-mono">
                 {stats.hero.eco.avg > 0 ? `${stats.hero.eco.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
-            <div>
+            <div className="px-2">
               <div className="text-[11px] text-slate-500 font-medium">Confort (Berline)</div>
-              <div className="text-sm font-bold text-teal-800 mt-0.5">
+              <div className="text-sm sm:text-base font-bold text-[#1F4F4A] mt-1 font-mono">
                 {stats.hero.confort.avg > 0 ? `${stats.hero.confort.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
@@ -987,199 +1077,217 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       </div>
 
       {/* 5. Active Campaign Banner & Selection Tabs */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         
         {/* Campaign Banner Header */}
         {activeCampaign ? (
-          <div className="bg-[#1F4F4A]/5 border border-[#3D8B85]/20 rounded-xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                {activeCampaign.isTestSample ? (
-                  <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-100/90 px-2.5 py-1 rounded-md border border-amber-300/80">
-                    ⚡ Test Rapide ({activeCampaign.totalPairs} trajets)
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 font-bold text-[#1F4F4A] bg-[#3D8B85]/15 px-2.5 py-1 rounded-md border border-[#3D8B85]/30">
-                    🚀 Campagne Globale ({activeCampaign.totalPairs.toLocaleString('fr-FR')} trajets)
-                  </span>
-                )}
-                <span className="font-bold text-slate-900 text-sm">{activeCampaign.cityName}</span>
-                <span className="text-slate-400">·</span>
-                <span className="text-slate-600 font-mono">
-                  {new Date(activeCampaign.startedAt).toLocaleString('fr-FR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-                {activeCampaign.status === 'in_progress' && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
-                    <RotateCw className="w-3 h-3 animate-spin text-amber-600" />
-                    En cours d'exécution
-                  </span>
-                )}
-                {activeCampaign.status === 'cancelled' && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300">
-                    <StopCircle className="w-3 h-3 text-rose-600" />
-                    Campagne interrompue
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-600">
-                Affichage des {trips.length} relevés de la campagne{' '}
-                <strong className="font-mono text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{activeCampaign.id}</strong>{' '}
-                déclenchée par {activeCampaign.triggeredByUserName || 'Système'}.
-              </p>
-            </div>
+          <div className="bg-white border border-slate-200/90 rounded-xl p-5 shadow-xs space-y-4">
+            
+            {/* Top row: Title, status indicator & cancel button */}
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                    {activeCampaign.isTestSample
+                      ? `Relevé Test Rapide (${activeCampaign.totalPairs} trajets)`
+                      : `Campagne Globale (${activeCampaign.totalPairs.toLocaleString('fr-FR')} trajets)`}
+                  </h2>
+                  {activeCampaign.status === 'in_progress' && (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                      <RotateCw className="w-3 h-3 animate-spin text-amber-600" />
+                      En cours d'exécution ({trips.length} / {activeCampaign.totalPairs})
+                    </span>
+                  )}
+                  {activeCampaign.status === 'completed' && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Terminée ({trips.length} relevés)
+                    </span>
+                  )}
+                  {activeCampaign.status === 'cancelled' && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-800 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
+                      <StopCircle className="w-3.5 h-3.5 text-rose-600" />
+                      Interrompue
+                    </span>
+                  )}
+                </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                  <span className="font-semibold text-slate-800">{activeCampaign.cityName}</span>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span>
+                    {new Date(activeCampaign.startedAt).toLocaleString('fr-FR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span>Lancé par {activeCampaign.triggeredByUserName || 'Système'}</span>
+                </div>
+              </div>
+
               {activeCampaign.status === 'in_progress' && (
                 <button
                   onClick={() => handleCancelCampaign(activeCampaign.id)}
                   disabled={isCancelling}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg shadow-md transition cursor-pointer"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg shadow-xs transition cursor-pointer shrink-0"
                   title="Stopper immédiatement toutes les requêtes de cette campagne"
                 >
                   <StopCircle className={`w-4 h-4 ${isCancelling ? 'animate-spin' : ''}`} />
-                  <span>{isCancelling ? 'Interruption...' : 'Arrêter immédiatement'}</span>
+                  <span>{isCancelling ? 'Arrêt...' : 'Arrêter immédiatement'}</span>
                 </button>
               )}
-
-              {/* Direct Quick Switch Pills between campaigns of this city */}
-              {cityCampaigns.length > 1 && (
-                <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200/90 shrink-0 self-start md:self-auto overflow-x-auto">
-                  {cityCampaigns.map((c) => {
-                    const isActive = c.id === activeCampaignId;
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() => handleCampaignChange(c.id)}
-                        className={`px-3 py-1.5 text-xs rounded-md font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                          isActive
-                            ? 'bg-[#1F4F4A] text-white font-semibold shadow-2xs'
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                        }`}
-                      >
-                        <span>{c.isTestSample ? '⚡ Test' : '🚀 Globale'}</span>
-                        <span className="text-[10px] opacity-80 font-mono">
-                          ({new Date(c.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
+
+            {/* Visual Live Progress Bar inside Campaign Card */}
+            {activeCampaign.status === 'in_progress' && (
+              <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <RotateCw className="w-3.5 h-3.5 text-amber-700 animate-spin" />
+                    <span className="font-bold text-slate-900">
+                      Progression de la tarification :
+                    </span>
+                  </div>
+                  <span className="font-bold text-slate-900 font-mono">
+                    {Math.max(activeCampaign.completedPairs || 0, trips.length)} / {activeCampaign.totalPairs} destinations pricées ({Math.min(100, Math.round((Math.max(activeCampaign.completedPairs || 0, trips.length) / (activeCampaign.totalPairs || 1)) * 100))}%)
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-amber-200/70 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-300 rounded-full"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          (Math.max(activeCampaign.completedPairs || 0, trips.length) /
+                            (activeCampaign.totalPairs || 1)) *
+                            100
+                        )
+                      )}%`
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Bottom row: Campaign Select and View Mode Switcher */}
+            <div className="pt-3.5 border-t border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <label className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                  Campagne active :
+                </label>
+                <select
+                  value={activeCampaignId}
+                  onChange={(e) => handleCampaignChange(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#3D8B85] cursor-pointer max-w-full sm:max-w-md"
+                >
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.isTestSample ? '⚡ TEST RAPIDE' : '🚀 GLOBALE'} • {c.cityName} ({c.completedPairs || c.totalPairs} trajets) — {new Date(c.startedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Segmented Mode Switcher */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs self-start lg:self-auto">
+                <button
+                  onClick={() => setViewMode('all')}
+                  className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
+                    viewMode === 'all'
+                      ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Toutes les classes (6)
+                </button>
+                <button
+                  onClick={() => setViewMode('eco_compare')}
+                  className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
+                    viewMode === 'eco_compare'
+                      ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Comparatif Éco
+                </button>
+                <button
+                  onClick={() => setViewMode('yango')}
+                  className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
+                    viewMode === 'yango'
+                      ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Yango Seul (4 classes)
+                </button>
+              </div>
+            </div>
+
           </div>
         ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800">
+          <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-4 text-xs text-amber-800">
             Aucune campagne sélectionnée. Veuillez en choisir une ou lancer un pricing ci-dessus.
           </div>
         )}
 
-        {/* Sub-bar: Campaign picker, View Mode Switcher, and Neighborhood Filters */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
-          
-          {/* Row 1: Campaign Selector & View Mode Switcher */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-            
-            {/* Campaign Select */}
-            <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
-                Campagne :
-              </label>
+        {/* Table Filters Sub-bar */}
+        <div className="bg-white px-4 py-3 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>Filtrer les trajets :</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 w-full sm:w-48">
+              <span className="text-[11px] text-slate-400 shrink-0">Départ :</span>
               <select
-                value={activeCampaignId}
-                onChange={(e) => handleCampaignChange(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#3D8B85]/30 focus:border-[#3D8B85] cursor-pointer w-full sm:w-auto max-w-full sm:max-w-md"
+                value={startFilter}
+                onChange={(e) => setStartFilter(e.target.value)}
+                className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer w-full"
               >
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.isTestSample ? '⚡ TEST RAPIDE' : '🚀 CAMPAGNE GLOBALE'} • {c.cityName} ({c.completedPairs} trajets) - {new Date(c.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                <option value="">Tous les quartiers</option>
+                {neighborhoodNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Segmented Mode Switcher */}
-            <div className="flex items-center bg-slate-100/90 p-1 rounded-lg text-xs overflow-x-auto max-w-full">
-              <button
-                onClick={() => setViewMode('all')}
-                className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
-                  viewMode === 'all'
-                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 w-full sm:w-48">
+              <span className="text-[11px] text-slate-400 shrink-0">Arrivée :</span>
+              <select
+                value={endFilter}
+                onChange={(e) => setEndFilter(e.target.value)}
+                className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer w-full"
               >
-                Vue Complète (6 classes)
-              </button>
-              <button
-                onClick={() => setViewMode('eco_compare')}
-                className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
-                  viewMode === 'eco_compare'
-                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Comparatif Éco
-              </button>
-              <button
-                onClick={() => setViewMode('yango')}
-                className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
-                  viewMode === 'yango'
-                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Yango Seul (4 classes)
-              </button>
+                <option value="">Tous les quartiers</option>
+                {neighborhoodNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {(startFilter || endFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStartFilter('');
+                  setEndFilter('');
+                }}
+                className="text-xs text-[#3D8B85] hover:text-[#1F4F4A] font-semibold px-2 py-1 cursor-pointer whitespace-nowrap"
+              >
+                Réinitialiser
+              </button>
+            )}
           </div>
-
-          {/* Row 2: Filters */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span>Filtrer les trajets :</span>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 w-full sm:w-48">
-                <span className="text-[11px] text-slate-400 shrink-0">Départ :</span>
-                <select
-                  value={startFilter}
-                  onChange={(e) => setStartFilter(e.target.value)}
-                  className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer w-full"
-                >
-                  <option value="">Tous</option>
-                  {neighborhoodNames.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 w-full sm:w-48">
-                <span className="text-[11px] text-slate-400 shrink-0">Arrivée :</span>
-                <select
-                  value={endFilter}
-                  onChange={(e) => setEndFilter(e.target.value)}
-                  className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer w-full"
-                >
-                  <option value="">Tous</option>
-                  {neighborhoodNames.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
         </div>
 
         {/* Crisp Data Table */}

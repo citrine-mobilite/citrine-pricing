@@ -1,5 +1,5 @@
-import { City, Neighborhood, PricingCampaign, TripResult, User, YangoSettings } from '../types';
-import { getDoualaFullAddressNeighborhoods } from './officialDoualaNeighborhoods';
+import type { City, Neighborhood, PricingCampaign, TripResult, User, YangoSettings } from '../types/index.ts';
+import { getDoualaFullAddressNeighborhoods } from './officialDoualaNeighborhoods.ts';
 
 export const CAMEROON_SLOTS: string[] = [];
 

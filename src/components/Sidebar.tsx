@@ -1,4 +1,5 @@
 import React from 'react';
+import { HeroLogo } from './HeroLogo';
 import {
   LayoutDashboard,
   Zap,
@@ -7,8 +8,7 @@ import {
   Compass,
   History,
   Settings,
-  Users,
-  Gem
+  Users
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -39,20 +39,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const content = (
     <div className="flex flex-col h-full bg-white border-r border-[#3D8B85]/15 select-none shadow-[1px_0_4px_rgba(31,79,74,0.03)]">
-      {/* Brand Header */}
-      <div className="h-16 px-5 flex items-center justify-between border-b border-[#3D8B85]/10 bg-white">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#3D8B85] flex items-center justify-center shadow-sm">
-            <Gem className="w-4 h-4 text-[#D4A82F] font-bold" />
-          </div>
-          <div>
-            <div className="text-sm font-bold tracking-tight text-[#1F4F4A]">
-              Citrine Pricing
-            </div>
-            <div className="text-[10px] text-[#3D8B85] font-semibold tracking-wider uppercase">
-              VTC Cameroun
-            </div>
-          </div>
+      {/* Brand Header with Hero Cab Logo */}
+      <div className="h-16 px-4 flex items-center justify-between border-b border-[#3D8B85]/10 bg-white">
+        <div className="flex items-center gap-2.5">
+          <HeroLogo size="md" showSubtitle={true} />
         </div>
 
         {/* Mobile close button */}
