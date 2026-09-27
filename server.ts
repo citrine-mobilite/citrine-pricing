@@ -15,7 +15,7 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import { createRequire } from 'module';
+import firebaseConfigJson from './firebase-applet-config.json';
 import {
   INITIAL_CITIES,
   INITIAL_NEIGHBORHOODS,
@@ -39,21 +39,23 @@ import {
 
 dotenv.config();
 
-const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let firebaseConfigData: any = null;
-try {
-  firebaseConfigData = require('./firebase-applet-config.json');
-} catch {
+// IMPORTANT: la config Firebase est chargée via un import ES statique
+// (traçable et bundlé de façon fiable par le compilateur serverless de Vercel),
+// au lieu d'un `createRequire(...)` dynamique qui n'était pas toujours détecté
+// par l'analyseur de dépendances de Vercel et pouvait provoquer un plantage
+// silencieux (ou l'exclusion du fichier du bundle) en production.
+let firebaseConfigData: any = (firebaseConfigJson as any) || null;
+if (!firebaseConfigData || !firebaseConfigData.apiKey) {
   try {
     const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
     if (fs.existsSync(cfgPath)) {
       firebaseConfigData = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
     }
   } catch (e) {
-    console.warn('[Firestore] Failed to read firebase-applet-config.json:', e);
+    console.warn('[Firestore] Failed to read firebase-applet-config.json from disk:', e);
   }
 }
 
@@ -1378,7 +1380,22 @@ app.get('/api/campaigns', async (req: Request, res: Response) => {
     try {
       const snap = await getDocs(collection(db, 'campaigns'));
       if (!snap.empty) {
-        campaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+        const firestoreCamps = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+        const map = new Map<string, PricingCampaign>();
+
+        // First add Firestore campaigns
+        for (const fc of firestoreCamps) {
+          map.set(fc.id, fc);
+        }
+
+        // Preserve in-memory campaigns (especially active or newly created ones)
+        for (const mc of campaigns) {
+          if (!map.has(mc.id) || mc.status === 'in_progress') {
+            map.set(mc.id, mc);
+          }
+        }
+
+        campaigns = Array.from(map.values());
       }
     } catch (e) {
       console.warn('[Firestore] get campaigns error:', e);
@@ -1509,6 +1526,14 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
   };
 
   campaigns.unshift(campaign);
+  if (db) {
+    try {
+      await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
+    } catch (e) {
+      console.warn('[Firestore] initial campaign save error:', e);
+    }
+  }
+
   const taskAbortController = new AbortController();
   activeCampaignTasks.set(campaignId, { cancelled: false, abortController: taskAbortController });
 

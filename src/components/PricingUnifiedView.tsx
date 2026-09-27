@@ -68,7 +68,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
   // Keep internal state in sync with parent prop or available campaigns for current city
   useEffect(() => {
-    if (propSelectedCampaignId && campaigns.some((c) => c.id === propSelectedCampaignId)) {
+    if (propSelectedCampaignId) {
       setInternalCampaignId(propSelectedCampaignId);
     } else {
       const activeForCity = campaigns.filter(c => c.cityId === selectedCityId);
@@ -174,14 +174,28 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     }
 
     let isMounted = true;
-    const fetchTrips = () => {
+    const fetchTrips = (isInitial = false) => {
       api
         .getCampaignResults(activeCampaignId)
         .then((data) => {
-          if (isMounted) {
-            setTrips(data);
-            setIsLoadingTrips(false);
+          if (!isMounted) return;
+          if (isInitial) {
+            setTrips(data || []);
+          } else {
+            setTrips((prevTrips) => {
+              if (!data || data.length === 0) return prevTrips;
+              const prevIds = new Set(prevTrips.map((t) => t.id));
+              const newItems = data.filter((t) => !prevIds.has(t.id));
+
+              if (newItems.length === 0) {
+                return prevTrips; // Conservé à l'identique : Aucun re-render React du tableau
+              }
+
+              // Ajout incrémental au sommet du tableau sans réinitialiser l'existant
+              return [...newItems, ...prevTrips];
+            });
           }
+          setIsLoadingTrips(false);
         })
         .catch((err) => {
           console.error('Error loading trips:', err);
@@ -190,15 +204,14 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     };
 
     setIsLoadingTrips(true);
-    fetchTrips();
+    fetchTrips(true);
 
     // Polling actif toutes les 400ms si la campagne est en cours d'exécution
     const activeCamp = campaigns.find(c => c.id === activeCampaignId);
     let intervalId: any = null;
     if (activeCamp?.status === 'in_progress') {
       intervalId = setInterval(() => {
-        fetchTrips();
-        if (onRefresh) onRefresh();
+        fetchTrips(false);
       }, 400);
     }
 
@@ -206,7 +219,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       isMounted = false;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [activeCampaignId, campaigns, onRefresh]);
+  }, [activeCampaignId, campaigns]);
 
   // Track status transitions to display SweetAlert2 on completion or failure
   const prevCampaignStatusRef = useRef<Record<string, string>>({});
@@ -220,44 +233,46 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     const currentStatus = currentCamp.status;
     prevCampaignStatusRef.current[activeCampaignId] = currentStatus;
 
-    // Transition from in_progress to completed
-    if (prevStatus === 'in_progress' && currentStatus === 'completed') {
-      Swal.fire({
-        icon: 'success',
-        title: 'Tarification terminée avec succès !',
-        html: `
-          <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-              <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte comparative terminée</p>
+    // Transition from in_progress to completed or failed
+    if (prevStatus === 'in_progress' && (currentStatus === 'completed' || currentStatus === 'failed' || currentStatus === 'cancelled')) {
+      if (onRefresh) onRefresh();
+      if (currentStatus === 'completed') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Tarification terminée avec succès !',
+          html: `
+            <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte comparative terminée</p>
+              </div>
+              <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${currentCamp.cityName}</p>
+              <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${currentCamp.completedPairs} / ${currentCamp.totalPairs}</p>
+              <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(currentCamp.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+              <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(currentCamp.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+              <p style="margin-bottom: 5px;"><strong>Chauffeurs HERO dispos :</strong> ${currentCamp.heroStats?.avgDriversCount || 0} par secteur</p>
+              <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${currentCamp.durationSeconds || 1} seconde(s)</p>
             </div>
-            <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${currentCamp.cityName}</p>
-            <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${currentCamp.completedPairs} / ${currentCamp.totalPairs}</p>
-            <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(currentCamp.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-            <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(currentCamp.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-            <p style="margin-bottom: 5px;"><strong>Chauffeurs HERO dispos :</strong> ${currentCamp.heroStats?.avgDriversCount || 0} par secteur</p>
-            <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${currentCamp.durationSeconds || 1} seconde(s)</p>
-          </div>
-        `,
-        confirmButtonColor: '#1F4F4A',
-        confirmButtonText: 'Consulter les résultats'
-      });
-    } else if (prevStatus === 'in_progress' && currentStatus === 'failed') {
-      // Transition from in_progress to failed
-      Swal.fire({
-        icon: 'error',
-        title: 'Échec de la tarification',
-        html: `
-          <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #1e293b;">
-            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-              <p style="margin: 0; font-weight: 700; color: #991b1b;">❌ La tarification a échoué</p>
+          `,
+          confirmButtonColor: '#1F4F4A',
+          confirmButtonText: 'Consulter les résultats'
+        });
+      } else if (currentStatus === 'failed') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Échec de la tarification',
+          html: `
+            <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #1e293b;">
+              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                <p style="margin: 0; font-weight: 700; color: #991b1b;">❌ La tarification a échoué</p>
+              </div>
+              <p style="margin-bottom: 8px;"><strong>Cause :</strong> ${(currentCamp as any).errorMessage || currentCamp.lastError || 'Impossible de joindre les serveurs de tarification ou données introuvables.'}</p>
+              <p style="margin-bottom: 0; color: #64748b; font-size: 12px;">Vérifiez vos paramètres API ou les coordonnées des quartiers.</p>
             </div>
-            <p style="margin-bottom: 8px;"><strong>Cause :</strong> ${(currentCamp as any).errorMessage || currentCamp.lastError || 'Impossible de joindre les serveurs de tarification ou données introuvables.'}</p>
-            <p style="margin-bottom: 0; color: #64748b; font-size: 12px;">Vérifiez vos paramètres API ou les coordonnées des quartiers.</p>
-          </div>
-        `,
-        confirmButtonColor: '#DC2626',
-        confirmButtonText: 'Compris'
-      });
+          `,
+          confirmButtonColor: '#DC2626',
+          confirmButtonText: 'Compris'
+        });
+      }
     }
   }, [campaigns, activeCampaignId]);
 
@@ -400,6 +415,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         }
       };
       setInspectedTrip(tempTrip);
+      setTrips((prev) => [tempTrip, ...prev.filter((t) => t.id !== tempTrip.id)]);
     } catch (err: any) {
       alert(err.message || 'Erreur lors du test direct.');
     } finally {
