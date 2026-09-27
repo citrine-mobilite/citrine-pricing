@@ -117,8 +117,9 @@ function cleanFirestoreDoc<T>(input: T): any {
 let users: User[] = [...INITIAL_USERS];
 let cities: City[] = [...INITIAL_CITIES];
 let neighborhoods: Neighborhood[] = [...INITIAL_NEIGHBORHOODS];
-let campaigns: PricingCampaign[] = [];
-let tripResults: TripResult[] = [];
+const initialCampaignData = generateInitialCampaigns();
+let campaigns: PricingCampaign[] = [...initialCampaignData.campaigns];
+let tripResults: TripResult[] = [...initialCampaignData.tripResults];
 
 // Sync from Firestore on server startup
 async function syncFromFirestore() {
@@ -155,12 +156,31 @@ async function syncFromFirestore() {
       }
     }
 
-    // 4. Campaigns
+    // 4. Campaigns & Trip Results
     const campsSnap = await getDocs(collection(db, 'campaigns'));
     if (!campsSnap.empty) {
-      campaigns = campsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
-      campaigns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-      console.log(`[Firestore] ${campaigns.length} campagnes chargées depuis Firestore.`);
+      const loadedCamps = campsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+      loadedCamps.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      
+      const allTrips: TripResult[] = [...tripResults];
+      for (const camp of loadedCamps) {
+        try {
+          const tripsSnap = await getDocs(collection(db, 'campaigns', camp.id, 'trip_results'));
+          if (!tripsSnap.empty) {
+            tripsSnap.docs.forEach(d => {
+              const tripObj = { id: d.id, ...d.data() } as TripResult;
+              if (!allTrips.some(t => t.id === tripObj.id)) {
+                allTrips.push(tripObj);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn(`[Firestore] Erreur chargement relevés pour campagne ${camp.id}:`, e);
+        }
+      }
+      campaigns = loadedCamps;
+      tripResults = allTrips;
+      console.log(`[Firestore] ${campaigns.length} campagnes et ${tripResults.length} relevés chargés depuis Firestore.`);
     }
 
     // 5. Settings
@@ -1855,11 +1875,19 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
       city.autoSchedule.lastRunAt = campaign.finishedAt;
     }
 
-    // Persist final completed campaign to Firestore in ONE SINGLE REQUEST (Zero intermediate writes)
+    // Persist final completed campaign and its trip results to Firestore
     if (db) {
       try {
         await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
-        console.log(`[Firestore Quota Optimisé] Campagne ${campaignId} enregistrée en 1 SEULE requête Firestore.`);
+        const campTrips = tripResults.filter(t => t.campaignId === campaignId);
+        if (campTrips.length > 0) {
+          const batch = writeBatch(db);
+          for (const t of campTrips) {
+            batch.set(doc(db, 'campaigns', campaignId, 'trip_results', t.id), cleanFirestoreDoc(t));
+          }
+          await batch.commit();
+        }
+        console.log(`[Firestore] Campagne ${campaignId} et ${campTrips.length} relevés enregistrés avec succès.`);
       } catch (e) {
         console.warn('[Firestore] final single campaign save error:', e);
       }

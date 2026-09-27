@@ -28,7 +28,9 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
   trip,
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'4prices' | 'yango_json' | 'hero_json' | 'request'>('4prices');
+  const [activeTab, setActiveTab] = useState<'4prices' | 'yango_json' | 'hero_json' | 'request'>(
+    (trip && (!trip.priceEconom && !trip.price)) ? 'yango_json' : '4prices'
+  );
   const [copied, setCopied] = useState(false);
 
   if (!trip) return null;
@@ -329,6 +331,20 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
           {/* TAB 2: YANGO RAW JSON */}
           {activeTab === 'yango_json' && (
             <div className="space-y-3">
+              {(apiDetails?.error || (trip.httpStatus && trip.httpStatus !== 200) || (!trip.priceEconom && !trip.price)) && (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-rose-800">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Statut de la réponse Yango : {trip.httpStatus ? `HTTP ${trip.httpStatus}` : 'Échec ou réponse absente'}</span>
+                  </div>
+                  {apiDetails?.error && (
+                    <div className="text-[11px] text-rose-700 font-mono">
+                      Message d'erreur : {apiDetails.error}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-xs text-slate-500">
                 <span>Réponse brute retournée par ya-authproxy.yango.com :</span>
                 <span className="font-mono text-[11px] text-slate-400">{yangoJsonString.length} octets</span>
