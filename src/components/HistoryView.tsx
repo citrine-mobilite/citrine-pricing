@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import { City, PricingCampaign, HistoryRecord } from '../types';
 import { DataTable, Column } from './DataTable';
 import { api } from '../services/api';
@@ -15,7 +16,10 @@ import {
   Layers,
   FileText,
   Trash2,
-  Sparkles
+  Sparkles,
+  Download,
+  Search,
+  X
 } from 'lucide-react';
 
 interface HistoryViewProps {
@@ -33,10 +37,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onNavigate,
   onRefresh
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'campaigns' | 'audit'>('campaigns');
+  const [activeSubTab, setActiveSubTab] = useState<'campaigns' | 'consolidation' | 'audit'>('campaigns');
   const [cityFilter, setCityFilter] = useState<string>('');
   const [modeFilter, setModeFilter] = useState<string>('');
   
+  // Consolidation State
+  const [rangePreset, setRangePreset] = useState<'today' | 'yesterday' | '7days' | '30days' | 'year' | 'custom' | 'all'>('7days');
+  const [customDate, setCustomDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
   // Firestore Audit records
   const [auditLogs, setAuditLogs] = useState<HistoryRecord[]>([]);
   const [loadingAudit, setLoadingAudit] = useState<boolean>(false);
@@ -60,12 +70,174 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     }
   }, [activeSubTab]);
 
+  // Dynamic filter for consolidation tab
+  const consolidatedCampaignList = React.useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    return campaigns.filter((c) => {
+      if (c.status !== 'completed') return false;
+      if (cityFilter && c.cityId !== cityFilter) return false;
+      
+      const startedDate = new Date(c.startedAt);
+      const startedDayTime = new Date(startedDate.getFullYear(), startedDate.getMonth(), startedDate.getDate()).getTime();
+      const diffDays = (todayStart - startedDayTime) / (1000 * 60 * 60 * 24);
+      
+      if (rangePreset === 'today') {
+        return startedDayTime === todayStart;
+      }
+      if (rangePreset === 'yesterday') {
+        const yesterdayTime = todayStart - (24 * 60 * 60 * 1000);
+        return startedDayTime === yesterdayTime;
+      }
+      if (rangePreset === '7days') {
+        return diffDays >= 0 && diffDays <= 7;
+      }
+      if (rangePreset === '30days') {
+        return diffDays >= 0 && diffDays <= 30;
+      }
+      if (rangePreset === 'year') {
+        return startedDate.getFullYear() === now.getFullYear();
+      }
+      if (rangePreset === 'custom') {
+        if (!customDate) return true;
+        const selectedDate = new Date(customDate);
+        const selectedDayTime = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime();
+        return startedDayTime === selectedDayTime;
+      }
+      return true; // 'all'
+    });
+  }, [campaigns, rangePreset, customDate, cityFilter]);
+
+  // Pre-check all campaigns when list changes
+  useEffect(() => {
+    setSelectedCampaignIds(consolidatedCampaignList.map(c => c.id));
+  }, [consolidatedCampaignList]);
+
+  // Pricing Helpers
+  const getYangoPrice = (t: any, className: 'econom' | 'business' | 'comfortplus' | 'moto') => {
+    if (className === 'econom') return t.priceEconom || t.classes?.econom?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || null;
+    if (className === 'business') return t.priceConfort || t.classes?.business?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort')?.price || null;
+    if (className === 'comfortplus') return t.priceConfortPlus || t.classes?.comfortplus?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'comfortplus' || c.className?.toLowerCase() === 'confort+')?.price || null;
+    if (className === 'moto') return t.priceMoto || t.classes?.moto?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'moto')?.price || null;
+    return null;
+  };
+
+  const getHeroPrice = (t: any, className: 'eco' | 'confort' | 'suv' | 'perkm') => {
+    const hQ = t.heroQuote as any;
+    if (className === 'eco') {
+      let p = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco')?.price || null;
+      }
+      return p;
+    }
+    if (className === 'confort') {
+      let p = t.priceHeroConfort || hQ?.priceConfort || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort')?.price || null;
+      }
+      return p;
+    }
+    if (className === 'suv') {
+      let p = hQ?.priceSuv || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'suv')?.price || null;
+      }
+      return p;
+    }
+    if (className === 'perkm') {
+      let p = hQ?.priceVip || null;
+      if (!p && hQ?.classes) {
+        p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'perkm' || c.className?.toLowerCase() === 'vip')?.price || null;
+      }
+      return p;
+    }
+    return null;
+  };
+
+  const getTripMasterPrice = (t: any, className: 'eco' | 'confort' | 'moto') => {
+    const tmQ = t.tripMasterQuote as any;
+    if (className === 'eco') return t.priceTripMaster || tmQ?.priceEco || null;
+    if (className === 'confort') return t.priceTripMasterConfort || tmQ?.priceConfort || null;
+    if (className === 'moto') return t.priceTripMasterMoto || tmQ?.priceMoto || null;
+    return null;
+  };
+
+  const handleBulkExport = async (format: 'excel' | 'pdf') => {
+    if (selectedCampaignIds.length === 0) {
+      Swal.fire('Attention', 'Veuillez sélectionner au moins une campagne à exporter.', 'warning');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const consolidatedData = [];
+
+      for (const campaignId of selectedCampaignIds) {
+        const campaign = campaigns.find(c => c.id === campaignId);
+        if (!campaign) continue;
+
+        const rawTrips = await api.getCampaignResults(campaignId);
+
+        const formattedTrips = rawTrips.map(t => ({
+          ...t,
+          yango_eco: getYangoPrice(t, 'econom'),
+          yango_confort: getYangoPrice(t, 'business'),
+          yango_confort_plus: getYangoPrice(t, 'comfortplus'),
+          yango_moto: getYangoPrice(t, 'moto'),
+          hero_eco: getHeroPrice(t, 'eco'),
+          hero_confort: getHeroPrice(t, 'confort'),
+          hero_suv: getHeroPrice(t, 'suv'),
+          hero_per_km: getHeroPrice(t, 'perkm'),
+          tripmaster_eco: getTripMasterPrice(t, 'eco'),
+          tripmaster_confort: getTripMasterPrice(t, 'confort'),
+          tripmaster_moto: getTripMasterPrice(t, 'moto'),
+        }));
+
+        consolidatedData.push({
+          campaignName: campaign.isTestSample ? `${campaign.cityName} (Test Rapide)` : `${campaign.cityName} (Campagne Globale)`,
+          cityName: campaign.cityName,
+          dateStr: new Date(campaign.startedAt).toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          trips: formattedTrips
+        });
+      }
+
+      const fileName = `consolidation_pricing_${rangePreset}_${new Date().toISOString().slice(0, 10)}`;
+
+      if (format === 'excel') {
+        const { exportConsolidatedExcel } = await import('../utils/exportUtils');
+        exportConsolidatedExcel(consolidatedData, fileName);
+      } else {
+        const { exportConsolidatedPdf } = await import('../utils/exportUtils');
+        exportConsolidatedPdf(
+          consolidatedData,
+          `Consolidation Multi-Campagnes — ${rangePreset === 'today' ? "Aujourd'hui" : rangePreset === '7days' ? "7 Derniers Jours" : rangePreset === '30days' ? "30 Derniers Jours" : "Tout l'Historique"}`,
+          fileName
+        );
+      }
+    } catch (e) {
+      console.error('Erreur de consolidation:', e);
+      Swal.fire('Erreur', 'Une erreur est survenue lors de la consolidation des rapports.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleDeleteAudit = async (id: string) => {
     try {
       await api.deleteHistoryItem(id);
       setAuditLogs(prev => prev.filter(a => a.id !== id));
+      Swal.fire('Succès', 'Événement supprimé avec succès.', 'success');
     } catch (e) {
       console.error('Erreur suppression log audit:', e);
+      Swal.fire('Erreur', 'Impossible de supprimer cet événement.', 'error');
     }
   };
 
@@ -317,17 +489,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   return (
     <div className="space-y-6">
       
-      {/* Title and Sub-Tabs */}
+      {/* SubTab Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <History className="w-5 h-5 text-amber-600" />
-            Historique & Traçabilité Firestore
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Historique immuable des campagnes tarifaires et journal d'audit synchronisé avec la base Firestore
-          </p>
-        </div>
+        <div />
 
         {/* SubTab Toggle */}
         <div className="flex items-center bg-slate-200/80 p-1 rounded-xl border border-slate-300/60">
@@ -342,6 +506,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <Layers className="w-3.5 h-3.5" />
             <span>Campagnes de Prix ({campaigns.length})</span>
           </button>
+          
+          <button
+            onClick={() => setActiveSubTab('consolidation')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'consolidation'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>Consolidation & Exports</span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('audit')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
@@ -416,6 +592,189 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             emptyMessage="Aucune campagne enregistrée dans la base de données."
           />
         </>
+      )}
+
+      {activeSubTab === 'consolidation' && (
+        <div className="space-y-6">
+          {/* Main settings card */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              {/* Preset Range */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-tight">Période d'Analyse</label>
+                <select
+                  value={rangePreset}
+                  onChange={(e: any) => setRangePreset(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-600 focus:bg-white transition-all"
+                >
+                  <option value="today">Aujourd'hui</option>
+                  <option value="yesterday">Hier</option>
+                  <option value="7days">Cette Semaine (7 derniers jours)</option>
+                  <option value="30days">Ce Mois-ci (30 derniers jours)</option>
+                  <option value="year">Cette Année</option>
+                  <option value="custom">Date Spécifique...</option>
+                  <option value="all">Tout l'Historique</option>
+                </select>
+
+                {rangePreset === 'custom' && (
+                  <input
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className="mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-amber-600 focus:bg-white transition-all animate-fade-in"
+                  />
+                )}
+              </div>
+
+              {/* City filter */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-tight">Filtrer par Ville</label>
+                <select
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-600 focus:bg-white"
+                >
+                  <option value="">Toutes les villes (Cameroun)</option>
+                  {cities.map((city) => (
+                    <option key={city.id} value={city.id}>
+                      {city.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status & Trigger actions */}
+              <div className="flex flex-col justify-end">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => handleBulkExport('excel')}
+                    disabled={isExporting || selectedCampaignIds.length === 0}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#153935] rounded-lg shadow-sm transition disabled:opacity-40 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Rapport Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    onClick={() => handleBulkExport('pdf')}
+                    disabled={isExporting || selectedCampaignIds.length === 0}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm transition disabled:opacity-40 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Rapport PDF Groupé</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {rangePreset === 'all' && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-[11px] text-blue-800 flex items-start gap-2 mt-1">
+                <span className="font-bold">💡 Note de volume :</span>
+                <span>
+                  L'option <strong>"Tout l'Historique"</strong> consolide l'intégralité absolue des campagnes. Si vous accumulez des millions de trajets dans le futur, l'extraction globale peut prendre plus de temps et de mémoire. Nous vous conseillons de privilégier des filtres ciblés.
+                </span>
+              </div>
+            )}
+
+            {isExporting && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2.5 animate-pulse mt-2">
+                <RotateCw className="w-4 h-4 animate-spin text-amber-600" />
+                <span>
+                  <strong>Consolidation en cours...</strong> Récupération et structuration des trajets pour <strong>{selectedCampaignIds.length}</strong> campagnes sélectionnées. Veuillez patienter, cela peut prendre quelques secondes.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* List of campaigns with checkboxes */}
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Campagnes Disponibles ({consolidatedCampaignList.length})</span>
+                <span className="text-[10px] text-slate-500">({selectedCampaignIds.length} sélectionnées)</span>
+              </div>
+
+              {consolidatedCampaignList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedCampaignIds(consolidatedCampaignList.map(c => c.id))}
+                    className="text-[11px] text-[#3D8B85] hover:text-[#1F4F4A] font-semibold cursor-pointer"
+                  >
+                    Tout sélectionner
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    onClick={() => setSelectedCampaignIds([])}
+                    className="text-[11px] text-[#3D8B85] hover:text-[#1F4F4A] font-semibold cursor-pointer"
+                  >
+                    Tout décocher
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="divide-y divide-slate-100 max-h-[350px] overflow-y-auto">
+              {consolidatedCampaignList.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  Aucune campagne terminée trouvée pour cette période. Essayez d'élargir la période d'analyse.
+                </div>
+              ) : (
+                consolidatedCampaignList.map((c) => {
+                  const isChecked = selectedCampaignIds.includes(c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        if (isChecked) {
+                          setSelectedCampaignIds(prev => prev.filter(id => id !== c.id));
+                        } else {
+                          setSelectedCampaignIds(prev => [...prev, c.id]);
+                        }
+                      }}
+                      className={`p-3.5 flex items-center justify-between hover:bg-slate-50/60 transition cursor-pointer select-none ${
+                        isChecked ? 'bg-amber-50/10' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-slate-400 hover:text-slate-600 transition">
+                          {isChecked ? (
+                            <span className="text-emerald-600"><CheckCircle2 className="w-5 h-5" /></span>
+                          ) : (
+                            <div className="w-5 h-5 rounded border border-slate-300 bg-white" />
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-900 text-xs">
+                            {c.isTestSample ? `${c.cityName} (Test Rapide)` : `${c.cityName} (Campagne Globale)`}
+                          </span>
+                          <span className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                            {new Date(c.startedAt).toLocaleString('fr-FR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-tight">Trajets collectés</span>
+                          <span className="text-xs font-semibold text-slate-800">{c.completedPairs} / {c.totalPairs}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-tight">Prix Moyen</span>
+                          <span className="text-xs font-bold text-slate-900">{c.avgPrice ? `${c.avgPrice.toLocaleString('fr-FR')} F` : '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {activeSubTab === 'audit' && (

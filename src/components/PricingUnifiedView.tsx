@@ -255,14 +255,18 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     setIsLoadingTrips(true);
     fetchTrips(true);
 
-    // Polling actif toutes les 400ms si la campagne est en cours d'exécution
+    // Polling désactivé durant l'exécution pour performance. 
+    // Mise à jour uniquement via le détecteur de changement d'état de campagne (ci-dessous).
+    /*
     const activeCamp = campaigns.find(c => c.id === activeCampaignId);
     let intervalId: any = null;
     if (activeCamp?.status === 'in_progress') {
       intervalId = setInterval(() => {
         fetchTrips(false);
-      }, 400);
+      }, 5000);
     }
+    */
+    const intervalId: any = null;
 
     return () => {
       isMounted = false;
@@ -285,44 +289,39 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     // Transition from in_progress to completed or failed
     if (prevStatus === 'in_progress' && (currentStatus === 'completed' || currentStatus === 'failed' || currentStatus === 'cancelled')) {
       if (onRefresh) onRefresh();
-      if (currentStatus === 'completed') {
-        Swal.fire({
-          icon: 'success',
-          title: 'Tarification terminée avec succès !',
-          html: `
-            <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
-              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-                <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte comparative terminée</p>
-              </div>
-              <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${currentCamp.cityName}</p>
-              <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${currentCamp.completedPairs} / ${currentCamp.totalPairs}</p>
-              <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(currentCamp.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-              <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(currentCamp.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-              <p style="margin-bottom: 5px;"><strong>Prix moyen Trip Master :</strong> ${((currentCamp as any).tripMasterStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-              <p style="margin-bottom: 5px;"><strong>Chauffeurs HERO dispos :</strong> ${currentCamp.heroStats?.avgDriversCount || 0} par secteur</p>
-              <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${currentCamp.durationSeconds || 1} seconde(s)</p>
-            </div>
-          `,
-          confirmButtonColor: '#1F4F4A',
-          confirmButtonText: 'Consulter les résultats'
-        });
-      } else if (currentStatus === 'failed') {
-        Swal.fire({
-          icon: 'error',
-          title: 'Échec de la tarification',
-          html: `
-            <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #1e293b;">
-              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-                <p style="margin: 0; font-weight: 700; color: #991b1b;">❌ La tarification a échoué</p>
-              </div>
-              <p style="margin-bottom: 8px;"><strong>Cause :</strong> ${(currentCamp as any).errorMessage || currentCamp.lastError || 'Impossible de joindre les serveurs de tarification ou données introuvables.'}</p>
-              <p style="margin-bottom: 0; color: #64748b; font-size: 12px;">Vérifiez vos paramètres API ou les coordonnées des quartiers.</p>
-            </div>
-          `,
-          confirmButtonColor: '#DC2626',
-          confirmButtonText: 'Compris'
-        });
-      }
+      
+      // Chargement final des résultats
+      api.getCampaignResults(activeCampaignId).then(finalResults => {
+          setTrips(finalResults || []);
+          setIsLoadingTrips(false);
+          
+          if (currentStatus === 'completed') {
+            Swal.fire({
+              icon: 'success',
+              title: 'Tarification terminée avec succès !',
+              html: `
+                <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
+                  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                    <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte terminée</p>
+                  </div>
+                  <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${currentCamp.cityName}</p>
+                  <p style="margin-bottom: 5px;"><strong>Trajets :</strong> ${currentCamp.completedPairs} / ${currentCamp.totalPairs}</p>
+                  <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(currentCamp.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+                  <p style="margin-bottom: 5px;"><strong>Prix moyen HERO :</strong> ${(currentCamp.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+                  <p style="margin-bottom: 5px;"><strong>Temps total :</strong> ${currentCamp.durationSeconds || 1} seconde(s)</p>
+                </div>
+              `,
+              confirmButtonColor: '#1F4F4A',
+              confirmButtonText: 'Voir le tableau'
+            });
+          } else if (currentStatus === 'failed') {
+            Swal.fire({
+              icon: 'error',
+              title: 'Échec de la tarification',
+              text: (currentCamp as any).errorMessage || 'Erreur inconnue.'
+            });
+          }
+      });
     }
   }, [campaigns, activeCampaignId]);
 

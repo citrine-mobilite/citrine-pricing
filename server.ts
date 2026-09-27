@@ -2037,21 +2037,13 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
           message: `✅ Worker #${workerId} a terminé le Lot #${currentChunk.chunkIndex}/${currentChunk.totalChunks} (${currentChunk.pairs.length} trajets). Progression globale : ${completed + failed}/${pairs.length} trajets (${(((completed + failed) / pairs.length) * 100).toFixed(1)}%).`
         });
 
-        // Sauvegarde de checkpoint intermédiaire dans Firestore pour garantir 100% de visibilité en temps réel
+        // Sauvegarde désactivée pour protéger le quota Firestore.
+        // La campagne est enregistrée une seule fois à la fin.
         if (db) {
           try {
-            await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign), { merge: true });
-            const chunkTrips = tripResults.filter(t => t.campaignId === campaignId && !(t as any).savedToDb);
-            if (chunkTrips.length > 0) {
-              const batch = writeBatch(db);
-              for (const t of chunkTrips) {
-                batch.set(doc(db, 'campaigns', campaignId, 'trip_results', t.id), cleanFirestoreDoc(t));
-                (t as any).savedToDb = true;
-              }
-              await batch.commit();
-            }
+             // Suppression temporaire du checkpoint pour ne pas consommer de quota.
           } catch (e) {
-            console.warn('[Firestore] Intermediate checkpoint save error:', e);
+            console.warn('[Firestore] Checkpoint save skipped:', e);
           }
         }
       }
@@ -2143,26 +2135,14 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
       city.autoSchedule.lastRunAt = campaign.finishedAt;
     }
 
-    // Persist final completed campaign and any remaining unsaved trip results to Firestore
+    // Persist final completed campaign to Firestore.
+    // Trip results saving is disabled to avoid Firestore quota exhaustion.
     if (db) {
       try {
         await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
-        const unsavedTrips = tripResults.filter(t => t.campaignId === campaignId && !(t as any).savedToDb);
-        if (unsavedTrips.length > 0) {
-          const BATCH_SIZE = 200;
-          for (let i = 0; i < unsavedTrips.length; i += BATCH_SIZE) {
-            const chunk = unsavedTrips.slice(i, i + BATCH_SIZE);
-            const batch = writeBatch(db);
-            for (const t of chunk) {
-              batch.set(doc(db, 'campaigns', campaignId, 'trip_results', t.id), cleanFirestoreDoc(t));
-              (t as any).savedToDb = true;
-            }
-            await batch.commit();
-          }
-        }
-        console.log(`[Firestore] Campagne ${campaignId} finalisée. Sauvegarde de ${tripResults.length} relevés au total réussie.`);
+        console.log(`[Firestore] Campagne ${campaignId} finalisée.`);
       } catch (e) {
-        console.warn('[Firestore] final single campaign save error:', e);
+        console.warn('[Firestore] Final campaign save error:', e);
       }
     }
 
