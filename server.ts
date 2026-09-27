@@ -15,6 +15,7 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
+import { createRequire } from 'module';
 import {
   INITIAL_CITIES,
   INITIAL_NEIGHBORHOODS,
@@ -23,7 +24,6 @@ import {
   estimateUrbanTrip,
   generateInitialCampaigns
 } from './src/data/seedData';
-import firebaseConfigData from './firebase-applet-config.json';
 import {
   City,
   Neighborhood,
@@ -39,13 +39,38 @@ import {
 
 dotenv.config();
 
+const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let firebaseConfigData: any = null;
+try {
+  firebaseConfigData = require('./firebase-applet-config.json');
+} catch {
+  try {
+    const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(cfgPath)) {
+      firebaseConfigData = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('[Firestore] Failed to read firebase-applet-config.json:', e);
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+// Enable CORS & JSON parsing
 app.use(express.json());
+app.use((_req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (_req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Initialize Firestore
 let db: any = null;
@@ -2248,6 +2273,12 @@ async function startServer() {
     console.log(`[VTC Pricing Hub] Full-stack Server listening on http://0.0.0.0:${PORT}`);
   });
 }
+
+// Global error handler
+app.use((err: any, _req: Request, res: Response, _next: any) => {
+  console.error('[Global Express Error]', err);
+  res.status(500).json({ error: err?.message || 'Erreur serveur' });
+});
 
 if (!process.env.VERCEL) {
   startServer();
