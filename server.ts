@@ -49,7 +49,10 @@ app.use(express.json());
 // Initialize Firestore
 let db: any = null;
 try {
-  const cfgPath = path.join(__dirname, 'firebase-applet-config.json');
+  const cfgPathLocal = path.join(__dirname, 'firebase-applet-config.json');
+  const cfgPathCwd = path.join(process.cwd(), 'firebase-applet-config.json');
+  const cfgPath = fs.existsSync(cfgPathLocal) ? cfgPathLocal : cfgPathCwd;
+
   if (fs.existsSync(cfgPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
     const firebaseApp = initializeApp(firebaseConfig);
@@ -2286,4 +2289,10 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  syncFromFirestore().catch(e => console.warn('[Firestore] Vercel sync error:', e));
+}
+
+export default app;
