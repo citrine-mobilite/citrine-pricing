@@ -23,6 +23,7 @@ import {
   estimateUrbanTrip,
   generateInitialCampaigns
 } from './src/data/seedData';
+import firebaseConfigData from './firebase-applet-config.json';
 import {
   City,
   Neighborhood,
@@ -49,15 +50,10 @@ app.use(express.json());
 // Initialize Firestore
 let db: any = null;
 try {
-  const cfgPathLocal = path.join(__dirname, 'firebase-applet-config.json');
-  const cfgPathCwd = path.join(process.cwd(), 'firebase-applet-config.json');
-  const cfgPath = fs.existsSync(cfgPathLocal) ? cfgPathLocal : cfgPathCwd;
-
-  if (fs.existsSync(cfgPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-    const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-    console.log(`[Firestore] Connecté à la base de données : ${firebaseConfig.firestoreDatabaseId}`);
+  if (firebaseConfigData && firebaseConfigData.apiKey) {
+    const firebaseApp = initializeApp(firebaseConfigData);
+    db = getFirestore(firebaseApp, firebaseConfigData.firestoreDatabaseId);
+    console.log(`[Firestore] Connecté à la base de données : ${firebaseConfigData.firestoreDatabaseId}`);
   }
 } catch (err) {
   console.warn('[Firestore] Avertissement initialisation :', err);
@@ -128,83 +124,47 @@ let tripResults: TripResult[] = [...initialCampaignData.tripResults];
 async function syncFromFirestore() {
   if (!db) return;
   try {
-    // 1. Users
-    const usersSnap = await getDocs(collection(db, 'users'));
-    if (!usersSnap.empty) {
-      users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as User));
-      console.log(`[Firestore] ${users.length} utilisateurs chargés depuis Firestore.`);
+    const [usersRes, citiesRes, nbsRes, campsRes, yangoRes, heroRes, historyRes] = await Promise.allSettled([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'cities')),
+      getDocs(collection(db, 'neighborhoods')),
+      getDocs(collection(db, 'campaigns')),
+      getDoc(doc(db, 'settings', 'yango')),
+      getDoc(doc(db, 'settings', 'hero')),
+      getDocs(collection(db, 'history'))
+    ]);
+
+    if (usersRes.status === 'fulfilled' && !usersRes.value.empty) {
+      users = usersRes.value.docs.map(d => ({ id: d.id, ...d.data() } as User));
     }
 
-    // 2. Cities
-    const citiesSnap = await getDocs(collection(db, 'cities'));
-    if (!citiesSnap.empty) {
-      cities = citiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as City));
-      console.log(`[Firestore] ${cities.length} villes chargées depuis Firestore.`);
+    if (citiesRes.status === 'fulfilled' && !citiesRes.value.empty) {
+      cities = citiesRes.value.docs.map(d => ({ id: d.id, ...d.data() } as City));
     }
 
-    // 3. Neighborhoods from /neighborhoods
-    let nbsSnap = await getDocs(collection(db, 'neighborhoods'));
-    if (!nbsSnap.empty) {
-      neighborhoods = nbsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
-      console.log(`[Firestore] ${neighborhoods.length} quartiers chargés depuis /neighborhoods.`);
-    } else {
-      const allLoadedNbs: Neighborhood[] = [];
-      for (const city of cities) {
-        const subSnap = await getDocs(collection(db, 'cities', city.id, 'neighborhoods'));
-        subSnap.docs.forEach(d => allLoadedNbs.push({ id: d.id, ...d.data() } as Neighborhood));
-      }
-      if (allLoadedNbs.length > 0) {
-        neighborhoods = allLoadedNbs;
-        console.log(`[Firestore] ${neighborhoods.length} quartiers chargés depuis les sous-collections.`);
-      }
+    if (nbsRes.status === 'fulfilled' && !nbsRes.value.empty) {
+      neighborhoods = nbsRes.value.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
     }
 
-    // 4. Campaigns & Trip Results
-    const campsSnap = await getDocs(collection(db, 'campaigns'));
-    if (!campsSnap.empty) {
-      const loadedCamps = campsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
-      loadedCamps.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-      
-      const allTrips: TripResult[] = [...tripResults];
-      for (const camp of loadedCamps) {
-        try {
-          const tripsSnap = await getDocs(collection(db, 'campaigns', camp.id, 'trip_results'));
-          if (!tripsSnap.empty) {
-            tripsSnap.docs.forEach(d => {
-              const tripObj = { id: d.id, ...d.data() } as TripResult;
-              if (!allTrips.some(t => t.id === tripObj.id)) {
-                allTrips.push(tripObj);
-              }
-            });
-          }
-        } catch (e) {
-          console.warn(`[Firestore] Erreur chargement relevés pour campagne ${camp.id}:`, e);
-        }
-      }
-      campaigns = loadedCamps;
-      tripResults = allTrips;
-      console.log(`[Firestore] ${campaigns.length} campagnes et ${tripResults.length} relevés chargés depuis Firestore.`);
+    if (campsRes.status === 'fulfilled' && !campsRes.value.empty) {
+      campaigns = campsRes.value.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+      campaigns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
     }
 
-    // 5. Settings
-    const yangoSnap = await getDoc(doc(db, 'settings', 'yango'));
-    if (yangoSnap.exists()) {
-      yangoSettings = { ...yangoSettings, ...yangoSnap.data() };
-      console.log('[Firestore] Paramètres Yango chargés depuis Firestore.');
-    }
-    const heroSnap = await getDoc(doc(db, 'settings', 'hero'));
-    if (heroSnap.exists()) {
-      heroSettings = { ...heroSettings, ...heroSnap.data() };
-      console.log('[Firestore] Paramètres Hero chargés depuis Firestore.');
+    if (yangoRes.status === 'fulfilled' && yangoRes.value.exists()) {
+      yangoSettings = { ...yangoSettings, ...yangoRes.value.data() };
     }
 
-    // 6. History
-    const historySnap = await getDocs(collection(db, 'history'));
-    if (!historySnap.empty) {
-      historyRecords = historySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (heroRes.status === 'fulfilled' && heroRes.value.exists()) {
+      heroSettings = { ...heroSettings, ...heroRes.value.data() };
+    }
+
+    if (historyRes.status === 'fulfilled' && !historyRes.value.empty) {
+      historyRecords = historyRes.value.docs.map(d => ({ id: d.id, ...d.data() }));
       historyRecords.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      console.log(`[Firestore] ${historyRecords.length} événements d'historique chargés.`);
     }
+
+    console.log(`[Firestore] Sync rapide terminé (${users.length} users, ${cities.length} villes, ${campaigns.length} campagnes).`);
   } catch (err) {
     console.warn('[Firestore] Erreur lors de la synchronisation initiale :', err);
   }
