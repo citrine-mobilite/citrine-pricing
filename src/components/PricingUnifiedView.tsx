@@ -23,7 +23,8 @@ import {
   StopCircle,
   Activity,
   CheckCircle2,
-  Check
+  Check,
+  Trash2
 } from 'lucide-react';
 
 interface PricingUnifiedViewProps {
@@ -70,12 +71,10 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   useEffect(() => {
     if (propSelectedCampaignId) {
       setInternalCampaignId(propSelectedCampaignId);
-    } else {
+    } else if (!internalCampaignId) {
       const activeForCity = campaigns.filter(c => c.cityId === selectedCityId);
       if (activeForCity.length > 0) {
-        if (!activeForCity.some(c => c.id === internalCampaignId)) {
-          setInternalCampaignId(activeForCity[0].id);
-        }
+        setInternalCampaignId(activeForCity[0].id);
       }
     }
   }, [propSelectedCampaignId, campaigns, selectedCityId, internalCampaignId]);
@@ -93,6 +92,56 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     const targetCamp = campaigns.find((c) => c.id === newCampaignId);
     if (targetCamp && targetCamp.cityId !== selectedCityId) {
       onSelectCityId(targetCamp.cityId);
+    }
+  };
+
+  const handleDeleteCampaign = async () => {
+    if (!activeCampaignId) return;
+    
+    const result = await Swal.fire({
+      title: 'Supprimer cette campagne ?',
+      text: "Cette action est irréversible et supprimera également tous les trajets associés en base de données.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Oui, supprimer',
+      cancelButtonText: 'Annuler'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        Swal.fire({
+          title: 'Suppression...',
+          text: 'Veuillez patienter',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        await api.deleteCampaign(activeCampaignId);
+        
+        // Find next campaign to select
+        const otherCampaigns = campaigns.filter((c) => c.id !== activeCampaignId && c.cityId === selectedCityId);
+        const nextId = otherCampaigns[0]?.id || campaigns.filter((c) => c.id !== activeCampaignId)[0]?.id || '';
+        
+        handleCampaignChange(nextId);
+        
+        if (onRefresh) {
+          await onRefresh();
+        }
+
+        Swal.fire({
+          title: 'Supprimée !',
+          text: 'La campagne a été supprimée avec succès.',
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Une erreur est survenue lors de la suppression.', 'error');
+      }
     }
   };
 
@@ -249,6 +298,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${currentCamp.completedPairs} / ${currentCamp.totalPairs}</p>
               <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(currentCamp.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
               <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(currentCamp.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+              <p style="margin-bottom: 5px;"><strong>Prix moyen Trip Master :</strong> ${((currentCamp as any).tripMasterStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
               <p style="margin-bottom: 5px;"><strong>Chauffeurs HERO dispos :</strong> ${currentCamp.heroStats?.avgDriversCount || 0} par secteur</p>
               <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${currentCamp.durationSeconds || 1} seconde(s)</p>
             </div>
@@ -399,6 +449,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         deltaPriceYangoVsHero: res.deltaPriceYangoVsHero,
         cheaperProvider: res.cheaperProvider,
 
+        tripMasterQuote: res.tripMaster || res.tripMasterQuote,
+        priceTripMaster: res.priceTripMaster || res.tripMaster?.priceEco,
+        priceTripMasterConfort: res.priceTripMasterConfort || res.tripMaster?.priceConfort,
+        priceTripMasterMoto: res.priceTripMasterMoto || res.tripMaster?.priceMoto,
+
         source: res.source,
         status: 'success',
         rawResponse: res.rawResponse,
@@ -431,8 +486,14 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     const yMoto: number[] = [];
     const hEco: number[] = [];
     const hConf: number[] = [];
+    const hSuv: number[] = [];
+    const hVip: number[] = [];
     let yangoWins = 0;
     let heroWins = 0;
+
+    const tmEco: number[] = [];
+    const tmConf: number[] = [];
+    const tmMoto: number[] = [];
 
     trips.forEach((t) => {
       const pYE = t.priceEconom || t.classes?.econom?.price || (t.tariffClass === 'econom' ? t.price : 0);
@@ -442,6 +503,12 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
       const pHE = t.priceHeroStandard || t.heroQuote?.priceStandard || t.priceHero || 0;
       const pHC = t.priceHeroConfort || t.heroQuote?.priceConfort || 0;
+      const pHS = t.heroQuote?.priceSuv || 0;
+      const pHV = t.heroQuote?.priceVip || 0;
+
+      const pTME = t.priceTripMaster || t.tripMasterQuote?.priceEco || 0;
+      const pTMC = t.priceTripMasterConfort || t.tripMasterQuote?.priceConfort || 0;
+      const pTMM = t.priceTripMasterMoto || t.tripMasterQuote?.priceMoto || 0;
 
       if (pYE > 0) yEco.push(pYE);
       if (pYC > 0) yConf.push(pYC);
@@ -450,6 +517,12 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
       if (pHE > 0) hEco.push(pHE);
       if (pHC > 0) hConf.push(pHC);
+      if (pHS > 0) hSuv.push(pHS);
+      if (pHV > 0) hVip.push(pHV);
+
+      if (pTME > 0) tmEco.push(pTME);
+      if (pTMC > 0) tmConf.push(pTMC);
+      if (pTMM > 0) tmMoto.push(pTMM);
 
       if (t.cheaperProvider === 'hero') heroWins++;
       else if (t.cheaperProvider === 'yango') yangoWins++;
@@ -467,7 +540,14 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       },
       hero: {
         eco: { avg: avg(hEco), min: min(hEco), count: hEco.length },
-        confort: { avg: avg(hConf), min: min(hConf), count: hConf.length }
+        confort: { avg: avg(hConf), min: min(hConf), count: hConf.length },
+        suv: { avg: avg(hSuv), min: min(hSuv), count: hSuv.length },
+        perKm: { avg: avg(hVip), min: min(hVip), count: hVip.length }
+      },
+      tripMaster: {
+        eco: { avg: avg(tmEco), min: min(tmEco), count: tmEco.length },
+        confort: { avg: avg(tmConf), min: min(tmConf), count: tmConf.length },
+        moto: { avg: avg(tmMoto), min: min(tmMoto), count: tmMoto.length }
       },
       yangoWins,
       heroWins,
@@ -502,6 +582,98 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     );
   };
 
+  const getDynamicAggregatorClassesText = (t: TripResult, provider: 'yango' | 'hero' | 'tripmaster'): string => {
+    if (provider === 'yango') {
+      let priceEco = t.priceEconom || t.classes?.econom?.price || null;
+      let priceConf = t.priceConfort || t.classes?.business?.price || null;
+      let priceMoto = t.priceMoto || t.classes?.moto?.price || null;
+      if (!priceEco && t.classes) {
+        priceEco = Object.values(t.classes).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || null;
+      }
+      return `${priceEco ? priceEco.toLocaleString('fr-FR') + ' F' : '—'} / ${priceConf ? priceConf.toLocaleString('fr-FR') + ' F' : '—'} / ${priceMoto ? priceMoto.toLocaleString('fr-FR') + ' F' : '—'}`;
+    } else if (provider === 'hero') {
+      const hQ = t.heroQuote as any;
+      let priceStd = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || null;
+      let priceConf = t.priceHeroConfort || hQ?.priceConfort || null;
+      let pricePerKm = hQ?.priceVip || hQ?.priceSuv || null;
+      if (hQ?.classes) {
+        const stdClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco');
+        if (stdClass) priceStd = (stdClass as any).price;
+        const confClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort');
+        if (confClass) priceConf = (confClass as any).price;
+        const perKmClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'perkm' || c.className?.toLowerCase() === 'vip' || c.className?.toLowerCase() === 'suv');
+        if (perKmClass) pricePerKm = (perKmClass as any).price;
+      }
+      return `${priceStd ? priceStd.toLocaleString('fr-FR') + ' F' : '—'} / ${priceConf ? priceConf.toLocaleString('fr-FR') + ' F' : '—'} / ${pricePerKm ? pricePerKm.toLocaleString('fr-FR') + ' F' : '—'}`;
+    } else if (provider === 'tripmaster') {
+      const tmQ = t.tripMasterQuote as any;
+      const priceEco = t.priceTripMaster || tmQ?.priceEco || null;
+      const priceConf = t.priceTripMasterConfort || tmQ?.priceConfort || null;
+      const priceMoto = t.priceTripMasterMoto || tmQ?.priceMoto || null;
+      return `${priceEco ? priceEco.toLocaleString('fr-FR') + ' F' : '—'} / ${priceConf ? priceConf.toLocaleString('fr-FR') + ' F' : '—'} / ${priceMoto ? priceMoto.toLocaleString('fr-FR') + ' F' : '—'}`;
+    }
+    return '—';
+  };
+
+  const renderSubCellsPricesYango = (t: TripResult) => {
+    let priceEco = t.priceEconom || t.classes?.econom?.price || null;
+    let priceConf = t.priceConfort || t.classes?.business?.price || null;
+    let priceMoto = t.priceMoto || t.classes?.moto?.price || null;
+    
+    if (!priceEco && t.classes) {
+      priceEco = Object.values(t.classes).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || null;
+    }
+    
+    return (
+      <div className="grid grid-cols-3 w-full min-w-[150px] divide-x divide-slate-200/40 text-center font-mono text-[11px] py-1">
+        <div className="px-1 text-slate-800 font-semibold">{priceEco ? `${priceEco.toLocaleString('fr-FR')}` : '—'}</div>
+        <div className="px-1 text-slate-800 font-semibold">{priceConf ? `${priceConf.toLocaleString('fr-FR')}` : '—'}</div>
+        <div className="px-1 text-slate-800 font-semibold">{priceMoto ? `${priceMoto.toLocaleString('fr-FR')}` : '—'}</div>
+      </div>
+    );
+  };
+
+  const renderSubCellsPricesHero = (t: TripResult) => {
+    const hQ = t.heroQuote as any;
+    let priceStd = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || null;
+    let priceConf = t.priceHeroConfort || hQ?.priceConfort || null;
+    let pricePerKm = hQ?.priceVip || hQ?.priceSuv || null;
+    
+    if (hQ?.classes) {
+      const stdClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco');
+      if (stdClass) priceStd = (stdClass as any).price;
+      
+      const confClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort');
+      if (confClass) priceConf = (confClass as any).price;
+      
+      const perKmClass = Object.values(hQ.classes).find((c: any) => c.className?.toLowerCase() === 'perkm' || c.className?.toLowerCase() === 'vip' || c.className?.toLowerCase() === 'suv');
+      if (perKmClass) pricePerKm = (perKmClass as any).price;
+    }
+    
+    return (
+      <div className="grid grid-cols-3 w-full min-w-[150px] divide-x divide-slate-200/40 text-center font-mono text-[11px] py-1">
+        <div className="px-1 text-slate-800 font-semibold">{priceStd ? `${priceStd.toLocaleString('fr-FR')}` : '—'}</div>
+        <div className="px-1 text-slate-800 font-semibold">{priceConf ? `${priceConf.toLocaleString('fr-FR')}` : '—'}</div>
+        <div className="px-1 text-slate-800 font-semibold">{pricePerKm ? `${pricePerKm.toLocaleString('fr-FR')}` : '—'}</div>
+      </div>
+    );
+  };
+
+  const renderSubCellsPricesTripMaster = (t: TripResult) => {
+    const tmQ = t.tripMasterQuote as any;
+    const priceEco = t.priceTripMaster || tmQ?.priceEco || null;
+    const priceConf = t.priceTripMasterConfort || tmQ?.priceConfort || null;
+    const priceMoto = t.priceTripMasterMoto || tmQ?.priceMoto || null;
+    
+    return (
+      <div className="grid grid-cols-3 w-full min-w-[150px] divide-x divide-slate-200/40 text-center font-mono text-[11px] py-1">
+        <div className="px-1 text-slate-800 font-semibold">{priceEco ? `${priceEco.toLocaleString('fr-FR')}` : '—'}</div>
+        <div className="px-1 text-slate-800 font-semibold">{priceConf ? `${priceConf.toLocaleString('fr-FR')}` : '—'}</div>
+        <div className="px-1 text-slate-800 font-semibold">{priceMoto ? `${priceMoto.toLocaleString('fr-FR')}` : '—'}</div>
+      </div>
+    );
+  };
+
   // Dynamic Table Columns
   const columns: Column<TripResult>[] = useMemo(() => {
     const baseCols: Column<TripResult>[] = [
@@ -531,71 +703,52 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       return [
         ...baseCols,
         {
-          key: 'priceEconom',
-          label: 'Y. Éco',
-          sortable: true,
-          align: 'right',
-          render: (t) => renderCellPrice(t.priceEconom || t.classes?.econom?.price || (t.tariffClass === 'econom' ? t.price : null)),
-          exportValue: (t) => `${t.priceEconom || t.classes?.econom?.price || t.price || 'Non disponible'}`
+          key: 'yangoClasses',
+          label: 'Yango',
+          headerRender: () => (
+            <div className="flex flex-col items-center w-full min-w-[150px] text-center select-none py-1">
+              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-700 border-b border-slate-200/60 pb-1.5 w-full block">Yango</span>
+              <div className="grid grid-cols-3 w-full text-[9px] text-[#3D8B85] font-extrabold divide-x divide-slate-200/60 pt-1.5 leading-none">
+                <div className="text-center uppercase tracking-tight">Éco</div>
+                <div className="text-center uppercase tracking-tight">Conf.</div>
+                <div className="text-center uppercase tracking-tight">Moto</div>
+              </div>
+            </div>
+          ),
+          render: (t) => renderSubCellsPricesYango(t),
+          exportValue: (t) => getDynamicAggregatorClassesText(t, 'yango')
         },
         {
-          key: 'priceConfort',
-          label: 'Y. Confort',
-          sortable: true,
-          align: 'right',
-          render: (t) => renderCellPrice(t.priceConfort || t.classes?.business?.price || t.classes?.comfort?.price),
-          exportValue: (t) => `${t.priceConfort || 'Non disponible'}`
+          key: 'heroClasses',
+          label: 'Hero Cab',
+          headerRender: () => (
+            <div className="flex flex-col items-center w-full min-w-[150px] text-center select-none py-1">
+              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-700 border-b border-slate-200/60 pb-1.5 w-full block">Hero Cab</span>
+              <div className="grid grid-cols-3 w-full text-[9px] text-[#3D8B85] font-extrabold divide-x divide-slate-200/60 pt-1.5 leading-none">
+                <div className="text-center uppercase tracking-tight">Std</div>
+                <div className="text-center uppercase tracking-tight">Conf.</div>
+                <div className="text-center uppercase tracking-tight">PerKm</div>
+              </div>
+            </div>
+          ),
+          render: (t) => renderSubCellsPricesHero(t),
+          exportValue: (t) => getDynamicAggregatorClassesText(t, 'hero')
         },
         {
-          key: 'priceConfortPlus',
-          label: 'Y. Confort+',
-          sortable: true,
-          align: 'right',
-          render: (t) => renderCellPrice(t.priceConfortPlus || t.classes?.comfortplus?.price),
-          exportValue: (t) => `${t.priceConfortPlus || 'Non disponible'}`
-        },
-        {
-          key: 'priceMoto',
-          label: 'Y. Moto',
-          sortable: true,
-          align: 'right',
-          render: (t) => renderCellPrice(t.priceMoto || t.classes?.moto?.price),
-          exportValue: (t) => `${t.priceMoto || 'Non disponible'}`
-        },
-        {
-          key: 'priceHeroStandard',
-          label: 'H. De Base',
-          sortable: true,
-          align: 'right',
-          render: (t) => renderCellPrice(t.priceHeroStandard || t.heroQuote?.priceStandard || t.priceHero, 'hero'),
-          exportValue: (t) => `${t.priceHeroStandard || t.priceHero || 'Non disponible'}`
-        },
-        {
-          key: 'priceHeroConfort',
-          label: 'H. Luxueux',
-          sortable: true,
-          align: 'right',
-          render: (t) => renderCellPrice(t.priceHeroConfort || t.heroQuote?.priceConfort, 'hero'),
-          exportValue: (t) => `${t.priceHeroConfort || 'Non disponible'}`
-        },
-        {
-          key: 'cheaperProvider',
-          label: 'Meilleur Prix',
-          sortable: true,
-          align: 'center',
-          render: (t) => {
-            const pY = t.priceEconom || t.price || 0;
-            const pH = t.priceHeroStandard || t.priceHero || 0;
-            if (pY <= 0 || pH <= 0) return <span className="text-slate-300">—</span>;
-            const delta = Math.abs(pY - pH);
-            if (pH < pY) {
-              return <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">Hero (-{delta} F)</span>;
-            }
-            if (pY < pH) {
-              return <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">Yango (-{delta} F)</span>;
-            }
-            return <span className="text-[11px] text-slate-400">Égalité</span>;
-          }
+          key: 'tripMasterClasses',
+          label: 'Trip Master',
+          headerRender: () => (
+            <div className="flex flex-col items-center w-full min-w-[150px] text-center select-none py-1">
+              <span className="font-bold text-[11px] uppercase tracking-wider text-slate-700 border-b border-slate-200/60 pb-1.5 w-full block">Trip Master</span>
+              <div className="grid grid-cols-3 w-full text-[9px] text-[#3D8B85] font-extrabold divide-x divide-slate-200/60 pt-1.5 leading-none">
+                <div className="text-center uppercase tracking-tight">Éco</div>
+                <div className="text-center uppercase tracking-tight">Conf.</div>
+                <div className="text-center uppercase tracking-tight">Moto</div>
+              </div>
+            </div>
+          ),
+          render: (t) => renderSubCellsPricesTripMaster(t),
+          exportValue: (t) => getDynamicAggregatorClassesText(t, 'tripmaster')
         },
         {
           key: 'source',
@@ -786,6 +939,27 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         </div>
       </div>
 
+      {/* Saved Campaign Details Banner */}
+      {activeCampaignId && activeCampaign && activeCampaign.status !== 'in_progress' && (
+        <div className="bg-[#1F4F4A] text-white rounded-xl p-4 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-400 text-slate-900 px-2 py-0.5 rounded">Campagne Enregistrée</span>
+              <h3 className="text-sm font-bold">{activeCampaign.cityName} — {new Date(activeCampaign.startedAt).toLocaleString('fr-FR')}</h3>
+            </div>
+            <p className="text-xs text-emerald-100">
+              Résultats et trajets parsés : <strong className="text-white">{trips.length} trajets affichés</strong> ({activeCampaign.completedPairs} / {activeCampaign.totalPairs} paires tarifées) • Prix moyen : <strong className="text-white">{(activeCampaign.avgPrice || 0).toLocaleString('fr-FR')} FCFA</strong>
+            </p>
+          </div>
+          <button
+            onClick={() => onCampaignStarted(null as any)}
+            className="px-3 py-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer text-white shrink-0"
+          >
+            Fermer / Retour au Live
+          </button>
+        </div>
+      )}
+
       {/* Inactive City Notice */}
       {!currentCity?.active && (
         <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300/80 text-amber-900 text-xs flex items-center gap-2.5 shadow-xs">
@@ -856,56 +1030,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
         </div>
 
-        {/* Live Execution Progress Bar Banner with 24/25 Counter */}
-        {(activeCampaign?.status === 'in_progress' || launchingTarget !== null) && (
-          <div className="mt-4 pt-4 border-t border-amber-200/80 bg-amber-50/70 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 p-4 sm:p-5 rounded-b-xl space-y-2.5 animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <RotateCw className="w-4 h-4 text-amber-700 animate-spin" />
-                <span className="text-xs font-bold text-slate-900">
-                  Collecte des tarifs en direct pour {activeCampaign?.cityName || currentCity.name}
-                </span>
-                <span className="text-[10px] font-semibold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
-                  Parallèle Yango & Hero
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-900 font-mono">
-                  {Math.max(activeCampaign?.completedPairs || 0, trips.length)} / {activeCampaign?.totalPairs || (sampleChoice === 'all' ? totalCombinations : 25)} destinations pricées ({Math.min(100, Math.round((Math.max(activeCampaign?.completedPairs || 0, trips.length) / (activeCampaign?.totalPairs || (sampleChoice === 'all' ? totalCombinations : 25) || 1)) * 100))}%)
-                </span>
-                {activeCampaignId && (
-                  <button
-                    onClick={() => handleCancelCampaign(activeCampaignId)}
-                    disabled={isCancelling}
-                    className="text-xs font-semibold text-rose-700 hover:text-rose-800 hover:underline cursor-pointer"
-                  >
-                    Arrêter
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Visual Animated Progress Bar */}
-            <div className="space-y-1">
-              <div className="w-full h-2.5 bg-amber-200/70 rounded-full overflow-hidden shadow-inner">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-300 rounded-full"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      Math.round(
-                        (Math.max(activeCampaign?.completedPairs || 0, trips.length) /
-                          (activeCampaign?.totalPairs || (sampleChoice === 'all' ? totalCombinations : 25) || 1)) *
-                          100
-                      )
-                    )}%`
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
         {launchError && (
           <div className="mt-3 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
@@ -962,7 +1086,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 transition cursor-pointer"
             >
               {isQuickTesting ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span>{isQuickTesting ? 'Calcul en cours...' : 'Calculer les 6 prix'}</span>
+              <span>{isQuickTesting ? 'Calcul en cours...' : 'Calculer les prix'}</span>
             </button>
           </div>
 
@@ -972,119 +1096,208 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                 <span>Trajet de <strong>{quickTestResult.distanceKm} km</strong> (~{quickTestResult.durationMinutes} min)</span>
                 {quickTestResult.cheaperProvider && (
                   <span className="text-emerald-400 font-medium">
-                    🏆 {quickTestResult.cheaperProvider === 'hero' ? 'Hero Cab est moins cher en Éco' : (quickTestResult.cheaperProvider === 'yango' ? 'Yango est moins cher en Éco' : 'Tarifs identiques')}
-                    {quickTestResult.deltaPriceYangoVsHero ? ` (Écart: ${Math.abs(quickTestResult.deltaPriceYangoVsHero)} F)` : ''}
+                    {quickTestResult.cheaperProvider === 'hero' ? 'Hero Cab est le moins cher en Éco' : (quickTestResult.cheaperProvider === 'yango' ? 'Yango est le moins cher en Éco' : (quickTestResult.cheaperProvider === 'tripmaster' ? 'Trip Master est le moins cher en Éco' : 'Tarifs identiques'))}
+                    {quickTestResult.deltaPriceYangoVsHero ? ` (Écart Éco: ${Math.abs(quickTestResult.deltaPriceYangoVsHero)} F)` : ''}
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-                <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
-                  <div className="text-[10px] text-slate-400">🔴 Yango Éco</div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    {quickTestResult.priceEconom ? `${quickTestResult.priceEconom.toLocaleString('fr-FR')} F` : '—'}
+              {(() => {
+                // Collect Yango classes
+                const yangoClasses: Array<{ label: string; price: number }> = [];
+                if (quickTestResult.classes) {
+                  for (const [k, q] of Object.entries(quickTestResult.classes)) {
+                    const qc = q as any;
+                    if (qc && qc.price > 0) {
+                      yangoClasses.push({ label: `Yango ${qc.className || k}`, price: qc.price });
+                    }
+                  }
+                }
+                if (yangoClasses.length === 0) {
+                  if (quickTestResult.priceEconom) yangoClasses.push({ label: 'Yango Éco', price: quickTestResult.priceEconom });
+                  if (quickTestResult.priceConfort) yangoClasses.push({ label: 'Yango Confort', price: quickTestResult.priceConfort });
+                  if (quickTestResult.priceConfortPlus) yangoClasses.push({ label: 'Yango Confort+', price: quickTestResult.priceConfortPlus });
+                  if (quickTestResult.priceMoto) yangoClasses.push({ label: 'Yango Moto', price: quickTestResult.priceMoto });
+                }
+
+                // Collect Hero classes
+                const heroClasses: Array<{ label: string; price: number }> = [];
+                const heroQ = quickTestResult.heroQuote || quickTestResult.hero;
+                if (heroQ) {
+                  if (heroQ.classes) {
+                    for (const [k, q] of Object.entries(heroQ.classes)) {
+                      const qc = q as any;
+                      if (qc && qc.price > 0) {
+                        heroClasses.push({ label: `Hero ${qc.className || k}`, price: qc.price });
+                      }
+                    }
+                  }
+                  if (heroClasses.length === 0) {
+                    if (heroQ.priceStandard || heroQ.priceEco || heroQ.price) heroClasses.push({ label: 'Hero Éco / Standard', price: heroQ.priceStandard || heroQ.priceEco || heroQ.price });
+                    if (heroQ.priceConfort) heroClasses.push({ label: 'Hero Confort', price: heroQ.priceConfort });
+                    if (heroQ.priceSuv) heroClasses.push({ label: 'Hero SUV', price: heroQ.priceSuv });
+                    if (heroQ.priceVip) heroClasses.push({ label: 'Hero PerKm', price: heroQ.priceVip });
+                    for (const [k, v] of Object.entries(heroQ)) {
+                      if (k.startsWith('price') && typeof v === 'number' && v > 0) {
+                        const subName = k.replace('price', '');
+                        if (!['Standard', 'Eco', 'Confort', 'Suv', 'Vip', 'PerKm', 'GrossStandard', 'GrossConfort'].includes(subName) && subName) {
+                          heroClasses.push({ label: `Hero ${subName}`, price: v });
+                        }
+                      }
+                    }
+                  }
+                }
+
+                // Collect Trip Master classes
+                const tmClasses: Array<{ label: string; price: number }> = [];
+                const tmQ = quickTestResult.tripMasterQuote || quickTestResult.tripMaster;
+                if (tmQ) {
+                  if (tmQ.priceEco || quickTestResult.priceTripMaster) tmClasses.push({ label: 'Trip Master Éco', price: tmQ.priceEco || quickTestResult.priceTripMaster });
+                  if (tmQ.priceConfort || quickTestResult.priceTripMasterConfort) tmClasses.push({ label: 'Trip Master Confort', price: tmQ.priceConfort || quickTestResult.priceTripMasterConfort });
+                  if (tmQ.priceMoto || quickTestResult.priceTripMasterMoto) tmClasses.push({ label: 'Trip Master Moto', price: tmQ.priceMoto || quickTestResult.priceTripMasterMoto });
+                  for (const [k, v] of Object.entries(tmQ)) {
+                    if (k.startsWith('price') && typeof v === 'number' && v > 0) {
+                      const subName = k.replace('price', '');
+                      if (!['Eco', 'Confort', 'Moto'].includes(subName) && subName) {
+                        tmClasses.push({ label: `Trip Master ${subName}`, price: v });
+                      }
+                    }
+                  }
+                }
+
+                const allClasses = [...yangoClasses, ...heroClasses, ...tmClasses];
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                    {allClasses.map((item, idx) => (
+                      <div key={idx} className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
+                        <div className="text-[10px] text-slate-400">{item.label}</div>
+                        <div className="text-sm font-bold text-white mt-1">
+                          {item.price ? `${item.price.toLocaleString('fr-FR')} F` : '—'}
+                        </div>
+                      </div>
+                    ))}
+                    {allClasses.length === 0 && (
+                      <div className="col-span-full text-xs text-slate-400 py-2">Aucun tarif disponible pour ce trajet.</div>
+                    )}
                   </div>
-                </div>
-                <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
-                  <div className="text-[10px] text-slate-400">🔴 Yango Confort</div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    {quickTestResult.priceConfort ? `${quickTestResult.priceConfort.toLocaleString('fr-FR')} F` : '—'}
-                  </div>
-                </div>
-                <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
-                  <div className="text-[10px] text-slate-400">🔴 Yango Confort+</div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    {quickTestResult.priceConfortPlus ? `${quickTestResult.priceConfortPlus.toLocaleString('fr-FR')} F` : '—'}
-                  </div>
-                </div>
-                <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
-                  <div className="text-[10px] text-slate-400">🔴 Yango Moto</div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    {quickTestResult.priceMoto ? `${quickTestResult.priceMoto.toLocaleString('fr-FR')} F` : '—'}
-                  </div>
-                </div>
-                <div className="bg-slate-800/80 p-2.5 rounded-lg border border-teal-500/40">
-                  <div className="text-[10px] text-teal-300">🔵 Hero Cab Éco</div>
-                  <div className="text-sm font-bold text-teal-200 mt-1">
-                    {quickTestResult.priceHeroStandard ? `${quickTestResult.priceHeroStandard.toLocaleString('fr-FR')} F` : '—'}
-                  </div>
-                </div>
-                <div className="bg-slate-800/80 p-2.5 rounded-lg border border-teal-500/40">
-                  <div className="text-[10px] text-teal-300">🔵 Hero Confort</div>
-                  <div className="text-sm font-bold text-teal-200 mt-1">
-                    {quickTestResult.priceHeroConfort ? `${quickTestResult.priceHeroConfort.toLocaleString('fr-FR')} F` : '—'}
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           )}
         </div>
       )}
 
-      {/* 4. Executive Dual-Provider Synthesis Ribbon */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* 4. Executive Tri-Provider Synthesis Ribbon */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         {/* Yango 4 Classes Overview */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">Moyennes Yango (4 Classes)</span>
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">Yango (4 Classes)</span>
             </div>
-            <span className="text-[11px] text-slate-400 font-mono">{stats.yango.eco.count} trajets relevés</span>
+            <span className="text-[11px] text-slate-400 font-mono">{stats.yango.eco.count} relevés</span>
           </div>
 
           <div className="grid grid-cols-4 gap-2 pt-4 text-center divide-x divide-slate-100">
             <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Éco</div>
-              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
+              <div className="text-sm font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.eco.avg > 0 ? `${stats.yango.eco.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
             <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Confort</div>
-              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
+              <div className="text-sm font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.confort.avg > 0 ? `${stats.yango.confort.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
             <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Confort+</div>
-              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
+              <div className="text-sm font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.confortPlus.avg > 0 ? `${stats.yango.confortPlus.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
             <div className="px-1">
               <div className="text-[11px] text-slate-500 font-medium">Moto</div>
-              <div className="text-sm sm:text-base font-bold text-slate-900 mt-1 font-mono">
+              <div className="text-sm font-bold text-slate-900 mt-1 font-mono">
                 {stats.yango.moto.avg > 0 ? `${stats.yango.moto.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Hero Cab 2 Classes Overview */}
+        {/* Hero Cab Classes Overview */}
         <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#1F4F4A] shrink-0" />
-              <span className="text-xs font-bold text-[#1F4F4A] uppercase tracking-wide">Moyennes Hero Cab (2 Classes)</span>
+              <span className="text-xs font-bold text-[#1F4F4A] uppercase tracking-wide">Hero Cab (4 Classes)</span>
             </div>
             <span className="text-[11px] font-semibold text-[#1F4F4A] bg-[#F0FAFA] px-2 py-0.5 rounded border border-[#3D8B85]/20">
-              {stats.heroWins > 0 ? `${stats.heroWins} fois plus compétitif` : 'Tarifs relevés'}
+              {stats.heroWins > 0 ? `${stats.heroWins} fois top prix` : 'Tarifs relevés'}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-4 text-center divide-x divide-slate-100">
-            <div className="px-2">
-              <div className="text-[11px] text-slate-500 font-medium">Éco (Standard)</div>
-              <div className="text-sm sm:text-base font-bold text-[#1F4F4A] mt-1 font-mono">
+          <div className="grid grid-cols-4 gap-2 pt-4 text-center divide-x divide-slate-100">
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">Éco</div>
+              <div className="text-sm font-bold text-[#1F4F4A] mt-1 font-mono">
                 {stats.hero.eco.avg > 0 ? `${stats.hero.eco.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
-            <div className="px-2">
-              <div className="text-[11px] text-slate-500 font-medium">Confort (Berline)</div>
-              <div className="text-sm sm:text-base font-bold text-[#1F4F4A] mt-1 font-mono">
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">Confort</div>
+              <div className="text-sm font-bold text-[#1F4F4A] mt-1 font-mono">
                 {stats.hero.confort.avg > 0 ? `${stats.hero.confort.avg.toLocaleString('fr-FR')} F` : '—'}
+              </div>
+            </div>
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">SUV</div>
+              <div className="text-sm font-bold text-[#1F4F4A] mt-1 font-mono">
+                {stats.hero.suv.avg > 0 ? `${stats.hero.suv.avg.toLocaleString('fr-FR')} F` : '—'}
+              </div>
+            </div>
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">PerKm</div>
+              <div className="text-sm font-bold text-[#1F4F4A] mt-1 font-mono">
+                {stats.hero.perKm.avg > 0 ? `${stats.hero.perKm.avg.toLocaleString('fr-FR')} F` : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Trip Master Cameroon 3 Classes Overview */}
+        <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+              <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">Trip Master (3 Classes)</span>
+            </div>
+            <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-mono">
+              Live API
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 pt-4 text-center divide-x divide-slate-100">
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">Éco</div>
+              <div className="text-sm font-bold text-amber-900 mt-1 font-mono">
+                {stats.tripMaster.eco.avg > 0 ? `${stats.tripMaster.eco.avg.toLocaleString('fr-FR')} F` : '—'}
+              </div>
+            </div>
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">Confort</div>
+              <div className="text-sm font-bold text-amber-900 mt-1 font-mono">
+                {stats.tripMaster.confort.avg > 0 ? `${stats.tripMaster.confort.avg.toLocaleString('fr-FR')} F` : '—'}
+              </div>
+            </div>
+            <div className="px-1">
+              <div className="text-[11px] text-slate-500 font-medium">Moto</div>
+              <div className="text-sm font-bold text-amber-900 mt-1 font-mono">
+                {stats.tripMaster.moto.avg > 0 ? `${stats.tripMaster.moto.avg.toLocaleString('fr-FR')} F` : '—'}
               </div>
             </div>
           </div>
@@ -1111,13 +1324,13 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                   {activeCampaign.status === 'in_progress' && (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
                       <RotateCw className="w-3 h-3 animate-spin text-amber-600" />
-                      En cours d'exécution ({trips.length} / {activeCampaign.totalPairs})
+                      En cours d'exécution ({(activeCampaign.completedPairs || 0) + (activeCampaign.failedPairs || 0)} / {activeCampaign.totalPairs})
                     </span>
                   )}
                   {activeCampaign.status === 'completed' && (
                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Terminée ({trips.length} relevés)
+                      Terminée ({activeCampaign.completedPairs || activeCampaign.totalPairs} relevés)
                     </span>
                   )}
                   {activeCampaign.status === 'cancelled' && (
@@ -1169,7 +1382,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                     </span>
                   </div>
                   <span className="font-bold text-slate-900 font-mono">
-                    {Math.max(activeCampaign.completedPairs || 0, trips.length)} / {activeCampaign.totalPairs} destinations pricées ({Math.min(100, Math.round((Math.max(activeCampaign.completedPairs || 0, trips.length) / (activeCampaign.totalPairs || 1)) * 100))}%)
+                    {(activeCampaign.completedPairs || 0) + (activeCampaign.failedPairs || 0)} / {activeCampaign.totalPairs} destinations pricées ({Math.min(100, Math.round((((activeCampaign.completedPairs || 0) + (activeCampaign.failedPairs || 0)) / (activeCampaign.totalPairs || 1)) * 100))}%)
                   </span>
                 </div>
                 <div className="w-full h-2.5 bg-amber-200/70 rounded-full overflow-hidden shadow-inner">
@@ -1179,7 +1392,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                       width: `${Math.min(
                         100,
                         Math.round(
-                          (Math.max(activeCampaign.completedPairs || 0, trips.length) /
+                          (((activeCampaign.completedPairs || 0) + (activeCampaign.failedPairs || 0)) /
                             (activeCampaign.totalPairs || 1)) *
                             100
                         )
@@ -1207,6 +1420,16 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                     </option>
                   ))}
                 </select>
+                {activeCampaign && activeCampaign.status !== 'in_progress' && (
+                  <button
+                    onClick={handleDeleteCampaign}
+                    title="Supprimer cette campagne"
+                    className="p-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition border border-red-200/50 cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Supprimer</span>
+                  </button>
+                )}
               </div>
 
               {/* Segmented Mode Switcher */}
@@ -1219,7 +1442,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Toutes les classes (6)
+                  Comparatif Global
                 </button>
                 <button
                   onClick={() => setViewMode('eco_compare')}
@@ -1229,7 +1452,17 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Comparatif Éco
+                  Focus Éco & Moto
+                </button>
+                <button
+                  onClick={() => setViewMode('confort_compare')}
+                  className={`px-3 py-1.5 font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
+                    viewMode === 'confort_compare'
+                      ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Focus Confort & Premium
                 </button>
                 <button
                   onClick={() => setViewMode('yango')}
@@ -1239,7 +1472,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Yango Seul (4 classes)
+                  Yango Multi-classes
                 </button>
               </div>
             </div>
@@ -1314,7 +1547,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           searchKeys={['startNeighborhoodName', 'endNeighborhoodName']}
           exportFileName={`pricing_${currentCity?.name?.toLowerCase() || 'city'}_${activeCampaign?.isTestSample ? 'test' : 'globale'}_${new Date().toISOString().slice(0, 10)}`}
           exportTitle={`Relevé Multi-Classes - ${activeCampaign?.cityName || 'Ville'} (${activeCampaign?.isTestSample ? 'Test Rapide' : 'Campagne Globale'})`}
-          exportSubtitle={`${filteredTrips.length} trajets répertoriés`}
+          exportSubtitle=""
           pageSizeOptions={[25, 50, 100, 250, 500]}
           defaultPageSize={25}
           isLoading={isLoadingTrips}

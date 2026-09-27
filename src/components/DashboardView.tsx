@@ -156,18 +156,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       exportValue: (c) => `${c.completedPairs}/${c.totalPairs}`
     },
     {
-      key: 'avgPrice',
-      label: 'Prix Moyen',
-      sortable: true,
-      align: 'right',
-      render: (c) => (
-        <span className="font-semibold text-slate-900">
-          {c.avgPrice ? `${c.avgPrice.toLocaleString('fr-FR')} FCFA` : '-'}
-        </span>
-      ),
-      exportValue: (c) => (c.avgPrice ? `${c.avgPrice} FCFA` : '')
-    },
-    {
       key: 'status',
       label: 'Statut',
       sortable: true,

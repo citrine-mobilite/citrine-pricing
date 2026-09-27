@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import { PricingCampaign } from '../types';
 import { api } from '../services/api';
 import { DataTable, Column } from './DataTable';
@@ -57,6 +58,43 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         if (fresh.status !== 'in_progress') {
           clearInterval(interval);
           onRefresh();
+
+          if (fresh.status === 'completed') {
+            Swal.fire({
+              icon: 'success',
+              title: 'Tarification terminée avec succès !',
+              html: `
+                <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
+                  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                    <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte comparative terminée</p>
+                  </div>
+                  <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${fresh.cityName}</p>
+                  <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${fresh.completedPairs} / ${fresh.totalPairs}</p>
+                  <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(fresh.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+                  <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(fresh.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
+                  <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${fresh.durationSeconds || 1} seconde(s)</p>
+                </div>
+              `,
+              confirmButtonColor: '#1F4F4A',
+              confirmButtonText: 'Consulter les résultats'
+            });
+          } else if (fresh.status === 'failed') {
+            Swal.fire({
+              icon: 'error',
+              title: 'Échec de la tarification',
+              html: `
+                <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #1e293b;">
+                  <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                    <p style="margin: 0; font-weight: 700; color: #991b1b;">❌ La tarification a échoué</p>
+                  </div>
+                  <p style="margin-bottom: 8px;"><strong>Cause :</strong> ${(fresh as any).errorMessage || fresh.lastError || 'Impossible de joindre les serveurs de tarification ou données introuvables.'}</p>
+                  <p style="margin-bottom: 0; color: #64748b; font-size: 12px;">Vérifiez vos paramètres API ou les coordonnées des quartiers.</p>
+                </div>
+              `,
+              confirmButtonColor: '#DC2626',
+              confirmButtonText: 'Compris'
+            });
+          }
         }
       } catch {
         if (isSubscribed) {
@@ -193,18 +231,6 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         </div>
       ),
       exportValue: (c) => `${c.completedPairs}/${c.totalPairs}${c.isTestSample ? ' (Test)' : ''}`
-    },
-    {
-      key: 'avgPrice',
-      label: 'Prix Moyen',
-      sortable: true,
-      align: 'right',
-      render: (c) => (
-        <span className="font-semibold text-slate-900">
-          {c.avgPrice ? `${c.avgPrice.toLocaleString('fr-FR')} FCFA` : '-'}
-        </span>
-      ),
-      exportValue: (c) => (c.avgPrice ? `${c.avgPrice} FCFA` : '')
     },
     {
       key: 'status',

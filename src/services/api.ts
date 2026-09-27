@@ -3,6 +3,24 @@ import { INITIAL_CITIES, INITIAL_NEIGHBORHOODS, INITIAL_USERS, generateInitialCa
 
 const BASE_URL = '/api';
 
+async function robustFetch(url: string | URL, options: RequestInit = {}): Promise<Response> {
+  const retries = 3;
+  const delay = 300;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await window.fetch(url, options);
+    } catch (err: any) {
+      if (i === retries - 1) {
+        throw err;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+    }
+  }
+  return window.fetch(url, options);
+}
+
+const fetch = robustFetch;
+
 export const api = {
   // Auth
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
@@ -215,7 +233,7 @@ export const api = {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Campagne introuvable.');
       }
-      return res.json();
+      return await res.json();
     } catch {
       return null;
     }
@@ -275,7 +293,7 @@ export const api = {
       const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/results${qs ? `?${qs}` : ''}`);
       if (res.status === 404) return [];
       if (!res.ok) throw new Error('Erreur lors de la récupération des trajets.');
-      return res.json();
+      return await res.json();
     } catch {
       return [];
     }

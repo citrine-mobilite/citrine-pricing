@@ -21,6 +21,7 @@ export interface Column<T> {
   align?: 'left' | 'center' | 'right';
   width?: string;
   render?: (item: T, index: number) => React.ReactNode;
+  headerRender?: () => React.ReactNode;
   exportValue?: (item: T) => string | number;
 }
 
@@ -128,7 +129,20 @@ export function DataTable<T extends Record<string, any>>({
       const obj: Record<string, any> = {};
       columns.forEach((col) => {
         if (col.exportValue) {
-          obj[col.label] = col.exportValue(row);
+          const val = col.exportValue(row);
+          if (typeof val === 'string' && val.includes('<div')) {
+            // Strip HTML elements and format as simple slashes for Excel spreadsheet cells
+            const textOnly = val
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .split(' ')
+              .filter(v => v.length > 0 && v !== '/')
+              .join(' / ');
+            obj[col.label] = textOnly;
+          } else {
+            obj[col.label] = val;
+          }
         } else {
           obj[col.label] = row[col.key] !== undefined && row[col.key] !== null ? row[col.key] : '';
         }
@@ -149,7 +163,41 @@ export function DataTable<T extends Record<string, any>>({
       })
     );
 
-    exportToPdf(exportTitle, exportSubtitle, headers, rows, exportFileName);
+    let customTheadHtml: string | undefined = undefined;
+    const hasSubheaders = columns.some((col) => col.key === 'yangoClasses' || col.key === 'heroClasses' || col.key === 'tripMasterClasses');
+    if (hasSubheaders) {
+      customTheadHtml = `
+        <thead>
+          <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1;">
+            <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left;">Départ</th>
+            <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left;">Destination</th>
+            <th rowspan="2" style="padding: 10px; text-align: right; border-bottom: 1.5px solid #cbd5e1; width: 60px;">Dist.</th>
+            <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1e293b; font-size: 10px; padding: 6px;">Yango</th>
+            <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1e293b; font-size: 10px; padding: 6px;">Hero Cab</th>
+            <th colspan="3" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1e293b; font-size: 10px; padding: 6px;">Trip Master</th>
+            <th rowspan="2" style="text-align: center; border-bottom: 1.5px solid #cbd5e1; width: 50px;">Détails</th>
+          </tr>
+          <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1; font-size: 8px; color: #475569;">
+            <!-- Yango -->
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.+</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px; width: 45px;">Moto</th>
+            <!-- Hero Cab -->
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Std</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">SUV</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px; width: 45px;">PerKm</th>
+            <!-- Trip Master -->
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Conf.</th>
+            <th style="text-align: center; text-transform: uppercase; font-weight: 700; padding: 4px; width: 45px;">Moto</th>
+          </tr>
+        </thead>
+      `;
+    }
+
+    exportToPdf(exportTitle, exportSubtitle, headers, rows, exportFileName, customTheadHtml);
   };
 
   return (
@@ -233,7 +281,7 @@ export function DataTable<T extends Record<string, any>>({
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div
-                      className={`inline-flex items-center gap-1.5 ${
+                      className={`inline-flex items-center gap-1.5 w-full ${
                         col.align === 'right'
                           ? 'justify-end'
                           : col.align === 'center'
@@ -241,7 +289,7 @@ export function DataTable<T extends Record<string, any>>({
                           : 'justify-start'
                       }`}
                     >
-                      <span>{col.label}</span>
+                      {col.headerRender ? col.headerRender() : <span>{col.label}</span>}
                       {col.sortable && (
                         <span className="text-slate-400 group-hover:text-slate-600 transition">
                           {isSorted ? (

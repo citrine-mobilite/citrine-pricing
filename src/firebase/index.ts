@@ -81,14 +81,16 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Test Connection on initial boot as required by skill
 export async function testConnection(): Promise<boolean> {
   try {
-    const testDocPromise = getDocFromServer(doc(db, 'cities', 'city_douala'));
+    const testDocPromise = getDoc(doc(db, 'cities', 'city_douala'));
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 2500)
+      setTimeout(() => reject(new Error('timeout')), 1500)
     );
     await Promise.race([testDocPromise, timeoutPromise]);
     return true;
-  } catch {
-    // Operates smoothly with server-side proxy fallback
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firestore client operates in offline mode.');
+    }
     return false;
   }
 }

@@ -39,7 +39,8 @@ export function exportToPdf(
   subtitle: string,
   headers: string[],
   rows: (string | number)[][],
-  fileName: string = 'rapport'
+  fileName: string = 'rapport',
+  customTheadHtml?: string
 ) {
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
@@ -157,9 +158,7 @@ export function exportToPdf(
         <div>
           <div class="brand">
             <span>Citrine Pricing</span>
-            <span class="brand-badge">Plateforme VTC Cameroun</span>
           </div>
-          <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Intelligence Tarifaire & Benchmark Yango</div>
         </div>
         <div class="meta">
           <div>Document généré le : <strong>${dateStr}</strong></div>
@@ -173,11 +172,13 @@ export function exportToPdf(
       </div>
 
       <table>
+        ${customTheadHtml ? customTheadHtml : `
         <thead>
           <tr>
             ${headers.map((h) => `<th>${h}</th>`).join('')}
           </tr>
         </thead>
+        `}
         <tbody>
           ${rows
             .map(

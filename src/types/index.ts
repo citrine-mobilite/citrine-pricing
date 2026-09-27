@@ -89,6 +89,7 @@ export interface HeroQuote {
   priceStandard?: number;
   priceConfort?: number;
   priceSuv?: number;
+  priceVip?: number;
   priceGrossStandard?: number;
   priceGrossConfort?: number;
   availableDriversCount: number;
@@ -158,6 +159,11 @@ export interface PricingCampaign {
     avgDriversCount: number;
     avgClosestDriverDistanceKm: number;
   };
+  tripMasterStats?: {
+    avgPrice: number;
+    minPrice: number;
+    maxPrice: number;
+  };
   deltaStats?: {
     yangoCheaperCount: number;
     heroCheaperCount: number;
@@ -206,7 +212,23 @@ export interface TripResult {
   heroDriversCount?: number;
   heroClosestDriverDistanceKm?: number;
   deltaPriceYangoVsHero?: number; // Yango price - Hero price
-  cheaperProvider?: 'yango' | 'hero' | 'equal';
+  cheaperProvider?: 'yango' | 'hero' | 'tripmaster' | 'equal';
+
+  // Trip Master Cameroon Provider
+  tripMasterQuote?: {
+    distanceKm?: number;
+    durationMinutes?: number;
+    priceEco?: number;
+    priceConfort?: number;
+    priceMoto?: number;
+    rawResponse?: any;
+    latencyMs?: number;
+    httpStatus?: number;
+    errorMessage?: string;
+  };
+  priceTripMaster?: number;
+  priceTripMasterConfort?: number;
+  priceTripMasterMoto?: number;
 
   source: 'yango_live' | 'yango_fallback' | 'yango_routestats';
   status?: 'success' | 'failed';

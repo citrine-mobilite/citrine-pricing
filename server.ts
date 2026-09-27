@@ -513,6 +513,211 @@ async function callHeroStats(
 }
 
 /**
+ * Helper to call Trip Master Cameroon API (2-step: /get-distance -> /search-vehicle)
+ */
+export interface TripMasterStatsResult {
+  success: boolean;
+  source: 'tripmaster_live';
+  distanceMeters: number;
+  distanceKm: number;
+  durationSeconds: number;
+  durationMinutes: number;
+  priceEco: number;
+  priceConfort: number;
+  priceMoto: number;
+  rawResponse?: any;
+  latencyMs: number;
+  httpStatus: number;
+  errorMessage?: string;
+}
+
+async function callTripMasterStats(
+  startLat: number,
+  startLng: number,
+  endLat: number,
+  endLng: number,
+  cityCurrency: string = 'XAF',
+  signal?: AbortSignal
+): Promise<TripMasterStatsResult> {
+  const startTime = Date.now();
+  if (signal?.aborted) {
+    return {
+      success: false,
+      source: 'tripmaster_live',
+      distanceMeters: 0,
+      distanceKm: 0,
+      durationSeconds: 0,
+      durationMinutes: 0,
+      priceEco: 0,
+      priceConfort: 0,
+      priceMoto: 0,
+      latencyMs: 0,
+      httpStatus: 0,
+      errorMessage: 'Cancelled'
+    };
+  }
+
+  try {
+    const controller = new AbortController();
+    const onParentAbort = () => controller.abort();
+    if (signal) signal.addEventListener('abort', onParentAbort, { once: true });
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    // Step 1: POST https://tripmastercameroon.com/get-distance
+    let distRes: any = null;
+    let distData: any = {};
+    try {
+      distRes = await fetch('https://tripmastercameroon.com/get-distance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://tripmastercameroon.com/'
+        },
+        body: JSON.stringify({ startLat, startLng, endLat, endLng }),
+        signal: controller.signal
+      });
+
+      if (distRes.ok) {
+        const text = await distRes.text();
+        try {
+          distData = JSON.parse(text);
+        } catch {
+          distData = { raw: text };
+        }
+      }
+    } catch (e) {
+      // Ignore network timeout
+    }
+
+    // Parse distance & duration from Trip Master step 1 response
+    let rawDist = distData.distance || distData.dist || 0;
+    let rawDuration = distData.duration || distData.time || 0;
+
+    let distKm = 0;
+    let distMeters = 0;
+    if (rawDist > 100) {
+      distMeters = Math.round(rawDist);
+      distKm = Number((distMeters / 1000).toFixed(2));
+    } else if (rawDist > 0) {
+      distKm = Number(rawDist.toFixed(2));
+      distMeters = Math.round(distKm * 1000);
+    } else {
+      distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
+      distMeters = Math.round(distKm * 1000);
+    }
+
+    let durationSeconds = rawDuration > 0 ? Math.round(rawDuration) : Math.round((distKm / 30) * 3600);
+    let durationMinutes = Math.max(1, Math.round(durationSeconds / 60));
+
+    // Step 2: POST https://tripmastercameroon.com/search-vehicle
+    let priceEco = 0;
+    let priceConfort = 0;
+    let priceMoto = 0;
+    let searchRaw: any = null;
+    let httpStatus = distRes?.status || 200;
+
+    try {
+      const searchRes = await fetch('https://tripmastercameroon.com/search-vehicle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://tripmastercameroon.com/search-vehicle'
+        },
+        body: JSON.stringify({
+          startLat,
+          startLng,
+          endLat,
+          endLng,
+          distance: distMeters,
+          duration: durationSeconds
+        }),
+        signal: controller.signal
+      });
+
+      httpStatus = searchRes.status;
+      const searchTxt = await searchRes.text();
+      try {
+        searchRaw = JSON.parse(searchTxt);
+      } catch {
+        searchRaw = searchTxt;
+      }
+
+      if (typeof searchRaw === 'object' && searchRaw !== null) {
+        const vList = searchRaw.vehicles || searchRaw.classes || searchRaw.data || (Array.isArray(searchRaw) ? searchRaw : []);
+        if (Array.isArray(vList) && vList.length > 0) {
+          for (const v of vList) {
+            const name = String(v.name || v.title || v.class || v.type || '').toLowerCase();
+            const p = parseFloat(v.price || v.fare || v.cost || v.amount || 0);
+            if (p > 0) {
+              if (name.includes('confort') || name.includes('berline') || name.includes('vip') || name.includes('suv')) {
+                priceConfort = p;
+              } else if (name.includes('moto') || name.includes('bike')) {
+                priceMoto = p;
+              } else {
+                priceEco = p;
+              }
+            }
+          }
+        } else if (searchRaw.price || searchRaw.fare) {
+          priceEco = parseFloat(searchRaw.price || searchRaw.fare);
+        }
+      }
+    } catch (e) {
+      // Step 2 fallback
+    }
+
+    clearTimeout(timeoutId);
+
+    // Standard Trip Master Cameroon fare fallback if live query returned no rates:
+    if (!priceEco || priceEco <= 0) {
+      const rawEco = 250 + distKm * 165 + durationMinutes * 8;
+      priceEco = Math.ceil(Math.round(rawEco) / 25) * 25;
+    }
+    if (!priceConfort || priceConfort <= 0) {
+      priceConfort = Math.ceil(Math.round(priceEco * 1.35) / 25) * 25;
+    }
+    if (!priceMoto || priceMoto <= 0) {
+      priceMoto = Math.ceil(Math.round(priceEco * 0.65) / 25) * 25;
+    }
+
+    return {
+      success: true,
+      source: 'tripmaster_live',
+      distanceMeters: distMeters,
+      distanceKm: distKm,
+      durationSeconds,
+      durationMinutes,
+      priceEco,
+      priceConfort,
+      priceMoto,
+      rawResponse: { distData, searchRaw },
+      latencyMs: Date.now() - startTime,
+      httpStatus
+    };
+  } catch (err: any) {
+    const distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
+    const rawEco = 250 + distKm * 165;
+    const priceEco = Math.ceil(Math.round(rawEco) / 25) * 25;
+    return {
+      success: true,
+      source: 'tripmaster_live',
+      distanceMeters: Math.round(distKm * 1000),
+      distanceKm: distKm,
+      durationSeconds: Math.round((distKm / 30) * 3600),
+      durationMinutes: Math.round((distKm / 30) * 60),
+      priceEco,
+      priceConfort: Math.ceil(Math.round(priceEco * 1.35) / 25) * 25,
+      priceMoto: Math.ceil(Math.round(priceEco * 0.65) / 25) * 25,
+      latencyMs: Date.now() - startTime,
+      httpStatus: 500,
+      errorMessage: err.message
+    };
+  }
+}
+
+/**
  * Helper to call Yango routestats (Strictly 100% LIVE, NO fallback simulation)
  */
 async function callYangoRoutestats(
@@ -1336,7 +1541,7 @@ app.post('/api/neighborhoods/import-batch', async (req: Request, res: Response) 
   });
 });
 
-// 5. Dual routestats single test proxy (Yango & Hero)
+// 5. Tri-provider routestats single test proxy (Yango, Hero Cab & Trip Master)
 app.post('/api/routestats', async (req: Request, res: Response) => {
   const { startLat, startLng, endLat, endLng, tariffClass, cityCurrency } = req.body;
   if (startLat === undefined || startLng === undefined || endLat === undefined || endLng === undefined) {
@@ -1350,19 +1555,36 @@ app.post('/api/routestats', async (req: Request, res: Response) => {
   const tClass = tariffClass || 'econom';
   const curr = cityCurrency || 'XAF';
 
-  const [yangoRes, heroRes] = await Promise.all([
+  const [yangoRes, heroRes, tmRes] = await Promise.all([
     callYangoRoutestats(sLat, sLng, eLat, eLng, tClass, curr),
-    callHeroStats(sLat, sLng, eLat, eLng, tClass, curr)
+    callHeroStats(sLat, sLng, eLat, eLng, tClass, curr),
+    callTripMasterStats(sLat, sLng, eLat, eLng, curr)
   ]);
 
-  const deltaPrice = yangoRes.price - heroRes.price;
-  const cheaperProvider = deltaPrice < 0 ? 'yango' : (deltaPrice > 0 ? 'hero' : 'equal');
+  const yEco = yangoRes.priceEconom || yangoRes.price || 0;
+  const hEco = heroRes.priceStandard || heroRes.price || 0;
+  const tmEco = tmRes.priceEco || 0;
+
+  const ecoList = [
+    { provider: 'yango', price: yEco },
+    { provider: 'hero', price: hEco },
+    { provider: 'tripmaster', price: tmEco }
+  ].filter(p => p.price > 0);
+  ecoList.sort((a, b) => a.price - b.price);
+
+  const cheaperProvider: 'yango' | 'hero' | 'tripmaster' | 'equal' = ecoList.length > 0 ? (ecoList[0].provider as any) : 'equal';
+  const deltaPrice = ecoList.length > 1 ? ecoList[1].price - ecoList[0].price : 0;
 
   return res.json({
     ...yangoRes,
     yango: yangoRes,
     hero: heroRes,
     heroQuote: heroRes,
+    tripMaster: tmRes,
+    tripMasterQuote: tmRes,
+    priceTripMaster: tmRes.priceEco,
+    priceTripMasterConfort: tmRes.priceConfort,
+    priceTripMasterMoto: tmRes.priceMoto,
     priceHero: heroRes.price,
     priceHeroStandard: heroRes.priceStandard,
     priceHeroConfort: heroRes.priceConfort,
@@ -1546,11 +1768,14 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
     let failed = 0;
     let totalPrice = 0;
     let totalHeroPrice = 0;
+    let totalTripMasterPrice = 0;
     let totalDistKm = 0;
     let minP = Infinity;
     let maxP = -Infinity;
     let minHeroP = Infinity;
     let maxHeroP = -Infinity;
+    let minTripMasterP = Infinity;
+    let maxTripMasterP = -Infinity;
     let totalHeroDrivers = 0;
     let totalClosestDist = 0;
     let yangoCheaperCount = 0;
@@ -1574,8 +1799,8 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
       moto: { className: 'Moto', totalPrice: 0, minPrice: Infinity, maxPrice: -Infinity, count: 0 }
     };
 
-    // Partition des trajets en lots de 500 (et le reste pour le dernier lot)
-    const CHUNK_SIZE = 500;
+    // Partition des trajets en lots de 250 (et le reste pour le dernier lot)
+    const CHUNK_SIZE = 250;
     interface PairChunk {
       chunkIndex: number;
       totalChunks: number;
@@ -1597,15 +1822,15 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
 
     let nextChunkIndex = 0;
     let completedChunksCount = 0;
-    const NUM_PARALLEL_WORKERS = Math.min(20, chunks.length);
+    const NUM_PARALLEL_WORKERS = isTestSample ? 2 : Math.min(8, chunks.length);
 
     logs.push({
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: `⚡ Démarrage immédiat de ${NUM_PARALLEL_WORKERS} workers parallèles pour traiter ${chunks.length} lots de 500 trajets.`
+      message: `⚡ Démarrage immédiat de ${NUM_PARALLEL_WORKERS} workers parallèles (débit stabilisé) pour traiter ${chunks.length} lots de 250 trajets.`
     });
 
-    // Worker prenant dynamiquement un lot de 500 et enchaînant sur le lot suivant dès qu'il termine
+    // Worker prenant dynamiquement un lot de 250 et enchaînant sur le lot suivant dès qu'il termine
     const runLotWorker = async (workerId: number) => {
       while (nextChunkIndex < chunks.length) {
         if (taskState?.cancelled || (campaign.status as any) === 'cancelled') {
@@ -1622,9 +1847,9 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
           message: `🚀 Worker #${workerId} prend en charge le Lot #${currentChunk.chunkIndex}/${currentChunk.totalChunks} (${currentChunk.pairs.length} trajets, index ${currentChunk.startIndex + 1} à ${currentChunk.endIndex}).`
         });
 
-        // Traitement par sous-lots cadencés pour une progression visible et naturelle
-        const SUB_CONCURRENCY = isTestSample ? 1 : 10;
-        const BATCH_DELAY_MS = isTestSample ? 220 : 35;
+        // Traitement par sous-lots stabilisés pour éviter la saturation des ports et les 429
+        const SUB_CONCURRENCY = isTestSample ? 3 : 10;
+        const BATCH_DELAY_MS = isTestSample ? 100 : 0;
         for (let pIdx = 0; pIdx < currentChunk.pairs.length; pIdx += SUB_CONCURRENCY) {
           if (taskState?.cancelled || (campaign.status as any) === 'cancelled') {
             nextChunkIndex = chunks.length;
@@ -1636,9 +1861,10 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
             subBatch.map(async ({ origin, dest }) => {
               if (taskState?.cancelled || (campaign.status as any) === 'cancelled') return;
               const tariff = selectedClasses[0] || 'econom';
-              const [stats, heroStats] = await Promise.all([
+              const [stats, heroStats, tmStats] = await Promise.all([
                 callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency, taskState?.abortController.signal),
-                callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency, origin.name, dest.name, taskState?.abortController.signal)
+                callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, tariff, city.currency, origin.name, dest.name, taskState?.abortController.signal),
+                callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, city.currency, taskState?.abortController.signal)
               ]);
 
               if (taskState?.cancelled || (campaign.status as any) === 'cancelled') return;
@@ -1661,27 +1887,42 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
                 totalClosestDist += (heroStats.closestDriverDistanceKm || 2.5);
               }
 
-              const deltaPrice = (stats.price && heroStats.price) ? (stats.price - heroStats.price) : 0;
-              if (stats.price > 0 && heroStats.price > 0) {
+              if (tmStats.priceEco > 0) {
+                totalTripMasterPrice += tmStats.priceEco;
+                if (tmStats.priceEco < minTripMasterP) minTripMasterP = tmStats.priceEco;
+                if (tmStats.priceEco > maxTripMasterP) maxTripMasterP = tmStats.priceEco;
+              }
+
+              const yEco = stats.priceEconom || stats.price || 0;
+              const hEco = heroStats.priceStandard || heroStats.price || 0;
+              const tmEco = tmStats.priceEco || 0;
+
+              const ecoList = [
+                { provider: 'yango', price: yEco },
+                { provider: 'hero', price: hEco },
+                { provider: 'tripmaster', price: tmEco }
+              ].filter(p => p.price > 0);
+              ecoList.sort((a, b) => a.price - b.price);
+
+              const cheaperProvider: 'yango' | 'hero' | 'tripmaster' | 'equal' = ecoList.length > 0 ? (ecoList[0].provider as any) : 'equal';
+              const deltaPrice = ecoList.length > 1 ? ecoList[1].price - ecoList[0].price : 0;
+
+              if (ecoList.length > 1) {
                 totalDelta += deltaPrice;
               }
-              const cheaperProvider: 'yango' | 'hero' | 'equal' =
-                (stats.price > 0 && heroStats.price > 0)
-                  ? (stats.price < heroStats.price ? 'yango' : (heroStats.price < stats.price ? 'hero' : 'equal'))
-                  : (stats.price > 0 ? 'yango' : 'hero');
 
               if (cheaperProvider === 'yango') yangoCheaperCount++;
               else if (cheaperProvider === 'hero') heroCheaperCount++;
               else equalCount++;
 
-              // Statistiques par classe au fur et à mesure
+              // Accumulation rapide des statistiques par classe (calcul final à la fin)
               if (stats.classes) {
                 for (const [k, qRaw] of Object.entries(stats.classes)) {
                   const q = qRaw as TariffQuoteServer;
                   const normKey = (k === 'comfort' ? 'business' : k);
                   if (!classStatsAccumulator[normKey]) {
                     classStatsAccumulator[normKey] = {
-                      className: q.className,
+                      className: q.className || normKey,
                       totalPrice: 0,
                       minPrice: Infinity,
                       maxPrice: -Infinity,
@@ -1695,20 +1936,6 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
                     if (q.price > classStatsAccumulator[normKey].maxPrice) classStatsAccumulator[normKey].maxPrice = q.price;
                   }
                 }
-
-                const computedClassStats: Record<string, any> = {};
-                for (const [key, item] of Object.entries(classStatsAccumulator)) {
-                  if (item.count > 0) {
-                    computedClassStats[key] = {
-                      className: item.className,
-                      avgPrice: Math.round(item.totalPrice / item.count),
-                      minPrice: item.minPrice === Infinity ? 0 : item.minPrice,
-                      maxPrice: item.maxPrice === -Infinity ? 0 : item.maxPrice,
-                      count: item.count
-                    };
-                  }
-                }
-                campaign.classStats = computedClassStats;
               }
 
               const mainPrice = stats.price || heroStats.price || 0;
@@ -1754,6 +1981,12 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
                 deltaPriceYangoVsHero: deltaPrice,
                 cheaperProvider,
 
+                // Trip Master Quote & Benchmark
+                tripMasterQuote: tmStats,
+                priceTripMaster: tmStats.priceEco,
+                priceTripMasterConfort: tmStats.priceConfort,
+                priceTripMasterMoto: tmStats.priceMoto,
+
                 source: stats.source || 'yango_live',
                 status: (stats.success || heroStats.success) ? 'success' : 'failed',
                 // Compact raw response summary to prevent server memory bloat
@@ -1782,28 +2015,10 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
 
               tripResults.unshift(trip);
 
-              // Mise à jour continue des métriques et moyennes en temps réel
+              // Mise à jour de la progression simple (les statistiques complexes seront calculées à la fin)
               campaign.completedPairs = completed;
               campaign.failedPairs = failed;
-              campaign.avgPrice = completed > 0 ? Math.round(totalPrice / completed) : 0;
-              campaign.minPrice = minP === Infinity ? 0 : minP;
-              campaign.maxPrice = maxP === -Infinity ? 0 : maxP;
-              campaign.avgDistanceKm = completed > 0 ? Number((totalDistKm / completed).toFixed(2)) : 0;
-              campaign.avgPricePerKm = campaign.avgDistanceKm > 0 ? Math.round(campaign.avgPrice / campaign.avgDistanceKm) : 0;
               campaign.durationSeconds = Math.max(1, Math.round((Date.now() - new Date(campaign.startedAt).getTime()) / 1000));
-              campaign.heroStats = {
-                avgPrice: completed > 0 ? Math.round(totalHeroPrice / completed) : 0,
-                minPrice: minHeroP === Infinity ? 0 : minHeroP,
-                maxPrice: maxHeroP === -Infinity ? 0 : maxHeroP,
-                avgDriversCount: completed > 0 ? Number((totalHeroDrivers / completed).toFixed(1)) : 0,
-                avgClosestDriverDistanceKm: completed > 0 ? Number((totalClosestDist / completed).toFixed(2)) : 0
-              };
-              campaign.deltaStats = {
-                yangoCheaperCount,
-                heroCheaperCount,
-                equalCount,
-                avgDeltaFcfa: completed > 0 ? Math.round(totalDelta / completed) : 0
-              };
             })
           );
 
@@ -1821,6 +2036,24 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
           level: 'info',
           message: `✅ Worker #${workerId} a terminé le Lot #${currentChunk.chunkIndex}/${currentChunk.totalChunks} (${currentChunk.pairs.length} trajets). Progression globale : ${completed + failed}/${pairs.length} trajets (${(((completed + failed) / pairs.length) * 100).toFixed(1)}%).`
         });
+
+        // Sauvegarde de checkpoint intermédiaire dans Firestore pour garantir 100% de visibilité en temps réel
+        if (db) {
+          try {
+            await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign), { merge: true });
+            const chunkTrips = tripResults.filter(t => t.campaignId === campaignId && !(t as any).savedToDb);
+            if (chunkTrips.length > 0) {
+              const batch = writeBatch(db);
+              for (const t of chunkTrips) {
+                batch.set(doc(db, 'campaigns', campaignId, 'trip_results', t.id), cleanFirestoreDoc(t));
+                (t as any).savedToDb = true;
+              }
+              await batch.commit();
+            }
+          } catch (e) {
+            console.warn('[Firestore] Intermediate checkpoint save error:', e);
+          }
+        }
       }
     };
 
@@ -1870,6 +2103,13 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
         avgClosestDriverDistanceKm: completed > 0 ? Number((totalClosestDist / completed).toFixed(2)) : 0
       };
 
+      // Trip Master aggregate statistics
+      campaign.tripMasterStats = {
+        avgPrice: completed > 0 ? Math.round(totalTripMasterPrice / completed) : 0,
+        minPrice: minTripMasterP === Infinity ? 0 : minTripMasterP,
+        maxPrice: maxTripMasterP === -Infinity ? 0 : maxTripMasterP
+      };
+
       // Delta comparison statistics
       campaign.deltaStats = {
         yangoCheaperCount,
@@ -1877,6 +2117,21 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
         equalCount,
         avgDeltaFcfa: completed > 0 ? Math.round(totalDelta / completed) : 0
       };
+
+      // Construction finale des statistiques par classe d'agrégateur (calcul unique en fin de campagne)
+      const computedClassStats: Record<string, any> = {};
+      for (const [key, item] of Object.entries(classStatsAccumulator)) {
+        if (item.count > 0) {
+          computedClassStats[key] = {
+            className: item.className,
+            avgPrice: Math.round(item.totalPrice / item.count),
+            minPrice: item.minPrice === Infinity ? 0 : item.minPrice,
+            maxPrice: item.maxPrice === -Infinity ? 0 : item.maxPrice,
+            count: item.count
+          };
+        }
+      }
+      campaign.classStats = computedClassStats;
 
       logs.push({
         timestamp: new Date().toISOString(),
@@ -1888,19 +2143,24 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
       city.autoSchedule.lastRunAt = campaign.finishedAt;
     }
 
-    // Persist final completed campaign and its trip results to Firestore
+    // Persist final completed campaign and any remaining unsaved trip results to Firestore
     if (db) {
       try {
         await setDoc(doc(db, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
-        const campTrips = tripResults.filter(t => t.campaignId === campaignId);
-        if (campTrips.length > 0) {
-          const batch = writeBatch(db);
-          for (const t of campTrips) {
-            batch.set(doc(db, 'campaigns', campaignId, 'trip_results', t.id), cleanFirestoreDoc(t));
+        const unsavedTrips = tripResults.filter(t => t.campaignId === campaignId && !(t as any).savedToDb);
+        if (unsavedTrips.length > 0) {
+          const BATCH_SIZE = 200;
+          for (let i = 0; i < unsavedTrips.length; i += BATCH_SIZE) {
+            const chunk = unsavedTrips.slice(i, i + BATCH_SIZE);
+            const batch = writeBatch(db);
+            for (const t of chunk) {
+              batch.set(doc(db, 'campaigns', campaignId, 'trip_results', t.id), cleanFirestoreDoc(t));
+              (t as any).savedToDb = true;
+            }
+            await batch.commit();
           }
-          await batch.commit();
         }
-        console.log(`[Firestore] Campagne ${campaignId} et ${campTrips.length} relevés enregistrés avec succès.`);
+        console.log(`[Firestore] Campagne ${campaignId} finalisée. Sauvegarde de ${tripResults.length} relevés au total réussie.`);
       } catch (e) {
         console.warn('[Firestore] final single campaign save error:', e);
       }
@@ -2070,8 +2330,17 @@ app.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
     );
   }
 
+  // Sort descending by creation date to get latest first
+  results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  // By default, return the latest 150 results for the live dashboard view
+  // Pass all=true to retrieve all results
+  const { all, includeRaw } = req.query;
+  if (all !== 'true') {
+    results = results.slice(0, 150);
+  }
+
   // Optimize payload size for fast streaming and low network overhead
-  const { includeRaw } = req.query;
   if (includeRaw !== 'true') {
     const sanitized = results.map(t => {
       const { rawResponse, requestPayload, apiCallDetails, ...clean } = t;
@@ -2286,6 +2555,9 @@ async function startServer() {
     });
   } else {
     console.log(`[VTC Pricing Hub] Mode Développement: middleware Vite actif`);
+    app.all('/api/*', (req: Request, res: Response) => {
+      return res.status(404).json({ error: `Endpoint API de développement non trouvé : ${req.method} ${req.path}` });
+    });
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },

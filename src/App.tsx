@@ -62,7 +62,7 @@ function AppContent() {
       if (campaignsData) {
         setCampaigns(campaignsData);
         if (campaignsData.length > 0) {
-          setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
+          setSelectedCampaignId((prev) => prev || campaignsData[0].id);
         }
       }
 
