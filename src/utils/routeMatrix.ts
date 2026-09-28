@@ -1,5 +1,5 @@
-import type { Neighborhood } from '../types/index.js';
-import { calculateDistanceKm } from './geoUtils.js';
+import type { Neighborhood } from '../types';
+import { calculateDistanceKm } from './geoUtils';
 
 export type DoualaArrondissement = 'Douala 1er' | 'Douala 2e' | 'Douala 3e' | 'Douala 4e' | 'Douala 5e' | 'Autre';
 

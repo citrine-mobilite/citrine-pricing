@@ -4,7 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.ts": {
-      "includeFiles": "firebase-applet-config.json",
+      "includeFiles": "{firebase-applet-config.json,server.ts,src/**}",
       "memory": 1024,
       "maxDuration": 30
     }
