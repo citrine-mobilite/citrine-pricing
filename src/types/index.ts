@@ -209,6 +209,8 @@ export interface TripResult {
   priceHero?: number;
   priceHeroStandard?: number;
   priceHeroConfort?: number;
+  priceHeroSuv?: number;
+  priceHeroPerKm?: number;
   heroDriversCount?: number;
   heroClosestDriverDistanceKm?: number;
   deltaPriceYangoVsHero?: number; // Yango price - Hero price
@@ -274,6 +276,13 @@ export interface HeroSettings {
     name: string;
     label: string;
   }[];
+}
+
+export interface TripMasterSettings {
+  distanceEndpoint: string;
+  searchVehicleEndpoint: string;
+  requestDelayMs: number;
+  mode: 'live';
 }
 
 export interface AuthState {

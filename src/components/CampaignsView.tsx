@@ -1,20 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { PricingCampaign } from '../types';
 import { api } from '../services/api';
 import { DataTable, Column } from './DataTable';
-import {
-  Activity,
-  RotateCw,
-  CheckCircle2,
-  AlertCircle,
-  Play,
-  ArrowRight,
-  Clock,
-  Building2,
-  StopCircle,
-  Trash2
-} from 'lucide-react';
+import { ArrowRight, Trash2 } from 'lucide-react';
+import { CampaignsHeader } from './campaigns/CampaignsHeader';
+import { CampaignsActiveBanner } from './campaigns/CampaignsActiveBanner';
 
 interface CampaignsViewProps {
   campaigns: PricingCampaign[];
@@ -30,87 +21,6 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   onRefresh
 }) => {
   const activeCampaign = campaigns.find((c) => c.status === 'in_progress');
-  const [liveData, setLiveData] = useState<PricingCampaign | null>(activeCampaign || null);
-
-  // Poll live campaign if in progress
-  useEffect(() => {
-    if (!activeCampaign) {
-      setLiveData(null);
-      return;
-    }
-
-    let isSubscribed = true;
-
-    const interval = setInterval(async () => {
-      try {
-        const fresh = await api.getCampaign(activeCampaign.id);
-        if (!isSubscribed) return;
-
-        if (!fresh) {
-          // Campaign no longer exists on server (e.g. server reset or deleted)
-          clearInterval(interval);
-          setLiveData(null);
-          onRefresh();
-          return;
-        }
-
-        setLiveData(fresh);
-        if (fresh.status !== 'in_progress') {
-          clearInterval(interval);
-          onRefresh();
-
-          if (fresh.status === 'completed') {
-            Swal.fire({
-              icon: 'success',
-              title: 'Tarification terminée avec succès !',
-              html: `
-                <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #1e293b;">
-                  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-                    <p style="margin: 0; font-weight: 700; color: #166534;">✅ Collecte comparative terminée</p>
-                  </div>
-                  <p style="margin-bottom: 5px;"><strong>Ville :</strong> ${fresh.cityName}</p>
-                  <p style="margin-bottom: 5px;"><strong>Trajets analysés :</strong> ${fresh.completedPairs} / ${fresh.totalPairs}</p>
-                  <p style="margin-bottom: 5px;"><strong>Prix moyen Yango :</strong> ${(fresh.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-                  <p style="margin-bottom: 5px;"><strong>Prix moyen HERO Cab :</strong> ${(fresh.heroStats?.avgPrice || 0).toLocaleString('fr-FR')} FCFA</p>
-                  <p style="margin-bottom: 0;"><strong>Temps d'exécution :</strong> ${fresh.durationSeconds || 1} seconde(s)</p>
-                </div>
-              `,
-              confirmButtonColor: '#1F4F4A',
-              confirmButtonText: 'Consulter les résultats'
-            });
-          } else if (fresh.status === 'failed') {
-            Swal.fire({
-              icon: 'error',
-              title: 'Échec de la tarification',
-              html: `
-                <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #1e293b;">
-                  <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-                    <p style="margin: 0; font-weight: 700; color: #991b1b;">❌ La tarification a échoué</p>
-                  </div>
-                  <p style="margin-bottom: 8px;"><strong>Cause :</strong> ${(fresh as any).errorMessage || fresh.lastError || 'Impossible de joindre les serveurs de tarification ou données introuvables.'}</p>
-                  <p style="margin-bottom: 0; color: #64748b; font-size: 12px;">Vérifiez vos paramètres API ou les coordonnées des quartiers.</p>
-                </div>
-              `,
-              confirmButtonColor: '#DC2626',
-              confirmButtonText: 'Compris'
-            });
-          }
-        }
-      } catch {
-        if (isSubscribed) {
-          clearInterval(interval);
-          setLiveData(null);
-          onRefresh();
-        }
-      }
-    }, 1200);
-
-    return () => {
-      isSubscribed = false;
-      clearInterval(interval);
-    };
-  }, [activeCampaign?.id, onRefresh]);
-
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const handleCancel = async (id: string) => {
@@ -119,57 +29,37 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       await api.cancelCampaign(id);
       onRefresh();
     } catch (err: any) {
-      console.error('Erreur lors de l’interruption:', err);
+      console.error(err);
     } finally {
       setCancellingId(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    try {
-      await api.deleteCampaign(id);
-      onRefresh();
-    } catch (err: any) {
-      console.error('Erreur lors de la suppression:', err);
+    const res = await Swal.fire({
+      title: 'Supprimer cette campagne ?',
+      text: 'Les données associées seront supprimées.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: 'Supprimer'
+    });
+    if (res.isConfirmed) {
+      try {
+        await api.deleteCampaign(id);
+        onRefresh();
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Erreur.', 'error');
+      }
     }
   };
 
-  // DataTable columns
-  const columns: Column<PricingCampaign>[] = [
+  const columns: Column<PricingCampaign>[] = useMemo(() => [
     {
       key: 'cityName',
       label: 'Ville',
       sortable: true,
-      render: (c) => (
-        <span className="font-semibold text-slate-900">{c.cityName}</span>
-      )
-    },
-    {
-      key: 'triggerType',
-      label: 'Déclencheur',
-      sortable: true,
-      render: (c) => (
-        <div className="flex flex-col">
-          <span
-            className={`inline-flex items-center w-fit px-2 py-0.5 rounded text-[11px] font-medium ${
-              c.triggerType === 'scheduled'
-                ? 'bg-slate-100 text-slate-700'
-                : 'bg-[#F0FAFA] text-[#1F4F4A] border border-[#3D8B85]/20'
-            }`}
-          >
-            {c.triggerType === 'scheduled' ? 'Automatique' : 'Manuel'}
-          </span>
-          {c.triggerType === 'manual' && c.triggeredByUserName && (
-            <span className="text-[10px] text-slate-500 mt-0.5">
-              par {c.triggeredByUserName}
-            </span>
-          )}
-        </div>
-      ),
-      exportValue: (c) =>
-        c.triggerType === 'scheduled'
-          ? 'Automatique'
-          : `Manuel (${c.triggeredByUserName || 'Opérateur'})`
+      render: (c) => <strong className="font-semibold text-slate-900">{c.cityName}</strong>
     },
     {
       key: 'startedAt',
@@ -184,30 +74,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
             minute: '2-digit'
           })}
         </span>
-      ),
-      exportValue: (c) => new Date(c.startedAt).toISOString()
-    },
-    {
-      key: 'durationSeconds',
-      label: 'Durée',
-      sortable: true,
-      render: (c) => {
-        const dur = c.durationSeconds || (c.status === 'in_progress' ? Math.max(1, Math.round((Date.now() - new Date(c.startedAt).getTime()) / 1000)) : 0);
-        const formatDur = (s: number) => {
-          if (!s || s <= 0) return '< 1s';
-          if (s < 60) return `${s}s`;
-          const m = Math.floor(s / 60);
-          const rem = s % 60;
-          return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
-        };
-        return (
-          <span className="inline-flex items-center gap-1 text-slate-700 font-mono text-[11px]">
-            <Clock className="w-3 h-3 text-slate-400" />
-            <span>{formatDur(dur)}</span>
-          </span>
-        );
-      },
-      exportValue: (c) => `${c.durationSeconds || 0}s`
+      )
     },
     {
       key: 'completedPairs',
@@ -215,52 +82,39 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       sortable: true,
       align: 'right',
       render: (c) => (
-        <div className="flex flex-col items-end">
-          <span className="font-semibold text-slate-800">
-            {c.completedPairs} / {c.totalPairs}
-          </span>
-          {c.isTestSample ? (
-            <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded font-medium border border-amber-200 mt-0.5">
-              Test ({c.totalPairs}/{c.totalPossiblePairs || '26k'})
-            </span>
-          ) : (
-            <span className="text-[10px] text-slate-400 mt-0.5">
-              Campagne globale
-            </span>
-          )}
-        </div>
-      ),
-      exportValue: (c) => `${c.completedPairs}/${c.totalPairs}${c.isTestSample ? ' (Test)' : ''}`
+        <span className="font-mono text-xs">
+          {(c.completedPairs || 0).toLocaleString('fr-FR')} / {(c.totalPairs || 0).toLocaleString('fr-FR')}
+        </span>
+      )
+    },
+    {
+      key: 'avgPrice',
+      label: 'Prix Moyen Yango',
+      sortable: true,
+      align: 'right',
+      render: (c) => (
+        <span className="font-mono text-xs font-bold text-slate-900">
+          {c.avgPrice ? `${c.avgPrice.toLocaleString('fr-FR')} FCFA` : '—'}
+        </span>
+      )
     },
     {
       key: 'status',
       label: 'Statut',
       sortable: true,
-      align: 'center',
-      render: (c) => {
-        if (c.status === 'completed') {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              Terminée
-            </span>
-          );
-        }
-        if (c.status === 'in_progress') {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
-              <RotateCw className="w-3 h-3 animate-spin text-amber-600" />
-              En cours
-            </span>
-          );
-        }
-        return (
-          <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-            {c.status === 'cancelled' ? 'Annulée' : 'Erreur'}
-          </span>
-        );
-      },
-      exportValue: (c) => c.status
+      render: (c) => (
+        <span
+          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+            c.status === 'completed'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+              : c.status === 'in_progress'
+              ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+              : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+          }`}
+        >
+          {c.status === 'completed' ? 'Succès' : c.status === 'in_progress' ? 'En cours' : 'Arrêtée'}
+        </span>
+      )
     },
     {
       key: 'actions',
@@ -268,114 +122,50 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       align: 'right',
       render: (c) => (
         <div className="flex items-center justify-end gap-2">
-          {c.status === 'in_progress' ? (
-            <button
-              onClick={() => handleCancel(c.id)}
-              disabled={cancellingId === c.id}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg shadow-2xs transition cursor-pointer"
-            >
-              <StopCircle className={`w-3.5 h-3.5 ${cancellingId === c.id ? 'animate-spin' : ''}`} />
-              <span>{cancellingId === c.id ? 'Arrêt...' : 'Arrêter'}</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                onSelectCampaign(c.id);
-                onNavigate('pricing');
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition"
-            >
-              <span>Résultats</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          )}
-
+          <button
+            onClick={() => {
+              onSelectCampaign(c.id);
+              onNavigate('pricing');
+            }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F4F4A] hover:underline"
+          >
+            <span>Voir</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
           <button
             onClick={() => handleDelete(c.id)}
-            className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-            title="Supprimer la campagne"
+            className="p-1 text-slate-400 hover:text-red-600 rounded transition"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
-      ),
-      exportValue: () => ''
+      )
     }
-  ];
+  ], [onSelectCampaign, onNavigate]);
 
   return (
-    <div className="space-y-6">
-      
-      {/* Title */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-          Campagnes de Pricing
-        </h1>
-        <button
-          onClick={() => onNavigate('pricing')}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-sm transition cursor-pointer"
-        >
-          <Play className="w-3.5 h-3.5 fill-current" />
-          <span>Lancer un pricing</span>
-        </button>
-      </div>
+    <div className="space-y-4">
+      <CampaignsHeader
+        totalCount={campaigns.length}
+        activeCount={campaigns.filter(c => c.status === 'in_progress').length}
+        onRefresh={onRefresh}
+      />
 
-      {/* Live Active Tracker Banner if in progress */}
-      {liveData && liveData.status === 'in_progress' && (
-        <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <RotateCw className="w-4 h-4 text-amber-700 animate-spin" />
-              <span className="text-xs font-bold text-slate-900">
-                Campagne en cours d'exécution : {liveData.cityName}
-              </span>
-            </div>
-            <button
-              onClick={() => handleCancel(liveData.id)}
-              className="text-xs font-medium text-rose-700 hover:underline cursor-pointer"
-            >
-              Interrompre la campagne
-            </button>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-slate-600">
-              <span>
-                {liveData.completedPairs} sur {liveData.totalPairs} trajets tarifés
-              </span>
-              <span className="font-semibold text-slate-900">
-                {Math.round(((liveData.completedPairs || 0) / (liveData.totalPairs || 1)) * 100)}%
-              </span>
-            </div>
-            <div className="w-full h-2 bg-amber-200/50 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-amber-600 transition-all duration-300 rounded-full"
-                style={{
-                  width: `${Math.round(
-                    ((liveData.completedPairs || 0) / (liveData.totalPairs || 1)) * 100
-                  )}%`
-                }}
-              />
-            </div>
-          </div>
-        </div>
+      {activeCampaign && (
+        <CampaignsActiveBanner
+          campaign={activeCampaign}
+          cancellingId={cancellingId}
+          onCancel={handleCancel}
+        />
       )}
 
-      {/* Modern Compact DataTable */}
       <DataTable
         columns={columns}
         data={campaigns}
-        searchPlaceholder="Rechercher par ville, mode, statut..."
-        searchKeys={['cityName', 'triggerType', 'status']}
-        exportFileName="campagnes_pricing_citrine"
-        exportTitle="Liste des Campagnes de Pricing - Citrine Pricing"
-        exportSubtitle="Plateforme VTC Cameroun"
-        pageSizeOptions={[25, 50, 100, 250]}
-        defaultPageSize={25}
-        emptyMessage="Aucune campagne enregistrée."
+        searchPlaceholder="Rechercher par ville ou date..."
+        searchKeys={['cityName']}
+        exportFileName="campagnes_pricing"
       />
-
     </div>
   );
 };

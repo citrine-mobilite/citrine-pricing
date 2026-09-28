@@ -241,6 +241,33 @@
       },
       "required": ["id", "campaignId", "cityId", "startNeighborhoodName", "endNeighborhoodName", "price", "status"]
     },
+    "CampaignResults": {
+      "title": "CampaignResults",
+      "description": "Consolidated single collection document of all trip results for a campaign",
+      "type": "object",
+      "properties": {
+        "campaignId": {
+          "type": "string"
+        },
+        "cityId": {
+          "type": "string"
+        },
+        "cityName": {
+          "type": "string"
+        },
+        "finishedAt": {
+          "type": "string"
+        },
+        "totalTrips": {
+          "type": "number"
+        },
+        "results": {
+          "type": "array",
+          "description": "List of all trips executed during the campaign"
+        }
+      },
+      "required": ["campaignId", "totalTrips", "results"]
+    },
     "SystemSettings": {
       "title": "SystemSettings",
       "description": "API connection and pricing configuration for Yango, Hero and General system settings",
@@ -326,6 +353,10 @@
     "/campaigns/{campaignId}": {
       "schema": { "$ref": "#/entities/PricingCampaign" },
       "description": "Pricing benchmark runs (immutable execution records)"
+    },
+    "/campaign_results/{campaignId}": {
+      "schema": { "$ref": "#/entities/CampaignResults" },
+      "description": "Single consolidated collection document storing all trip results of a completed campaign in 1 single write"
     },
     "/campaigns/{campaignId}/trip_results/{resultId}": {
       "schema": { "$ref": "#/entities/TripResult" },

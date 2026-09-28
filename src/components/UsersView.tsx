@@ -1,17 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User } from '../types';
-import {
-  Users,
-  UserPlus,
-  Trash2,
-  CheckCircle2,
-  XCircle,
-  X,
-  AlertCircle
-} from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { DataTable, Column } from './DataTable';
+import { CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { UsersHeader } from './users/UsersHeader';
+import { UserModal } from './users/UserModal';
+import { DeleteUserModal } from './users/DeleteUserModal';
+import Swal from 'sweetalert2';
 
 interface UsersViewProps {
   users: User[];
@@ -23,9 +19,13 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Deletion modal state
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,10 +46,24 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
       setIsModalOpen(false);
       setName('');
       setEmail('');
-      setPassword('');
       onRefresh();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Utilisateur créé avec succès',
+        showConfirmButton: false,
+        timer: 2500
+      });
     } catch (err: any) {
-      setError(err.message || 'Erreur lors de la création de l’utilisateur.');
+      const msg = err.message || 'Erreur lors de la création de l’utilisateur.';
+      setError(msg);
+      Swal.fire({
+        title: 'Erreur',
+        text: msg,
+        icon: 'error',
+        confirmButtonColor: '#1F4F4A'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -57,33 +71,89 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
 
   const handleToggleActive = async (user: User) => {
     if (user.id === currentUser?.id) {
-      alert('Vous ne pouvez pas désactiver votre propre compte.');
+      Swal.fire({
+        title: 'Action impossible',
+        text: 'Vous ne pouvez pas désactiver votre propre compte administrateur.',
+        icon: 'warning',
+        confirmButtonColor: '#1F4F4A'
+      });
       return;
     }
     try {
       await api.updateUser(user.id, { active: !user.active });
       onRefresh();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: user.active ? 'info' : 'success',
+        title: user.active ? 'Compte utilisateur désactivé' : 'Compte utilisateur réactivé',
+        showConfirmButton: false,
+        timer: 2000
+      });
     } catch (err: any) {
-      alert(err.message || 'Erreur lors du changement de statut.');
+      Swal.fire({
+        title: 'Erreur',
+        text: err.message || 'Erreur lors du changement de statut.',
+        icon: 'error',
+        confirmButtonColor: '#1F4F4A'
+      });
     }
   };
 
-  const handleDeleteUser = async (user: User) => {
+  const handleOpenDeleteModal = (user: User) => {
     if (user.id === currentUser?.id) {
-      alert('Vous ne pouvez pas supprimer votre propre compte.');
+      Swal.fire({
+        title: 'Action impossible',
+        text: 'Vous ne pouvez pas supprimer votre propre compte.',
+        icon: 'warning',
+        confirmButtonColor: '#1F4F4A'
+      });
       return;
     }
-    if (confirm(`Confirmez-vous la suppression du compte de ${user.name} ?`)) {
-      try {
-        await api.deleteUser(user.id);
-        onRefresh();
-      } catch (err: any) {
-        alert(err.message || 'Erreur lors de la suppression.');
-      }
+    if (users.length <= 1) {
+      Swal.fire({
+        title: 'Action impossible',
+        text: 'Impossible de supprimer le seul utilisateur restant du système.',
+        icon: 'warning',
+        confirmButtonColor: '#1F4F4A'
+      });
+      return;
+    }
+    setUserToDelete(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setIsDeleting(true);
+
+    try {
+      await api.deleteUser(userToDelete.id);
+      setIsDeleteModalOpen(false);
+      const deletedName = userToDelete.name;
+      setUserToDelete(null);
+      onRefresh();
+
+      Swal.fire({
+        title: 'Utilisateur supprimé !',
+        text: `Le compte de ${deletedName} a été définitivement supprimé.`,
+        icon: 'success',
+        confirmButtonColor: '#1F4F4A',
+        timer: 2500
+      });
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Erreur de suppression',
+        text: err.message || 'Impossible de supprimer cet utilisateur.',
+        icon: 'error',
+        confirmButtonColor: '#1F4F4A'
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const columns: Column<User>[] = [
+  const columns: Column<User>[] = useMemo(() => [
     {
       key: 'name',
       label: 'Utilisateur',
@@ -92,20 +162,18 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
         <span className="font-semibold text-slate-900">
           {u.name}{' '}
           {u.id === currentUser?.id && (
-            <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 ml-1">
+            <span className="text-[10px] text-[#1F4F4A] bg-[#1F4F4A]/10 px-1.5 py-0.5 rounded border border-[#1F4F4A]/20 ml-1">
               Vous
             </span>
           )}
         </span>
-      ),
-      exportValue: (u) => u.name
+      )
     },
     {
       key: 'email',
       label: 'Email',
       sortable: true,
-      render: (u) => <span className="font-mono text-slate-600 text-xs">{u.email}</span>,
-      exportValue: (u) => u.email
+      render: (u) => <span className="font-mono text-slate-600 text-xs">{u.email}</span>
     },
     {
       key: 'active',
@@ -116,7 +184,6 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
           onClick={() => handleToggleActive(u)}
           disabled={u.id === currentUser?.id}
           className="inline-flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-          title="Activer ou désactiver l'accès"
         >
           {u.active ? (
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -130,15 +197,14 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
             </span>
           )}
         </button>
-      ),
-      exportValue: (u) => (u.active ? 'Actif' : 'Désactivé')
+      )
     },
     {
       key: 'lastLoginAt',
       label: 'Dernière Connexion',
       sortable: true,
       render: (u) => (
-        <span className="text-slate-500 text-xs">
+        <span className="text-slate-500 text-xs font-mono">
           {u.lastLoginAt
             ? new Date(u.lastLoginAt).toLocaleString('fr-FR', {
                 day: '2-digit',
@@ -148,156 +214,63 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
               })
             : 'Jamais'}
         </span>
-      ),
-      exportValue: (u) => (u.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : 'Jamais')
+      )
     },
     {
       key: 'actions',
       label: 'Actions',
       align: 'right',
       render: (u) => (
-        <div>
-          {u.id !== currentUser?.id && (
-            <button
-              onClick={() => handleDeleteUser(u)}
-              className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-              title="Supprimer ce compte"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      ),
-      exportValue: () => ''
+        u.id !== currentUser?.id && (
+          <button
+            onClick={() => handleOpenDeleteModal(u)}
+            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+            title="Supprimer l'utilisateur"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )
+      )
     }
-  ];
+  ], [currentUser?.id, users.length]);
 
   return (
-    <div className="space-y-6">
-      
-      {/* Title & Action */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-[#1F4F4A] tracking-tight">
-            Comptes Utilisateurs
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Application interne : création manuelle des comptes autorisés.
-          </p>
-        </div>
+    <div className="space-y-4">
+      <UsersHeader
+        totalCount={users.length}
+        onOpenAddModal={() => setIsModalOpen(true)}
+      />
 
-        <button
-          onClick={() => {
-            setError(null);
-            setIsModalOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#3D8B85] hover:bg-[#347872] shadow-sm transition cursor-pointer"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>Créer un utilisateur</span>
-        </button>
-      </div>
-
-      {/* Users DataTable */}
       <DataTable
         columns={columns}
         data={users}
         searchPlaceholder="Rechercher par nom ou email..."
         searchKeys={['name', 'email']}
-        exportFileName="utilisateurs_citrine"
-        exportTitle="Liste des Utilisateurs - Citrine Pricing"
-        pageSizeOptions={[25, 50, 100]}
-        defaultPageSize={25}
-        emptyMessage="Aucun utilisateur configuré."
+        exportFileName="utilisateurs_vtc"
       />
 
-      {/* Modal Create User */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-sm font-bold text-[#1F4F4A] flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-[#3D8B85]" />
-                <span>Créer un compte collaborateur</span>
-              </h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      <UserModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        name={name}
+        onNameChange={setName}
+        email={email}
+        onEmailChange={setEmail}
+        isSubmitting={isSubmitting}
+        onSubmit={handleCreateUser}
+        error={error}
+      />
 
-            {error && (
-              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-500" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCreateUser} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#1F4F4A] mb-1">
-                  Nom et Prénom
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ex: Jean Dupont"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[#F0FAFA]/60 border border-slate-200 rounded-lg px-3 py-2 text-xs text-[#1F4F4A] focus:outline-none focus:border-[#3D8B85] focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#1F4F4A] mb-1">
-                  Adresse email
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="nom@citrine-pricing.cm"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#F0FAFA]/60 border border-slate-200 rounded-lg px-3 py-2 text-xs text-[#1F4F4A] focus:outline-none focus:border-[#3D8B85] focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#1F4F4A] mb-1">
-                  Mot de passe initial
-                </label>
-                <input
-                  type="text"
-                  placeholder="Mot de passe temporaire"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#F0FAFA]/60 border border-slate-200 rounded-lg px-3 py-2 text-xs text-[#1F4F4A] focus:outline-none focus:border-[#3D8B85] focus:bg-white font-mono"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#3D8B85] hover:bg-[#347872] rounded-lg shadow-sm transition disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Création...' : 'Créer le compte'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+      <DeleteUserModal
+        isOpen={isDeleteModalOpen}
+        user={userToDelete}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setUserToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

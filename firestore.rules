@@ -94,6 +94,13 @@ service cloud.firestore {
       }
     }
 
+    // CAMPAIGN RESULTS (Consolidated single document per campaign to save quota):
+    match /campaign_results/{campaignId} {
+      allow read: if true;
+      allow create, update: if isValidId(campaignId);
+      allow delete: if isValidId(campaignId);
+    }
+
     // SYSTEM SETTINGS (Yango, Hero & General config):
     match /settings/{settingId} {
       allow read: if true;

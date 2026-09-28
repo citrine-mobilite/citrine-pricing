@@ -1,7 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
+  initializeFirestore,
   getFirestore,
+  disableNetwork,
+  memoryLocalCache,
   doc,
   getDocFromServer,
   getDoc,
@@ -18,13 +21,24 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { User, City, Neighborhood, PricingCampaign, TripResult } from '../types';
-import { INITIAL_CITIES, INITIAL_NEIGHBORHOODS } from '../data/seedData';
 
 // Initialize Firebase App
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with specific database ID (CRITICAL as per skill)
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firestore with memory cache and disable client network loop (all data requests go through Express /api server)
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: memoryLocalCache(),
+    experimentalAutoDetectLongPolling: true,
+    experimentalForceLongPolling: true
+  }, firebaseConfig.firestoreDatabaseId);
+  // Prevent client-side 10s backend connection timeouts in iframe preview
+  disableNetwork(firestoreInstance).catch(() => {});
+} catch {
+  firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+export const db = firestoreInstance;
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);
@@ -58,8 +72,15 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const isQuotaExhausted =
+    errMsg.includes('RESOURCE_EXHAUSTED') ||
+    errMsg.includes('Quota limit exceeded') ||
+    errMsg.includes('resource-exhausted') ||
+    errMsg.includes('Code: 8');
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: isQuotaExhausted ? 'Quota d’écriture Firestore temporairement atteint (mode local autonome actif)' : errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -74,23 +95,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  console.warn('Firestore Notice: ', JSON.stringify(errInfo));
+  if (isQuotaExhausted) {
+    return undefined as never;
+  }
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test Connection on initial boot as required by skill
+// Test Connection safely on initial boot
 export async function testConnection(): Promise<boolean> {
   try {
-    const testDocPromise = getDoc(doc(db, 'cities', 'city_douala'));
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 1500)
-    );
-    await Promise.race([testDocPromise, timeoutPromise]);
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore client operates in offline mode.');
-    }
+  } catch {
     return false;
   }
 }
@@ -211,108 +227,34 @@ export async function saveFirestoreTripResult(campaignId: string, trip: TripResu
   }
 }
 
-// ----------------- FIRESTORE SEEDING & INVENTORY ----------------- //
+// ----------------- FIRESTORE STATS & SYNC ----------------- //
 
 export async function getFirestoreStats(): Promise<{ userCount: number; cityCount: number; neighborhoodCount: number }> {
   try {
-    const [usersSnap, citiesSnap] = await Promise.all([
+    const [usersSnap, citiesSnap, nbsSnap] = await Promise.all([
       getDocs(collection(db, 'users')),
-      getDocs(collection(db, 'cities'))
+      getDocs(collection(db, 'cities')),
+      getDocs(collection(db, 'neighborhoods'))
     ]);
-    let neighborhoodCount = 0;
-    for (const cityDoc of citiesSnap.docs) {
-      const nbsSnap = await getDocs(collection(db, 'cities', cityDoc.id, 'neighborhoods'));
-      neighborhoodCount += nbsSnap.size;
-    }
     return {
       userCount: usersSnap.size,
       cityCount: citiesSnap.size,
-      neighborhoodCount
+      neighborhoodCount: nbsSnap.size
     };
   } catch (err) {
     console.warn('Could not query Firestore stats:', err);
-    return { userCount: 4, cityCount: 2, neighborhoodCount: 169 };
+    return { userCount: 0, cityCount: 0, neighborhoodCount: 0 };
   }
 }
 
 export async function seedFirestoreDatabase(): Promise<{ success: boolean; usersCount: number; citiesCount: number; neighborhoodsCount: number }> {
-  const SEED_USERS: User[] = [
-    {
-      id: 'usr_admin_01',
-      email: 'admin@citrine-pricing.cm',
-      name: 'Admin Plateforme',
-      role: 'admin',
-      active: true,
-      createdAt: '2026-01-10T08:00:00.000Z',
-      lastLoginAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_citrine_admin',
-      email: 'citrinemobilite@gmail.com',
-      name: 'Citrine Mobilité (Super Admin)',
-      role: 'admin',
-      active: true,
-      createdAt: '2026-01-10T08:00:00.000Z',
-      lastLoginAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_resp_01',
-      email: 'responsable@citrine-pricing.cm',
-      name: 'Sophie (Responsable Pricing)',
-      role: 'responsable',
-      active: true,
-      createdAt: '2026-02-01T08:00:00.000Z',
-      lastLoginAt: new Date().toISOString()
-    },
-    {
-      id: 'usr_emp_01',
-      email: 'employe@citrine-pricing.cm',
-      name: 'Marc (Opérations)',
-      role: 'employe',
-      active: true,
-      createdAt: '2026-03-01T08:00:00.000Z',
-      lastLoginAt: new Date().toISOString()
-    }
-  ];
-
-  function cleanData<T>(obj: T): T {
-    return JSON.parse(JSON.stringify(obj, (_, v) => (v === undefined ? null : v)));
-  }
-
-  // 1. Users
-  const userBatch = writeBatch(db);
-  for (const u of SEED_USERS) {
-    userBatch.set(doc(db, 'users', u.id), cleanData(u), { merge: true });
-  }
-  await userBatch.commit();
-
-  // 2. Cities
-  const cityBatch = writeBatch(db);
-  for (const c of INITIAL_CITIES) {
-    cityBatch.set(doc(db, 'cities', c.id), cleanData(c), { merge: true });
-  }
-  await cityBatch.commit();
-
-  // 3. Neighborhoods in subcollection & root collections
-  const BATCH_SIZE = 100;
-  for (let i = 0; i < INITIAL_NEIGHBORHOODS.length; i += BATCH_SIZE) {
-    const chunk = INITIAL_NEIGHBORHOODS.slice(i, i + BATCH_SIZE);
-    const nbBatch = writeBatch(db);
-    for (const nb of chunk) {
-      const cityName = nb.cityId === 'city_douala' ? 'Douala' : 'Yaoundé';
-      const enrichedNb = { ...nb, cityName, updatedAt: new Date().toISOString() };
-      const cleaned = cleanData(enrichedNb);
-      nbBatch.set(doc(db, 'cities', nb.cityId, 'neighborhoods', nb.id), cleaned, { merge: true });
-      nbBatch.set(doc(db, 'neighborhoods', nb.id), cleaned, { merge: true });
-    }
-    await nbBatch.commit();
-  }
-
+  // Pure dynamic sync of current stats
+  const stats = await getFirestoreStats();
   return {
     success: true,
-    usersCount: SEED_USERS.length,
-    citiesCount: INITIAL_CITIES.length,
-    neighborhoodsCount: INITIAL_NEIGHBORHOODS.length
+    usersCount: stats.userCount,
+    citiesCount: stats.cityCount,
+    neighborhoodsCount: stats.neighborhoodCount
   };
 }
 

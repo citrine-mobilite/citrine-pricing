@@ -13,7 +13,6 @@ import { SettingsView } from './components/SettingsView';
 import { LoginModal } from './components/LoginModal';
 import { api } from './services/api';
 import { City, Neighborhood, PricingCampaign, User } from './types';
-import { INITIAL_CITIES, INITIAL_NEIGHBORHOODS, INITIAL_USERS } from './data/seedData';
 import { RotateCw } from 'lucide-react';
 
 function AppContent() {
@@ -21,15 +20,15 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
-  // Core Data States initialized with reliable seed defaults
-  const [cities, setCities] = useState<City[]>(INITIAL_CITIES);
-  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>(INITIAL_NEIGHBORHOODS);
+  // Core Data States loaded dynamically from database
+  const [cities, setCities] = useState<City[]>([]);
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
   const [campaigns, setCampaigns] = useState<PricingCampaign[]>([]);
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Selected Entities
-  const [selectedCityId, setSelectedCityId] = useState<string>('city_douala');
+  const [selectedCityId, setSelectedCityId] = useState<string>('');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   // Mobile Menu State
@@ -46,10 +45,10 @@ function AppContent() {
   }, [campaigns]);
 
   // Fetch all core datasets
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (forceRefresh: boolean = false) => {
     try {
       const [citiesData, campaignsData, usersData] = await Promise.all([
-        api.getCities(),
+        api.getCities(forceRefresh),
         api.getCampaigns(),
         api.getUsers().catch(() => [])
       ]);
@@ -62,7 +61,9 @@ function AppContent() {
       if (campaignsData) {
         setCampaigns(campaignsData);
         if (campaignsData.length > 0) {
-          setSelectedCampaignId((prev) => prev || campaignsData[0].id);
+          setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
+        } else {
+          setSelectedCampaignId(null);
         }
       }
 
@@ -70,9 +71,9 @@ function AppContent() {
         setUsers(usersData);
       }
 
-      // Fetch neighborhoods for all cities
+      // Fetch neighborhoods for all cities (with 24h caching)
       if (citiesData && citiesData.length > 0) {
-        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(c.id));
+        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(c.id, forceRefresh));
         const nbsResults = await Promise.all(nbsPromises);
         const allNbs = nbsResults.flat();
         if (allNbs && allNbs.length > 0) {

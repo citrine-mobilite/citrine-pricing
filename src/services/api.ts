@@ -1,5 +1,4 @@
-import { City, HeroSettings, Neighborhood, PricingCampaign, TripResult, User, YangoSettings } from '../types';
-import { INITIAL_CITIES, INITIAL_NEIGHBORHOODS, INITIAL_USERS, generateInitialCampaigns } from '../data/seedData';
+import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings } from '../types';
 
 const BASE_URL = '/api';
 
@@ -24,22 +23,14 @@ const fetch = robustFetch;
 export const api = {
   // Auth
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    try {
-      const res = await fetch(`${BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      if (res.ok) return await res.json();
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Erreur lors de la connexion.');
-    } catch (e: any) {
-      if (e.message && !e.message.includes('fetch')) throw e;
-      const cleanEmail = email.trim().toLowerCase();
-      const user = INITIAL_USERS.find(u => u.email.toLowerCase() === cleanEmail);
-      if (!user) throw new Error('Utilisateur introuvable.');
-      return { user, token: `token_${user.id}_${Date.now()}` };
-    }
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (res.ok) return await res.json();
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erreur lors de la connexion.');
   },
 
   // Users
@@ -48,9 +39,9 @@ export const api = {
       const res = await fetch(`${BASE_URL}/users`);
       if (res.ok) return await res.json();
     } catch (e) {
-      console.warn('[API Client] getUsers fallback:', e);
+      console.warn('[API Client] getUsers error:', e);
     }
-    return INITIAL_USERS;
+    return [];
   },
 
   async createUser(data: { name: string; email: string; role: string }): Promise<User> {
@@ -84,20 +75,16 @@ export const api = {
     }
   },
 
-  // Cities
-  async getCities(): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
+  // Cities (avec cache 24h côté serveur / BD)
+  async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
     try {
-      const res = await fetch(`${BASE_URL}/cities`);
+      const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
+      const res = await fetch(url);
       if (res.ok) return await res.json();
     } catch (e) {
-      console.warn('[API Client] getCities fallback:', e);
+      console.warn('[API Client] getCities error:', e);
     }
-    return INITIAL_CITIES.map(c => ({
-      ...c,
-      neighborhoodsCount: INITIAL_NEIGHBORHOODS.filter(n => n.cityId === c.id).length,
-      activeNeighborhoodsCount: INITIAL_NEIGHBORHOODS.filter(n => n.cityId === c.id && n.active).length,
-      possiblePairs: INITIAL_NEIGHBORHOODS.filter(n => n.cityId === c.id && n.active).length ** 2
-    }));
+    return [];
   },
 
   async createCity(data: Partial<City>): Promise<City> {
@@ -128,16 +115,19 @@ export const api = {
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
   },
 
-  // Neighborhoods
-  async getNeighborhoods(cityId?: string): Promise<Neighborhood[]> {
+  // Neighborhoods (avec cache 24h côté serveur / BD)
+  async getNeighborhoods(cityId?: string, forceRefresh: boolean = false): Promise<Neighborhood[]> {
     try {
-      const url = cityId ? `${BASE_URL}/neighborhoods?cityId=${encodeURIComponent(cityId)}` : `${BASE_URL}/neighborhoods`;
-      const res = await fetch(url);
+      const params = new URLSearchParams();
+      if (cityId) params.append('cityId', cityId);
+      if (forceRefresh) params.append('forceRefresh', 'true');
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
       if (res.ok) return await res.json();
     } catch (e) {
-      console.warn('[API Client] getNeighborhoods fallback:', e);
+      console.warn('[API Client] getNeighborhoods error:', e);
     }
-    return cityId ? INITIAL_NEIGHBORHOODS.filter(n => n.cityId === cityId) : INITIAL_NEIGHBORHOODS;
+    return [];
   },
 
   async createNeighborhood(data: Partial<Neighborhood>): Promise<Neighborhood> {
@@ -219,10 +209,9 @@ export const api = {
       const res = await fetch(url);
       if (res.ok) return await res.json();
     } catch (e) {
-      console.warn('[API Client] getCampaigns fallback:', e);
+      console.warn('[API Client] getCampaigns error:', e);
     }
-    const initial = generateInitialCampaigns().campaigns;
-    return cityId ? initial.filter(c => c.cityId === cityId) : initial;
+    return [];
   },
 
   async getCampaign(id: string): Promise<PricingCampaign | null> {
@@ -279,10 +268,14 @@ export const api = {
       minPrice?: number;
       maxPrice?: number;
       search?: string;
+      limit?: number;
+      all?: boolean;
     }
   ): Promise<TripResult[]> {
     try {
       const params = new URLSearchParams();
+      params.append('all', 'true');
+      if (filters?.limit) params.append('limit', filters.limit.toString());
       if (filters?.startNeighborhood) params.append('startNeighborhood', filters.startNeighborhood);
       if (filters?.endNeighborhood) params.append('endNeighborhood', filters.endNeighborhood);
       if (filters?.minPrice) params.append('minPrice', filters.minPrice.toString());
@@ -309,6 +302,8 @@ export const api = {
     startLng: number;
     endLat: number;
     endLng: number;
+    startName?: string;
+    endName?: string;
     tariffClass?: string;
     cityCurrency?: string;
   }) {
@@ -355,6 +350,23 @@ export const api = {
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour des paramètres Hero.');
+    return res.json();
+  },
+
+  // Trip Master Settings
+  async getTripMasterSettings(): Promise<TripMasterSettings> {
+    const res = await fetch(`${BASE_URL}/settings/tripmaster`);
+    if (!res.ok) throw new Error('Impossible de charger les paramètres Trip Master.');
+    return res.json();
+  },
+
+  async updateTripMasterSettings(data: Partial<TripMasterSettings>): Promise<{ success: boolean; settings: TripMasterSettings }> {
+    const res = await fetch(`${BASE_URL}/settings/tripmaster`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Erreur lors de la mise à jour des paramètres Trip Master.');
     return res.json();
   },
 
