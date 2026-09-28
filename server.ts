@@ -23,6 +23,7 @@ import {
   generateBenchmarkPairs,
   calculatePossibleBenchmarkPairsCount
 } from './src/utils/routeMatrix.ts';
+import firebaseConfigDataFromFile from './firebase-applet-config.json';
 import {
   City,
   Neighborhood,
@@ -42,8 +43,8 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Charger la config Firebase de manière synchrone et sécurisée pour éviter les erreurs d'importation de modules ES sur Vercel
-let firebaseConfigData: any = null;
+// Charger la config Firebase de manière statique et sécurisée pour Vercel & Node
+let firebaseConfigData: any = firebaseConfigDataFromFile;
 try {
   const pathsToTry = [
     path.join(process.cwd(), 'firebase-applet-config.json'),
@@ -52,7 +53,10 @@ try {
   ];
   for (const cfgPath of pathsToTry) {
     if (fs.existsSync(cfgPath)) {
-      firebaseConfigData = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      const diskCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      if (diskCfg && diskCfg.apiKey) {
+        firebaseConfigData = diskCfg;
+      }
       break;
     }
   }
