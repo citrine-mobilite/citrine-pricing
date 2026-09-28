@@ -19,12 +19,12 @@ import {
 import {
   calculateDistanceKm,
   estimateUrbanTrip
-} from './src/utils/geoUtils';
+} from './src/utils/geoUtils.js';
 import {
   generateBenchmarkPairs,
   calculatePossibleBenchmarkPairsCount
-} from './src/utils/routeMatrix';
-import {
+} from './src/utils/routeMatrix.js';
+import type {
   City,
   Neighborhood,
   PricingCampaign,
@@ -36,7 +36,7 @@ import {
   HeroQuote,
   HeroDriver,
   CampaignLog
-} from './src/types';
+} from './src/types/index.js';
 
 dotenv.config();
 
