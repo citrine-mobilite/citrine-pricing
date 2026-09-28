@@ -2502,19 +2502,68 @@ app.post('/api/campaigns/start', async (req: Request, res: Response) => {
 
     // Persistance finale unique en base de données :
     // Zéro écriture au démarrage, zéro écriture pendant le pricing.
-    // TOUT est envoyé en ligne en UNE SEULE ET UNIQUE REQUÊTE à la fin avec le paquet de destinations dans le champ 'data' structuré par worker.
+    // L'en-tête de la campagne est enregistré dans 'campaigns' (sans le gros tableau 'data')
+    // Et le détail des destinations est enregistré dans 'campaign_results' (avec découpage automatique si taille > 750 Ko)
     await safeFirestoreWrite('saveCompletedCampaign', async () => {
-      const singleDocPayload = {
-        ...cleanFirestoreDoc(campaign),
-        data: workerResults,
-        totalTripsInData: localCampaignTrips.length
-      };
+      const campaignDocPayload = cleanFirestoreDoc({
+        ...campaign
+      });
+      delete (campaignDocPayload as any).data;
 
-      (campaign as any).data = workerResults;
+      // 1. Sauvegarde des métadonnées légères dans 'campaigns'
+      await setDoc(doc(db!, 'campaigns', campaignId), campaignDocPayload);
 
-      // 1 SEULE et unique requête d'écriture Firestore
-      await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(singleDocPayload));
-      console.log(`[Firestore] Campagne ${campaignId} et son paquet de destinations sauvegardés avec succès en BD.`);
+      // 2. Nettoyage et sauvegarde des résultats dans 'campaign_results'
+      const sanitizedWorkerResults: Record<string, any[]> = {};
+      for (const [wKey, wList] of Object.entries(workerResults)) {
+        if (Array.isArray(wList)) {
+          sanitizedWorkerResults[wKey] = wList.map(t => {
+            if (!t || typeof t !== 'object') return t;
+            const { rawResponse, requestPayload, apiCallDetails, ...cleanItem } = t;
+            return cleanItem;
+          });
+        }
+      }
+
+      const str = JSON.stringify(sanitizedWorkerResults);
+      const byteSize = Buffer.byteLength(str, 'utf8');
+
+      if (byteSize < 750000) {
+        await setDoc(doc(db!, 'campaign_results', campaignId), cleanFirestoreDoc({
+          campaignId,
+          data: sanitizedWorkerResults,
+          savedAt: new Date().toISOString()
+        }));
+      } else {
+        const keys = Object.keys(sanitizedWorkerResults);
+        const mid = Math.ceil(keys.length / 2);
+        const part1Keys = keys.slice(0, mid);
+        const part2Keys = keys.slice(mid);
+
+        const part1Data: Record<string, any[]> = {};
+        part1Keys.forEach(k => part1Data[k] = sanitizedWorkerResults[k]);
+
+        const part2Data: Record<string, any[]> = {};
+        part2Keys.forEach(k => part2Data[k] = sanitizedWorkerResults[k]);
+
+        await setDoc(doc(db!, 'campaign_results', campaignId), cleanFirestoreDoc({
+          campaignId,
+          data: part1Data,
+          hasMoreParts: true,
+          partsCount: 2,
+          savedAt: new Date().toISOString()
+        }));
+
+        await setDoc(doc(db!, 'campaign_results', `${campaignId}_part2`), cleanFirestoreDoc({
+          campaignId,
+          data: part2Data,
+          isPart: true,
+          partIndex: 2,
+          savedAt: new Date().toISOString()
+        }));
+      }
+
+      console.log(`[Firestore] Campagne ${campaignId} et ses résultats de destinations sauvegardés avec succès en BD.`);
     });
 
     // VIDAGE IMMÉDIAT DU CACHE MÉMOIRE DÈS QUE LE PRICING EST TERMINÉ
@@ -2558,12 +2607,19 @@ app.post('/api/campaigns/:id/cancel', async (req: Request, res: Response) => {
     targetCampaign = { ...session.campaign };
 
     // Sauvegarder l'état annulé dans Firestore
-    await safeFirestoreWrite('cancelCampaign', () =>
-      setDoc(doc(db!, 'campaigns', id), cleanFirestoreDoc({
-        ...targetCampaign,
-        data: session.workerResults
-      }))
-    );
+    await safeFirestoreWrite('cancelCampaign', async () => {
+      const cancelPayload = cleanFirestoreDoc({ ...targetCampaign });
+      delete (cancelPayload as any).data;
+      await setDoc(doc(db!, 'campaigns', id), cancelPayload);
+
+      if (session.workerResults) {
+        await setDoc(doc(db!, 'campaign_results', id), cleanFirestoreDoc({
+          campaignId: id,
+          data: session.workerResults,
+          savedAt: new Date().toISOString()
+        }));
+      }
+    });
 
     // Vider immédiatement le cache mémoire
     activePricingSessions.delete(id);
@@ -2685,7 +2741,27 @@ app.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
       const campSnap = await getDoc(doc(db, 'campaigns', id));
       if (campSnap.exists()) {
         campaign = { id: campSnap.id, ...campSnap.data() };
-        const raw = campaign.data;
+        let raw = campaign.data;
+
+        if (!raw || (typeof raw === 'object' && Object.keys(raw).length === 0)) {
+          const resSnap = await getDoc(doc(db, 'campaign_results', id));
+          if (resSnap.exists()) {
+            const resData = resSnap.data();
+            raw = resData.data || {};
+            if (resData.hasMoreParts) {
+              for (let p = 2; p <= (resData.partsCount || 2); p++) {
+                const partSnap = await getDoc(doc(db, 'campaign_results', `${id}_part${p}`));
+                if (partSnap.exists()) {
+                  const partData = partSnap.data().data;
+                  if (typeof partData === 'object' && partData !== null) {
+                    raw = { ...raw, ...partData };
+                  }
+                }
+              }
+            }
+          }
+        }
+
         if (Array.isArray(raw)) {
           results = raw;
         } else if (typeof raw === 'object' && raw !== null) {
@@ -2835,7 +2911,27 @@ app.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
       const campSnap = await getDoc(doc(db, 'campaigns', id));
       if (campSnap.exists()) {
         campaign = { id: campSnap.id, ...campSnap.data() };
-        const rawData = (campaign as any).data;
+        let rawData = (campaign as any).data;
+
+        if (!rawData || (typeof rawData === 'object' && Object.keys(rawData).length === 0)) {
+          const resSnap = await getDoc(doc(db, 'campaign_results', id));
+          if (resSnap.exists()) {
+            const resData = resSnap.data();
+            rawData = resData.data || {};
+            if (resData.hasMoreParts) {
+              for (let p = 2; p <= (resData.partsCount || 2); p++) {
+                const partSnap = await getDoc(doc(db, 'campaign_results', `${id}_part${p}`));
+                if (partSnap.exists()) {
+                  const partData = partSnap.data().data;
+                  if (typeof partData === 'object' && partData !== null) {
+                    rawData = { ...rawData, ...partData };
+                  }
+                }
+              }
+            }
+          }
+        }
+
         if (Array.isArray(rawData)) {
           trips = rawData;
         } else if (typeof rawData === 'object' && rawData !== null) {

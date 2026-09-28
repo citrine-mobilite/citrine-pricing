@@ -2,7 +2,7 @@ import React from 'react';
 import { PricingCampaign, City } from '../../types';
 import { Layers, Download, FileSpreadsheet, FileText, CheckCircle2, Clock, RotateCw } from 'lucide-react';
 import { api } from '../../services/api';
-import { exportToExcel, exportToPdf } from '../../utils/exportUtils';
+import { exportConsolidatedExcel, exportConsolidatedPdf, ConsolidatedCampaignData } from '../../utils/exportUtils';
 import Swal from 'sweetalert2';
 
 interface HistoryConsolidationTabProps {
@@ -102,66 +102,65 @@ export const HistoryConsolidationTab: React.FC<HistoryConsolidationTabProps> = (
 
   const handleBulkExport = async (format: 'excel' | 'pdf') => {
     if (selectedCampaignIds.length === 0) {
-      Swal.fire('Attention', 'Veuillez sélectionner au moins une campagne.', 'warning');
+      Swal.fire('Attention', 'Veuillez sélectionner au moins une campagne à exporter.', 'warning');
       return;
     }
 
     setIsExporting(true);
     try {
-      const consolidatedData: any[] = [];
+      const campaignsDataList: ConsolidatedCampaignData[] = [];
+      let totalTripsCount = 0;
+
+      // Charger le contenu complet (tous les trajets) de chaque pricing sélectionné
       for (const campaignId of selectedCampaignIds) {
         const camp = campaigns.find((c) => c.id === campaignId);
         if (!camp) continue;
-        const res = await api.getCampaignResults(campaignId);
-        if (res && res.length > 0) {
-          res.forEach((t) => {
-            consolidatedData.push({
-              ...t,
-              campaignId,
-              campaignDate: new Date(camp.startedAt).toLocaleString('fr-FR'),
-              cityName: camp.cityName
-            });
+
+        const trips = await api.getCampaignResults(campaignId);
+        if (trips && trips.length > 0) {
+          totalTripsCount += trips.length;
+          campaignsDataList.push({
+            campaignName: camp.isTestSample ? `Test Rapide (${camp.totalPairs} trajets)` : `Campagne Globale (${camp.totalPairs} trajets)`,
+            cityName: camp.cityName || 'Ville',
+            dateStr: new Date(camp.startedAt).toLocaleString('fr-FR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            trips
           });
         }
       }
 
-      if (consolidatedData.length === 0) {
+      if (campaignsDataList.length === 0 || totalTripsCount === 0) {
         Swal.fire('Information', 'Aucun trajet trouvé dans les campagnes sélectionnées.', 'info');
         return;
       }
 
       if (format === 'excel') {
-        const rows = consolidatedData.map((d) => ({
-          'ID Trajet': d.id,
-          'Campagne': d.campaignDate,
-          'Ville': d.cityName,
-          'Départ': d.startNeighborhoodName,
-          'Arrivée': d.endNeighborhoodName,
-          'Distance (km)': d.distanceKm,
-          'Prix Yango (FCFA)': d.price || d.priceEconom,
-          'Prix Hero Cab (FCFA)': d.priceHero || d.priceHeroStandard,
-          'Moins Cher': d.cheaperProvider || '',
-          'Écart Prix': d.deltaPriceYangoVsHero || ''
-        }));
-        exportToExcel(rows, `consolidation_vtc_${consolidatedData.length}_trajets`, 'Consolidation');
+        exportConsolidatedExcel(
+          campaignsDataList,
+          `export_consolide_${selectedCampaignIds.length}_pricings_${totalTripsCount}_trajets`
+        );
       } else {
-        const headers = ['Campagne', 'Ville', 'Départ', 'Destination', 'Dist.', 'Yango (F)', 'Hero (F)', 'Moins Cher'];
-        const rows = consolidatedData.slice(0, 1000).map((d) => [
-          d.campaignDate,
-          d.cityName,
-          d.startNeighborhoodName,
-          d.endNeighborhoodName,
-          `${d.distanceKm} km`,
-          d.price || d.priceEconom || '',
-          d.priceHero || d.priceHeroStandard || '',
-          d.cheaperProvider || ''
-        ]);
-        exportToPdf('Rapport Consolidé Multi-Campagnes', `Export de ${consolidatedData.length} trajets`, headers, rows, 'rapport_consolide_vtc');
+        exportConsolidatedPdf(
+          campaignsDataList,
+          `Rapport Consolidé Multi-Pricings (${selectedCampaignIds.length} relevés)`,
+          `export_consolide_${selectedCampaignIds.length}_pricings`
+        );
       }
 
-      Swal.fire({ title: 'Export réussi !', text: `${consolidatedData.length} trajets consolidés exportés.`, icon: 'success', timer: 2000, showConfirmButton: false });
+      Swal.fire({
+        title: 'Export réussi !',
+        text: `${selectedCampaignIds.length} pricing(s) exporté(s) (${totalTripsCount} trajets au total).`,
+        icon: 'success',
+        timer: 2200,
+        showConfirmButton: false
+      });
     } catch (err: any) {
-      Swal.fire('Erreur', err?.message || 'Erreur lors de l’export.', 'error');
+      Swal.fire('Erreur', err?.message || 'Erreur lors de l’exportation.', 'error');
     } finally {
       setIsExporting(false);
     }

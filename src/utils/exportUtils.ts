@@ -355,13 +355,13 @@ export function exportConsolidatedExcel(
 
   const flatRows: any[] = [];
   const merges: any[] = [];
-  let currentRow = 1; // row 0 is header of sheet
+  let currentRow = 1; // row 0 is header of sheet (column names)
 
   campaignsData.forEach((camp) => {
     // Add merge across all 16 columns (indices 0 to 15)
     merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 15 } });
 
-    const separatorText = `=== ${camp.dateStr.toUpperCase()}  |  ${camp.campaignName.toUpperCase()} (${camp.cityName.toUpperCase()}) ===`;
+    const separatorText = `=== PRICING DU ${camp.dateStr.toUpperCase()} — ${camp.cityName.toUpperCase()} | ${camp.campaignName.toUpperCase()} (${camp.trips.length} TRAJETS) ===`;
     
     flatRows.push({
       'Date & Heure': separatorText,
@@ -381,13 +381,18 @@ export function exportConsolidatedExcel(
       'Trip Master Confort': '',
       'Trip Master Moto': ''
     });
-    
-    // Apply center alignment to the merged cell
-    const cellRef = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
-    if (!worksheet[cellRef]) worksheet[cellRef] = {};
-    worksheet[cellRef].s = { alignment: { horizontal: 'center' } };
 
     currentRow++;
+
+    const getVal = (...vals: any[]) => {
+      for (const v of vals) {
+        if (v !== undefined && v !== null && v !== 0 && v !== '' && v !== '—') {
+          const num = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^\d.]/g, ''));
+          if (!isNaN(num) && num > 0) return Math.round(num);
+        }
+      }
+      return '—';
+    };
 
     // Content Rows
     camp.trips.forEach((t) => {
@@ -397,23 +402,40 @@ export function exportConsolidatedExcel(
         'Départ': t.startNeighborhoodName || '—',
         'Destination': t.endNeighborhoodName || '—',
         'Dist.': t.distanceKm ? `${t.distanceKm} km` : '—',
-        'Yango Éco': t.yango_eco || '—',
-        'Yango Confort': t.yango_confort || '—',
-        'Yango Confort+': t.yango_confort_plus || '—',
-        'Yango Moto': t.yango_moto || '—',
-        'Hero Éco': t.hero_eco || '—',
-        'Hero Confort': t.hero_confort || '—',
-        'Hero SUV': t.hero_suv || '—',
-        'Hero PerKm': t.hero_per_km || '—',
-        'Trip Master Éco': t.tripmaster_eco || '—',
-        'Trip Master Confort': t.tripmaster_confort || '—',
-        'Trip Master Moto': t.tripmaster_moto || '—'
+        'Yango Éco': getVal(t.yango_eco, t.price, t.priceEconom, t.vehiclePrices?.eco, t.vehiclePrices?.standard),
+        'Yango Confort': getVal(t.yango_confort, t.priceConfort, t.vehiclePrices?.confort),
+        'Yango Confort+': getVal(t.yango_confort_plus, t.priceConfortPlus, t.vehiclePrices?.confort_plus),
+        'Yango Moto': getVal(t.yango_moto, t.priceMoto, t.vehiclePrices?.moto),
+        'Hero Éco': getVal(t.hero_eco, t.priceHero, t.priceHeroStandard, t.heroPrices?.eco, t.heroPrices?.standard),
+        'Hero Confort': getVal(t.hero_confort, t.priceHeroConfort, t.heroPrices?.confort),
+        'Hero SUV': getVal(t.hero_suv, t.priceHeroSuv, t.heroPrices?.suv),
+        'Hero PerKm': getVal(t.hero_per_km, t.priceHeroPerKm, t.heroPrices?.perKm),
+        'Trip Master Éco': getVal(t.tripmaster_eco, t.priceTripMasterEco, t.tripMasterPrices?.eco),
+        'Trip Master Confort': getVal(t.tripmaster_confort, t.priceTripMasterConfort, t.tripMasterPrices?.confort),
+        'Trip Master Moto': getVal(t.tripmaster_moto, t.priceTripMasterMoto, t.tripMasterPrices?.moto)
       });
       currentRow++;
     });
 
     // Spacer
-    flatRows.push({});
+    flatRows.push({
+      'Date & Heure': '',
+      'Campagne / Ville': '',
+      'Départ': '',
+      'Destination': '',
+      'Dist.': '',
+      'Yango Éco': '',
+      'Yango Confort': '',
+      'Yango Confort+': '',
+      'Yango Moto': '',
+      'Hero Éco': '',
+      'Hero Confort': '',
+      'Hero SUV': '',
+      'Hero PerKm': '',
+      'Trip Master Éco': '',
+      'Trip Master Confort': '',
+      'Trip Master Moto': ''
+    });
     currentRow++;
   });
 
@@ -425,7 +447,7 @@ export function exportConsolidatedExcel(
 
   const keys = Object.keys(flatRows[0] || {});
   worksheet['!cols'] = keys.map((key) => {
-    return { wch: key === 'Campagne / Ville' || key === 'Date & Heure' ? 24 : 15 };
+    return { wch: key === 'Campagne / Ville' || key === 'Date & Heure' ? 26 : 15 };
   });
 
   const fullFileName = fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`;
@@ -451,12 +473,22 @@ export function exportConsolidatedPdf(
     minute: '2-digit'
   });
 
+  const getPriceStr = (...vals: any[]) => {
+    for (const v of vals) {
+      if (v !== undefined && v !== null && v !== 0 && v !== '' && v !== '—') {
+        const num = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^\d.]/g, ''));
+        if (!isNaN(num) && num > 0) return `${Math.round(num).toLocaleString('fr-FR')} F`;
+      }
+    }
+    return '—';
+  };
+
   const tablesHtml = campaignsData.map((camp, idx) => {
     return `
       <div class="campaign-section" style="${idx > 0 ? 'page-break-before: always; margin-top: 30px;' : ''}">
-        <div class="campaign-banner" style="background-color: #f1f5f9; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #3d8b85; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <div class="campaign-banner" style="background-color: #f1f5f9; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #1F4F4A; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; text-align: center;">
           <h2 style="margin: 0; font-size: 13px; color: #0f172a; font-weight: 700;">
-            ${camp.campaignName} — ${camp.cityName}
+            PRICING DU ${camp.dateStr.toUpperCase()} — ${camp.cityName.toUpperCase()} (${camp.campaignName.toUpperCase()})
           </h2>
           <div style="font-size: 10px; color: #475569; margin-top: 4px; display: flex; gap: 15px;">
             <span>Date d'exécution : <strong>${camp.dateStr}</strong></span>
@@ -467,50 +499,65 @@ export function exportConsolidatedPdf(
         <table>
           <thead>
             <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1; font-size: 10px;">
-              <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left; font-weight: 700; color: #1e293b; width: 120px; max-width: 120px;">Départ</th>
-              <th rowspan="2" style="padding: 10px; border-bottom: 1.5px solid #cbd5e1; text-align: left; font-weight: 700; color: #1e293b; width: 120px; max-width: 120px;">Destination</th>
-              <th rowspan="2" style="padding: 10px; text-align: right; border-bottom: 1.5px solid #cbd5e1; font-weight: 700; color: #1e293b; width: 50px;">Dist.</th>
-              <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #3d8b85; background-color: #f1f5f9; padding: 6px;">Yango</th>
-              <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #3d8b85; background-color: #f1f5f9; padding: 6px;">Hero Cab</th>
-              <th colspan="3" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #3d8b85; background-color: #f1f5f9; padding: 6px;">Trip Master</th>
+              <th rowspan="2" style="padding: 8px; border-bottom: 1.5px solid #cbd5e1; text-align: left; font-weight: 700; color: #1e293b;">Départ</th>
+              <th rowspan="2" style="padding: 8px; border-bottom: 1.5px solid #cbd5e1; text-align: left; font-weight: 700; color: #1e293b;">Destination</th>
+              <th rowspan="2" style="padding: 8px; text-align: right; border-bottom: 1.5px solid #cbd5e1; font-weight: 700; color: #1e293b;">Dist.</th>
+              <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1F4F4A; background-color: #f1f5f9; padding: 6px;">Yango</th>
+              <th colspan="4" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1F4F4A; background-color: #f1f5f9; padding: 6px;">Hero Cab</th>
+              <th colspan="3" style="text-align: center; border-bottom: 1px solid #cbd5e1; font-weight: 700; color: #1F4F4A; background-color: #f1f5f9; padding: 6px;">Trip Master</th>
             </tr>
             <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1; font-size: 8px; color: #475569;">
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort+</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px; width: 45px;">Moto</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">SUV</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px; width: 45px;">PerKm</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Éco</th>
-              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px; width: 45px;">Confort</th>
-              <th style="text-align: center; text-transform: uppercase; padding: 4px; width: 45px;">Moto</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Éco</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Confort</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Confort+</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px;">Moto</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Éco</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Confort</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">SUV</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #cbd5e1; padding: 4px;">PerKm</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Éco</th>
+              <th style="text-align: center; text-transform: uppercase; font-weight: 700; border-right: 1px solid #e2e8f0; padding: 4px;">Confort</th>
+              <th style="text-align: center; text-transform: uppercase; padding: 4px;">Moto</th>
             </tr>
           </thead>
           <tbody>
             ${camp.trips.map(t => {
               const dNmStart = t.startNeighborhoodName && t.startNeighborhoodName.includes(',') ? t.startNeighborhoodName.split(',')[0].trim() : (t.startNeighborhoodName || '—');
               const dNmEnd = t.endNeighborhoodName && t.endNeighborhoodName.includes(',') ? t.endNeighborhoodName.split(',')[0].trim() : (t.endNeighborhoodName || '—');
+              
+              const yEco = getPriceStr(t.yango_eco, t.price, t.priceEconom, t.vehiclePrices?.eco, t.vehiclePrices?.standard);
+              const yConf = getPriceStr(t.yango_confort, t.priceConfort, t.vehiclePrices?.confort);
+              const yConfPlus = getPriceStr(t.yango_confort_plus, t.priceConfortPlus, t.vehiclePrices?.confort_plus);
+              const yMoto = getPriceStr(t.yango_moto, t.priceMoto, t.vehiclePrices?.moto);
+
+              const hEco = getPriceStr(t.hero_eco, t.priceHero, t.priceHeroStandard, t.heroPrices?.eco, t.heroPrices?.standard);
+              const hConf = getPriceStr(t.hero_confort, t.priceHeroConfort, t.heroPrices?.confort);
+              const hSuv = getPriceStr(t.hero_suv, t.priceHeroSuv, t.heroPrices?.suv);
+              const hPerKm = getPriceStr(t.hero_per_km, t.priceHeroPerKm, t.heroPrices?.perKm);
+
+              const tmEco = getPriceStr(t.tripmaster_eco, t.priceTripMasterEco, t.tripMasterPrices?.eco);
+              const tmConf = getPriceStr(t.tripmaster_confort, t.priceTripMasterConfort, t.tripMasterPrices?.confort);
+              const tmMoto = getPriceStr(t.tripmaster_moto, t.priceTripMasterMoto, t.tripMasterPrices?.moto);
+
               return `
                 <tr style="font-size: 9.5px;">
                   <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; font-weight: 500;">${dNmStart}</td>
                   <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; font-weight: 500;">${dNmEnd}</td>
                   <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.distanceKm ? t.distanceKm + ' km' : '—'}</td>
                   
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.yango_eco ? t.yango_eco + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.yango_confort ? t.yango_confort + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.yango_confort_plus ? t.yango_confort_plus + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; border-right: 1px solid #e2e8f0;">${t.yango_moto ? t.yango_moto + ' F' : '—'}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${yEco}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${yConf}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${yConfPlus}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; border-right: 1px solid #e2e8f0;">${yMoto}</td>
                   
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600;">${t.hero_eco ? t.hero_eco + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600;">${t.hero_confort ? t.hero_confort + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600;">${t.hero_suv ? t.hero_suv + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600; border-right: 1px solid #e2e8f0;">${t.hero_per_km ? t.hero_per_km + ' F' : '—'}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600;">${hEco}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600;">${hConf}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600;">${hSuv}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: #0d9488; font-weight: 600; border-right: 1px solid #e2e8f0;">${hPerKm}</td>
                   
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.tripmaster_eco ? t.tripmaster_eco + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.tripmaster_confort ? t.tripmaster_confort + ' F' : '—'}</td>
-                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${t.tripmaster_moto ? t.tripmaster_moto + ' F' : '—'}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${tmEco}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${tmConf}</td>
+                  <td style="padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">${tmMoto}</td>
                 </tr>
               `;
             }).join('')}
