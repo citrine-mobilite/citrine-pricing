@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
@@ -18,12 +19,11 @@ import {
 import {
   calculateDistanceKm,
   estimateUrbanTrip
-} from './src/utils/geoUtils.js';
+} from './src/utils/geoUtils';
 import {
   generateBenchmarkPairs,
   calculatePossibleBenchmarkPairsCount
-} from './src/utils/routeMatrix.ts';
-import firebaseConfigDataFromFile from './firebase-applet-config.json';
+} from './src/utils/routeMatrix';
 import {
   City,
   Neighborhood,
@@ -36,16 +36,19 @@ import {
   HeroQuote,
   HeroDriver,
   CampaignLog
-} from './src/types/index.js';
+} from './src/types';
 
 dotenv.config();
 
+const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Charger la config Firebase de manière statique et sécurisée pour Vercel & Node
-let firebaseConfigData: any = firebaseConfigDataFromFile;
+// Charger la config Firebase de manière 100% robuste pour Node 20 / Vercel sans erreur d'attribut d'importation JSON
+let firebaseConfigData: any = null;
 try {
+  firebaseConfigData = require('./firebase-applet-config.json');
+} catch {
   const pathsToTry = [
     path.join(process.cwd(), 'firebase-applet-config.json'),
     path.join(__dirname, 'firebase-applet-config.json'),
@@ -53,15 +56,15 @@ try {
   ];
   for (const cfgPath of pathsToTry) {
     if (fs.existsSync(cfgPath)) {
-      const diskCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-      if (diskCfg && diskCfg.apiKey) {
-        firebaseConfigData = diskCfg;
-      }
+      try {
+        const diskCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+        if (diskCfg && diskCfg.apiKey) {
+          firebaseConfigData = diskCfg;
+        }
+      } catch {}
       break;
     }
   }
-} catch (e) {
-  console.warn('[Firestore] Failed to read firebase-applet-config.json from disk:', e);
 }
 
 const app = express();
