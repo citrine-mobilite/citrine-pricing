@@ -16,7 +16,23 @@ export function updateHeroSettings(newSettings: Partial<SystemSettings>) {
 export function parseHeroPriceNumber(val: any): number {
   if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val);
   if (!val) return 0;
-  const str = String(val).replace(/CFA|FCFA|XAF/gi, '').replace(/\s+/g, '').replace(/,/g, '.');
+  let str = String(val).trim();
+  // Remove currency names/symbols and white spaces
+  str = str.replace(/CFA|FCFA|XAF|\$/gi, '').replace(/\s+/g, '');
+
+  // Handle format like "1,184.00" or "12,500.00" (comma thousands separator + dot decimal)
+  if (str.includes(',') && str.includes('.')) {
+    str = str.replace(/,/g, '');
+  } else if (/^\d{1,3}(,\d{3})+$/.test(str)) {
+    // Format like "1,184"
+    str = str.replace(/,/g, '');
+  } else if (/^\d+,\d{1,2}$/.test(str)) {
+    // Format like "1184,00"
+    str = str.replace(',', '.');
+  } else {
+    str = str.replace(/,/g, '');
+  }
+
   const clean = str.replace(/[^\d.]/g, '');
   const num = parseFloat(clean);
   return isNaN(num) ? 0 : Math.round(num);
