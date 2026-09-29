@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { collection, doc, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
-import { db, safeFirestoreWrite, loadCanonicalCampaignResults } from '../db/firestore.js';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, loadCanonicalCampaignResults } from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
@@ -132,6 +132,12 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
 
   // Enregistrement initial
   memoryCampaigns.unshift(campaign);
+  if (db) {
+    await safeFirestoreWrite('initCampaignMetaDoc', () =>
+      setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign))
+    );
+  }
+
   await recordHistory({
     action: 'start_campaign',
     eventType: 'campaign',
@@ -141,11 +147,11 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     performedBy: triggeredByUserId || 'admin'
   });
 
-  // Exécution asynchrone non-bloquante avec workers parallèles
-  startCampaignExecution(campaign, city, pairs, Boolean(isTestSample));
+  // Exécution garantie et écriture en base Firestore (non tronquée par Serverless)
+  await startCampaignExecution(campaign, city, pairs, Boolean(isTestSample));
 
-  return res.status(202).json({
-    message: isTestSample ? `Test rapide lancé (${pairs.length} trajets).` : `Campagne lancée (${pairs.length} trajets).`,
+  return res.status(200).json({
+    message: isTestSample ? `Test rapide terminé (${pairs.length} trajets).` : `Campagne terminée (${pairs.length} trajets).`,
     campaign
   });
 });
@@ -307,7 +313,8 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
     return res.json(normalizedRows);
   }
 
-  return res.status(404).json({ error: 'Trajets introuvables pour cette campagne.' });
+  // Si aucun trajet n'est encore enregistré ou si la campagne débute, renvoyer un tableau vide [] avec statut 200 (pas d'erreur 404)
+  return res.json([]);
 });
 
 // 8. Endpoint Téléchargement JSON Canonique Ultra-Léger
