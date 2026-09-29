@@ -10,6 +10,7 @@ import { NeighborhoodsView } from './components/NeighborhoodsView';
 import { HistoryView } from './components/HistoryView';
 import { UsersView } from './components/UsersView';
 import { SettingsView } from './components/SettingsView';
+import { QuotaNoticeBanner } from './components/QuotaNoticeBanner';
 import { LoginPage } from './components/LoginPage';
 import { HeroLogo } from './components/HeroLogo';
 import { api } from './services/api';
@@ -162,6 +163,9 @@ function AppContent() {
           setActiveTab={setActiveTab}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
+
+        {/* Global Quota Notice Banner (Passive Exception Catch) */}
+        <QuotaNoticeBanner />
 
         {/* Content Workspace */}
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">

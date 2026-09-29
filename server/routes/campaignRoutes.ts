@@ -16,6 +16,7 @@ import {
   initializeCampaignSession,
   processCampaignChunk,
   finalizeCampaignExecution,
+  cancelChunkCampaignSession,
   cleanNeighborhoodName
 } from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount } from '../../src/utils/routeMatrix.js';
@@ -100,7 +101,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   let pairs = generateBenchmarkPairs(activeNbs);
   const totalPossible = calculatePossibleBenchmarkPairsCount(activeNbs);
 
-  const limit = sampleLimit ? parseInt(String(sampleLimit), 10) : (isTestSample ? 25 : undefined);
+  const limit = sampleLimit ? parseInt(String(sampleLimit), 10) : (isTestSample ? 10 : undefined);
   if (limit && limit > 0 && limit < pairs.length) {
     pairs = pairs.slice(0, limit);
   }
@@ -207,15 +208,24 @@ router.post('/api/campaigns/:id/step', async (req: Request, res: Response) => {
 router.post('/api/campaigns/:id/cancel', async (req: Request, res: Response) => {
   const { id } = req.params;
   const session = activePricingSessions.get(id);
-  if (!session) {
-    return res.status(404).json({ error: 'Session de tarification active introuvable pour cette campagne.' });
+  const chunkCancelled = cancelChunkCampaignSession(id);
+
+  if (session) {
+    session.cancelled = true;
+    session.abortController.abort();
+    session.campaign.status = 'cancelled';
   }
 
-  session.cancelled = true;
-  session.abortController.abort();
-  session.campaign.status = 'cancelled';
+  const camp = memoryCampaigns.find(c => c.id === id);
+  if (camp) {
+    camp.status = 'cancelled';
+  }
 
-  return res.json({ success: true, message: 'Arrêt de la campagne demandé.' });
+  if (db) {
+    await safeFirestoreWrite('cancelCamp', () => setDoc(doc(db!, 'campaigns', id), { status: 'cancelled' }, { merge: true }));
+  }
+
+  return res.json({ success: true, message: 'Arrêt de la campagne effectué.' });
 });
 
 // 5. Suppression globale

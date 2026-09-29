@@ -76,10 +76,14 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
       // Exécution séquentielle des lots (Client-Driven Chunking)
       (async () => {
         for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          try {
-            await api.processCampaignChunk(campaignId, chunkIdx);
-          } catch (e) {
-            console.error(`Erreur lot ${chunkIdx}:`, e);
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              await api.processCampaignChunk(campaignId, chunkIdx);
+              break;
+            } catch (e) {
+              console.warn(`Lot ${chunkIdx} tentative ${attempt}/2 échouée:`, e);
+              if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+            }
           }
         }
         await api.finalizeCampaign(campaignId);

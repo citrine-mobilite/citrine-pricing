@@ -14,7 +14,7 @@ interface PricingHeaderProps {
   showSingleTester: boolean;
   onToggleSingleTester: () => void;
   totalCombinations: number;
-  launchingTarget: '25' | 'all' | null;
+  launchingTarget: string | null;
   onLaunch: (overrideLimit: number | 'all') => void;
   activeCampaign?: PricingCampaign;
 }

@@ -1,17 +1,19 @@
 import React from 'react';
 import { PricingCampaign } from '../../types';
-import { Activity, StopCircle, Clock, AlertCircle } from 'lucide-react';
+import { StopCircle, RotateCw } from 'lucide-react';
 
 interface PricingLiveTrackerProps {
   campaign: PricingCampaign;
   isCancelling: boolean;
   onCancelCampaign: () => void;
+  onRestartCampaign?: () => void;
 }
 
 export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
   campaign,
   isCancelling,
-  onCancelCampaign
+  onCancelCampaign,
+  onRestartCampaign
 }) => {
   const isRunning = campaign.status === 'in_progress';
   const progressPercent =
@@ -21,7 +23,7 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
-      {/* Top row: Status, Title, Stop Button */}
+      {/* Top row: Status, Title, Stop / Restart Buttons */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
         <div className="flex items-center gap-2.5">
           <span className="relative flex h-3 w-3">
@@ -48,21 +50,34 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Traitement automatique par lots de 100 trajets
+              Traitement automatique par lots de 10 trajets
             </p>
           </div>
         </div>
 
-        {isRunning && (
-          <button
-            onClick={onCancelCampaign}
-            disabled={isCancelling}
-            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
-          >
-            <StopCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>{isCancelling ? 'Arrêt en cours...' : 'Arrêter immédiatement'}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isRunning ? (
+            <button
+              onClick={onCancelCampaign}
+              disabled={isCancelling}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
+            >
+              <StopCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>{isCancelling ? 'Arrêt en cours...' : 'Arrêter immédiatement'}</span>
+            </button>
+          ) : (
+            onRestartCampaign && (
+              <button
+                onClick={onRestartCampaign}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-sm"
+                title="Relancer cette campagne de tarification"
+              >
+                <RotateCw className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Relancer la campagne</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Progress Bar & Indicators */}
@@ -88,8 +103,8 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
               isRunning
                 ? 'bg-gradient-to-r from-orange-500 via-amber-400 to-sky-400'
                 : campaign.status === 'completed'
-                ? 'bg-gradient-to-r from-orange-500 via-amber-400 to-sky-400'
-                : 'bg-rose-500'
+                ? 'bg-emerald-500'
+                : 'bg-sky-500'
             }`}
             style={{ width: `${progressPercent}%` }}
           />

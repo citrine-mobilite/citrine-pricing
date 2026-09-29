@@ -22,6 +22,8 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { User, City, Neighborhood, PricingCampaign, TripResult } from '../types';
 
+import { triggerQuotaExceededNotice } from '../utils/quotaHandler';
+
 // Initialize Firebase App
 export const app = initializeApp(firebaseConfig);
 
@@ -97,6 +99,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   console.warn('Firestore Notice: ', JSON.stringify(errInfo));
   if (isQuotaExhausted) {
+    triggerQuotaExceededNotice();
     return undefined as never;
   }
   throw new Error(JSON.stringify(errInfo));

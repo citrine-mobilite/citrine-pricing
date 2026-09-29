@@ -80,7 +80,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   const [quickDestId, setQuickDestId] = useState<string>(cityActiveNeighborhoods[1]?.id || '');
   const [isQuickTesting, setIsQuickTesting] = useState<boolean>(false);
   const [quickTestResult, setQuickTestResult] = useState<any>(null);
-  const [launchingTarget, setLaunchingTarget] = useState<'25' | 'all' | null>(null);
+  const [launchingTarget, setLaunchingTarget] = useState<string | null>(null);
   const [trips, setTrips] = useState<TripResult[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [startFilter, setStartFilter] = useState('');
@@ -89,6 +89,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   // Suivi de l'état des campagnes pour déclencher le SweetAlert Récapitulatif
   const alertedCampaignsRef = React.useRef<Set<string>>(new Set());
   const previousCampaignStatusRef = React.useRef<Record<string, string>>({});
+  const cancelRequestedRef = React.useRef<boolean>(false);
 
   useEffect(() => {
     campaigns.forEach((camp) => {
@@ -200,7 +201,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
   const handleLaunch = async (overrideLimit: number | 'all') => {
     if (totalCombinations === 0) return;
-    const targetKey = overrideLimit === 'all' ? 'all' : '25';
+    cancelRequestedRef.current = false;
+    const targetKey = overrideLimit === 'all' ? 'all' : String(overrideLimit);
     setLaunchingTarget(targetKey);
     try {
       const result = await api.startCampaign({
@@ -221,14 +223,29 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
         // Exécution séquentielle des lots (Client-Driven Chunking)
         for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          try {
-            const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
-            if (chunkRes.chunkTrips && chunkRes.chunkTrips.length > 0) {
-              setTrips(prev => [...prev, ...chunkRes.chunkTrips]);
+          if (cancelRequestedRef.current) {
+            console.log('[Campaign] Annulation demandée, arrêt immédiat de la boucle de lots.');
+            break;
+          }
+          let success = false;
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            if (cancelRequestedRef.current) break;
+            try {
+              const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
+              if (chunkRes.chunkTrips && chunkRes.chunkTrips.length > 0) {
+                setTrips(prev => [...prev, ...chunkRes.chunkTrips]);
+              }
+              if (onRefresh) await onRefresh();
+              success = true;
+              break;
+            } catch (chunkErr) {
+              console.warn(`Tentative ${attempt}/2 échouée pour le lot ${chunkIdx}:`, chunkErr);
+              if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
             }
-            if (onRefresh) await onRefresh();
-          } catch (chunkErr) {
-            console.error(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
+          }
+          if (cancelRequestedRef.current) break;
+          if (!success) {
+            console.error(`Le lot ${chunkIdx} n'a pas pu être traité après 2 essais.`);
           }
         }
 
@@ -245,6 +262,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
   const handleCancelCampaign = async () => {
     if (!activeCampaignId) return;
+    cancelRequestedRef.current = true;
     setIsCancelling(true);
     try {
       await api.cancelCampaign(activeCampaignId);
@@ -332,6 +350,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           campaign={activeCampaign}
           isCancelling={isCancelling}
           onCancelCampaign={handleCancelCampaign}
+          onRestartCampaign={() => handleLaunch(activeCampaign.sampleLimit || 'all')}
         />
       )}
 

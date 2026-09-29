@@ -42,6 +42,24 @@ export interface CampaignSessionState {
 // Map local des sessions actives
 const campaignSessions = new Map<string, CampaignSessionState>();
 
+function fetchWithTimeout<T>(promise: Promise<T>, ms = 7000, fallback: T): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
+export function cancelChunkCampaignSession(campaignId: string): boolean {
+  const session = campaignSessions.get(campaignId);
+  if (session) {
+    session.campaign.status = 'cancelled';
+    campaignSessions.delete(campaignId);
+    return true;
+  }
+  return false;
+}
+
 /**
  * 1. Initialisation d'une session de campagne pour le Client-Driven Chunking
  */
@@ -50,7 +68,7 @@ export async function initializeCampaignSession(
   city: City,
   pairs: Array<{ origin: Neighborhood; dest: Neighborhood }>
 ): Promise<{ totalChunks: number; totalPairs: number }> {
-  const LOT_SIZE = 25;
+  const LOT_SIZE = 10;
   const chunks: ChunkDefinition[] = [];
 
   for (let i = 0; i < pairs.length; i += LOT_SIZE) {
@@ -128,7 +146,7 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
       pairs = pairs.slice(0, camp.sampleLimit);
     }
 
-    const LOT_SIZE = 25;
+    const LOT_SIZE = 10;
     const chunks: ChunkDefinition[] = [];
     for (let i = 0; i < pairs.length; i += LOT_SIZE) {
       chunks.push({
@@ -153,7 +171,7 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
   }
 
   const targetChunk = session.chunks.find(c => c.chunkIndex === chunkIndex);
-  if (!targetChunk) {
+  if (!targetChunk || session.campaign.status === 'cancelled') {
     return {
       success: false,
       chunkIndex,
@@ -166,16 +184,18 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
   const chunkTrips: TripResult[] = [];
   const chunkCanonicalTrips: CanonicalTrip[] = [];
 
-  for (const pair of targetChunk.pairs) {
+  const emptyStats = { price: null, priceEconom: null, priceConfort: null, priceStandard: null, priceEco: null };
+
+  await Promise.all(targetChunk.pairs.map(async (pair) => {
     const { origin, dest } = pair;
     const distKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
     const durationMin = Math.max(2, Math.round((distKm / 25) * 60));
 
     try {
       const [yangoStats, heroStats, tmStats] = await Promise.all([
-        callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency),
-        callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name),
-        callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name)
+        fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 7000, emptyStats as any),
+        fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 7000, emptyStats as any),
+        fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 7000, emptyStats as any)
       ]);
 
       const yEco = yangoStats.priceEconom || (yangoStats.classes?.econom?.price) || yangoStats.price || null;
@@ -290,7 +310,7 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
     } catch {
       session.failedPairs++;
     }
-  }
+  }));
 
   session.completedBatches++;
   session.campaign.completedPairs = session.completedPairs;

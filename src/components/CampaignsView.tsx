@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 import { PricingCampaign } from '../types';
 import { api } from '../services/api';
 import { DataTable, Column } from './DataTable';
-import { ArrowRight, Trash2 } from 'lucide-react';
+import { ArrowRight, Trash2, RotateCw } from 'lucide-react';
 import { CampaignsHeader } from './campaigns/CampaignsHeader';
 import { CampaignsActiveBanner } from './campaigns/CampaignsActiveBanner';
 
@@ -51,6 +51,22 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       } catch (err: any) {
         Swal.fire('Erreur', err?.message || 'Erreur.', 'error');
       }
+    }
+  };
+
+  const handleRestart = async (c: PricingCampaign) => {
+    try {
+      const res = await api.startCampaign({
+        cityId: c.cityId,
+        triggerType: 'manual',
+        sampleLimit: c.sampleLimit
+      });
+      if (res?.campaign) {
+        onSelectCampaign(res.campaign.id);
+        onNavigate('pricing');
+      }
+    } catch (err: any) {
+      Swal.fire('Erreur', err?.message || 'Erreur lors du relancement', 'error');
     }
   };
 
@@ -122,6 +138,16 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       align: 'right',
       render: (c) => (
         <div className="flex items-center justify-end gap-2">
+          {c.status !== 'in_progress' && (
+            <button
+              onClick={() => handleRestart(c)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition"
+              title="Relancer cette campagne"
+            >
+              <RotateCw className="w-3 h-3" />
+              <span>Relancer</span>
+            </button>
+          )}
           <button
             onClick={() => {
               onSelectCampaign(c.id);
@@ -135,6 +161,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           <button
             onClick={() => handleDelete(c.id)}
             className="p-1 text-slate-400 hover:text-red-600 rounded transition"
+            title="Supprimer la campagne"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
