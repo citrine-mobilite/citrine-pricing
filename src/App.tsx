@@ -96,17 +96,20 @@ function AppContent() {
   // Live polling for running campaigns so UI never hangs or spins indefinitely
   useEffect(() => {
     if (!isAuthenticated) return;
-    const hasActiveCampaign = campaigns.some((c) => c.status === 'in_progress');
-    if (!hasActiveCampaign) return;
+    const activeCamps = campaigns.filter((c) => c.status === 'in_progress');
+    if (activeCamps.length === 0) return;
 
     const interval = setInterval(async () => {
       try {
+        for (const c of activeCamps) {
+          await api.stepCampaign(c.id);
+        }
         const updatedCampaigns = await api.getCampaigns();
         setCampaigns(updatedCampaigns);
       } catch (err) {
         console.error('Error polling active campaigns:', err);
       }
-    }, 500);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [isAuthenticated, campaigns]);

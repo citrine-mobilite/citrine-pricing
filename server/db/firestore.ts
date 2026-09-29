@@ -60,7 +60,28 @@ export async function safeFirestoreWrite<T>(opName: string, op: () => Promise<T>
 }
 
 /**
- * Stockage partitionné garanti < 500 Ko pour respecter strictement la limite Firestore de 1 Mo
+ * Initialisation immédiate du document campaign_results avant l'insertion des lots
+ */
+export async function initCanonicalCampaignResults(campaignId: string, cityName: string): Promise<void> {
+  if (!db) return;
+  const payload = cleanFirestoreDoc({
+    campaignId,
+    cityName,
+    savedAt: new Date().toISOString(),
+    partIndex: 1,
+    totalParts: 1,
+    hasMoreParts: false,
+    chunkSize: 0,
+    totalTrips: 0,
+    canonicalTrips: []
+  });
+  await safeFirestoreWrite('initCanonicalResults', async () => {
+    await setDoc(doc(db!, 'campaign_results', campaignId), payload);
+  });
+}
+
+/**
+ * Stockage partitionné garanti < 500 Ko pour respecter strictly la limite Firestore de 1 Mo
  * Chaque document est plafonné à 1 000 trajets canoniques maximum (~280 Ko).
  */
 export async function saveCanonicalCampaignResults(

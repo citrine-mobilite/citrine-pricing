@@ -211,9 +211,30 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         selectedClasses: ['econom'],
         sampleLimit: overrideLimit
       });
+
       if (result?.campaign) {
         onCampaignStarted(result.campaign.id);
         handleCampaignChange(result.campaign.id);
+
+        const campaignId = result.campaign.id;
+        const totalChunks = result.totalChunks || 1;
+
+        // Exécution séquentielle des lots (Client-Driven Chunking)
+        for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+          try {
+            const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
+            if (chunkRes.chunkTrips && chunkRes.chunkTrips.length > 0) {
+              setTrips(prev => [...prev, ...chunkRes.chunkTrips]);
+            }
+            if (onRefresh) await onRefresh();
+          } catch (chunkErr) {
+            console.error(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
+          }
+        }
+
+        // Finalisation globale de la campagne
+        await api.finalizeCampaign(campaignId);
+        if (onRefresh) await onRefresh();
       }
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: err?.message || 'Erreur de démarrage' });

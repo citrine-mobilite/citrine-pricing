@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, loadCanonicalCampaignResults } from '../db/firestore.js';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, loadCanonicalCampaignResults, initCanonicalCampaignResults } from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
@@ -12,7 +12,12 @@ import {
   recordHistory
 } from '../db/memoryStore.js';
 import { PricingCampaign, CanonicalTrip } from '../types.js';
-import { startCampaignExecution, cleanNeighborhoodName } from '../services/campaignEngine.js';
+import {
+  initializeCampaignSession,
+  processCampaignChunk,
+  finalizeCampaignExecution,
+  cleanNeighborhoodName
+} from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount } from '../../src/utils/routeMatrix.js';
 
 const router = Router();
@@ -95,7 +100,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   let pairs = generateBenchmarkPairs(activeNbs);
   const totalPossible = calculatePossibleBenchmarkPairsCount(activeNbs);
 
-  const limit = sampleLimit ? parseInt(String(sampleLimit), 10) : (isTestSample ? 10 : undefined);
+  const limit = sampleLimit ? parseInt(String(sampleLimit), 10) : (isTestSample ? 25 : undefined);
   if (limit && limit > 0 && limit < pairs.length) {
     pairs = pairs.slice(0, limit);
   }
@@ -130,30 +135,72 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     ]
   };
 
-  // Enregistrement initial
-  memoryCampaigns.unshift(campaign);
-  if (db) {
-    await safeFirestoreWrite('initCampaignMetaDoc', () =>
-      setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign))
-    );
-  }
+  // Initialisation de la session de campagne
+  const { totalChunks, totalPairs } = await initializeCampaignSession(campaign, city, pairs);
 
   await recordHistory({
     action: 'start_campaign',
     eventType: 'campaign',
     title: `Démarrage de campagne: ${city.name}`,
-    description: `${pairs.length} trajets prévus.`,
+    description: `${pairs.length} trajets prévus (${totalChunks} lots).`,
     performedByName: cleanTriggeredByName,
     performedBy: triggeredByUserId || 'admin'
   });
 
-  // Exécution garantie et écriture en base Firestore (non tronquée par Serverless)
-  await startCampaignExecution(campaign, city, pairs, Boolean(isTestSample));
-
   return res.status(200).json({
-    message: isTestSample ? `Test rapide terminé (${pairs.length} trajets).` : `Campagne terminée (${pairs.length} trajets).`,
-    campaign
+    message: isTestSample ? `Test rapide initialisé (${pairs.length} trajets).` : `Campagne initialisée (${pairs.length} trajets).`,
+    campaign,
+    totalChunks,
+    totalPairs
   });
+});
+
+// Traitement individuel d'un lot (Client-Driven Chunking)
+router.post('/api/campaigns/:id/process-chunk', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const chunkIndex = parseInt(String(req.body.chunkIndex || req.query.chunkIndex || 1), 10);
+
+  try {
+    const result = await processCampaignChunk(id, chunkIndex);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Erreur lors du traitement du lot.' });
+  }
+});
+
+// Finalisation de la campagne
+router.post('/api/campaigns/:id/finalize', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const campaign = await finalizeCampaignExecution(id);
+    return res.json({ success: true, campaign });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Erreur lors de la finalisation.' });
+  }
+});
+
+// Endpoint de suivi/step dynamique pour actualisation temps réel
+router.post('/api/campaigns/:id/step', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const session = activePricingSessions.get(id);
+  if (session) {
+    return res.json({ success: true, campaign: session.campaign });
+  }
+
+  let campaign = memoryCampaigns.find(c => c.id === id);
+  if (!campaign && db) {
+    try {
+      const snap = await getDoc(doc(db, 'campaigns', id));
+      if (snap.exists()) campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
+    } catch {}
+  }
+
+  if (!campaign) {
+    return res.status(404).json({ error: 'Campagne introuvable.' });
+  }
+
+  return res.json({ success: true, campaign });
 });
 
 // 4. Interruption manuelle

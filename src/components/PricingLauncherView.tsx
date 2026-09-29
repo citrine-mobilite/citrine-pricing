@@ -69,6 +69,21 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
       });
 
       onCampaignStarted(res.campaign.id);
+
+      const campaignId = res.campaign.id;
+      const totalChunks = res.totalChunks || 1;
+
+      // Exécution séquentielle des lots (Client-Driven Chunking)
+      (async () => {
+        for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+          try {
+            await api.processCampaignChunk(campaignId, chunkIdx);
+          } catch (e) {
+            console.error(`Erreur lot ${chunkIdx}:`, e);
+          }
+        }
+        await api.finalizeCampaign(campaignId);
+      })();
     } catch (err: any) {
       setError(err.message || 'Erreur lors du lancement de la campagne.');
       setIsLaunching(false);

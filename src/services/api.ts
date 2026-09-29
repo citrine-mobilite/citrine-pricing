@@ -235,7 +235,7 @@ export const api = {
     triggerType?: 'manual' | 'scheduled';
     selectedClasses?: string[];
     sampleLimit?: number | 'all';
-  }): Promise<{ message: string; campaign: PricingCampaign }> {
+  }): Promise<{ message: string; campaign: PricingCampaign; totalChunks: number; totalPairs: number }> {
     const res = await fetch(`${BASE_URL}/campaigns/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -248,10 +248,48 @@ export const api = {
     return res.json();
   },
 
+  async processCampaignChunk(campaignId: string, chunkIndex: number): Promise<{
+    success: boolean;
+    chunkIndex: number;
+    completedPairs: number;
+    campaign: PricingCampaign;
+    chunkTrips: TripResult[];
+  }> {
+    const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/process-chunk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunkIndex })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erreur lors du traitement du lot ${chunkIndex}.`);
+    }
+    return res.json();
+  },
+
+  async finalizeCampaign(campaignId: string): Promise<{ success: boolean; campaign: PricingCampaign }> {
+    const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/finalize`, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de la finalisation de la campagne.');
+    }
+    return res.json();
+  },
+
   async cancelCampaign(id: string): Promise<{ campaign: PricingCampaign }> {
     const res = await fetch(`${BASE_URL}/campaigns/${id}/cancel`, { method: 'POST' });
     if (!res.ok) throw new Error('Erreur lors de l’interruption de la campagne.');
     return res.json();
+  },
+
+  async stepCampaign(id: string): Promise<{ success: boolean; campaign?: PricingCampaign }> {
+    try {
+      const res = await fetch(`${BASE_URL}/campaigns/${id}/step`, { method: 'POST' });
+      if (res.ok) return await res.json();
+    } catch {}
+    return { success: false };
   },
 
   async deleteCampaign(id: string): Promise<void> {
