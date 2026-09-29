@@ -133,26 +133,36 @@ export interface TripMasterQuote {
 export interface TripResult {
   id: string;
   campaignId: string;
-  cityId: string;
+  cityId?: string;
   cityName?: string;
-  startNeighborhoodId: string;
-  startNeighborhoodName: string;
+  origin: string;
+  destination: string;
+  startNeighborhoodId?: string;
+  startNeighborhoodName?: string;
   startCoordinates?: [number, number];
-  endNeighborhoodId: string;
-  endNeighborhoodName: string;
+  endNeighborhoodId?: string;
+  endNeighborhoodName?: string;
   endCoordinates?: [number, number];
-  distanceMeters: number;
+  distanceMeters?: number;
   distanceKm: number;
-  durationSeconds: number;
+  durationSeconds?: number;
   durationMinutes: number;
-  tariffClass: string;
-  price: number;
-  priceFormatted: string;
-  currency: string;
-  pricePerKm: number;
+  tariffClass?: string;
+  price?: number;
+  priceFormatted?: string;
+  currency?: string;
+  pricePerKm?: number;
   waitingTimeMinutes?: number;
 
-  // Multi-Class support
+  // Clean Canonical Multi-Provider Prices
+  prices: CanonicalTripPrices;
+  cheapest?: {
+    eco: string | null;
+    confort: string | null;
+    overall: string | null;
+  };
+
+  // Multi-Class support (legacy optional)
   classes?: Record<string, any>;
   availableClasses?: string[];
   priceEconom?: number;
@@ -160,7 +170,7 @@ export interface TripResult {
   priceConfortPlus?: number;
   priceMoto?: number;
 
-  // Dual Provider Benchmark
+  // Dual Provider Benchmark (legacy optional)
   heroQuote?: HeroQuote;
   priceHero?: number;
   priceHeroStandard?: number;
@@ -172,7 +182,7 @@ export interface TripResult {
   deltaPriceYangoVsHero?: number;
   cheaperProvider?: 'yango' | 'hero' | 'tripmaster' | 'equal';
 
-  // Trip Master Cameroon
+  // Trip Master Cameroon (legacy optional)
   tripMasterQuote?: TripMasterQuote;
   priceTripMaster?: number;
   priceTripMasterConfort?: number;
@@ -189,7 +199,7 @@ export interface TripResult {
   tripmaster_confort?: number;
   tripmaster_moto?: number;
 
-  source: 'yango_live' | 'yango_fallback' | 'yango_routestats';
+  source?: 'yango_live' | 'yango_fallback' | 'yango_routestats' | string;
   status?: 'success' | 'failed';
   errorMessage?: string;
   createdAt?: string;

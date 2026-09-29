@@ -83,13 +83,14 @@ export const TripMatrixView: React.FC<TripMatrixViewProps> = ({
                       </td>
                     );
                   }
+                  const tripPrice = trip.price || trip.prices?.yango?.eco || trip.prices?.heroCab?.eco || 0;
                   return (
                     <td
                       key={dest}
-                      className={`py-2 px-2 border text-center font-mono ${getHeatmapColor(trip.price)}`}
+                      className={`py-2 px-2 border text-center font-mono ${getHeatmapColor(tripPrice)}`}
                       title={`${orig} ➔ ${dest} (${trip.distanceKm} km, ${trip.durationMinutes} min)`}
                     >
-                      {trip.price.toLocaleString('fr-FR')}
+                      {tripPrice.toLocaleString('fr-FR')}
                     </td>
                   );
                 })}

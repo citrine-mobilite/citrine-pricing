@@ -37,6 +37,16 @@ export const renderCellPrice = (price: any, accent?: 'yango' | 'hero' | 'tripmas
 
 export const getYangoPrice = (t: TripResult, className: 'econom' | 'business' | 'comfortplus' | 'moto'): number | null => {
   if (!t) return null;
+
+  // 1. Direct clean access from t.prices.yango
+  if (t.prices?.yango) {
+    if (className === 'econom') return parseAnyPrice(t.prices.yango.eco);
+    if (className === 'business') return parseAnyPrice(t.prices.yango.confort);
+    if (className === 'comfortplus') return parseAnyPrice(t.prices.yango.confortPlus);
+    if (className === 'moto') return parseAnyPrice(t.prices.yango.moto);
+  }
+
+  // 2. Fallback for legacy cached structures
   const anyT = t as any;
   if (className === 'econom') {
     return parseAnyPrice(
@@ -82,6 +92,16 @@ export const getYangoPrice = (t: TripResult, className: 'econom' | 'business' | 
 
 export const getHeroPrice = (t: TripResult, className: 'eco' | 'confort' | 'suv' | 'perkm'): number | null => {
   if (!t) return null;
+
+  // 1. Direct clean access from t.prices.heroCab
+  if (t.prices?.heroCab) {
+    if (className === 'eco') return parseAnyPrice(t.prices.heroCab.eco);
+    if (className === 'confort') return parseAnyPrice(t.prices.heroCab.confort);
+    if (className === 'suv') return parseAnyPrice(t.prices.heroCab.suv);
+    if (className === 'perkm') return parseAnyPrice(t.prices.heroCab.perKm);
+  }
+
+  // 2. Fallback for legacy cached structures
   const anyT = t as any;
   const hQ = t.heroQuote as any;
 
@@ -148,6 +168,15 @@ export const getHeroPrice = (t: TripResult, className: 'eco' | 'confort' | 'suv'
 
 export const getTripMasterPrice = (t: TripResult, className: 'eco' | 'confort' | 'moto'): number | null => {
   if (!t) return null;
+
+  // 1. Direct clean access from t.prices.tripMaster
+  if (t.prices?.tripMaster) {
+    if (className === 'eco') return parseAnyPrice(t.prices.tripMaster.eco);
+    if (className === 'confort') return parseAnyPrice(t.prices.tripMaster.confort);
+    if (className === 'moto') return parseAnyPrice(t.prices.tripMaster.moto);
+  }
+
+  // 2. Fallback for legacy cached structures
   const anyT = t as any;
   const tmQ = t.tripMasterQuote as any;
 

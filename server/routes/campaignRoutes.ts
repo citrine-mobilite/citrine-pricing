@@ -307,66 +307,21 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
   // 3. Lecture du JSON canonique en base de données Firestore
   const canonicalTrips = await loadCanonicalCampaignResults(id);
   if (canonicalTrips.length > 0) {
-    // Conversion fluide vers les colonnes attendues par le tableau
-    const normalizedRows = canonicalTrips.map(t => {
-      const yEco = t.prices.yango?.eco || null;
-      const yConf = t.prices.yango?.confort || null;
-      const yConfPlus = t.prices.yango?.confortPlus || null;
-      const yMoto = t.prices.yango?.moto || null;
+    const cleanTrips = canonicalTrips.map(t => ({
+      id: t.id,
+      campaignId: id,
+      origin: t.origin,
+      destination: t.destination,
+      distanceKm: t.distanceKm,
+      durationMinutes: t.durationMin,
+      prices: t.prices,
+      cheapest: t.cheapest,
+      status: t.status,
+      createdAt: t.createdAt
+    }));
 
-      const hEco = t.prices.heroCab?.eco || null;
-      const hConf = t.prices.heroCab?.confort || null;
-      const hSuv = t.prices.heroCab?.suv || null;
-      const hPerKm = t.prices.heroCab?.perKm || null;
-
-      const tmEco = t.prices.tripMaster?.eco || null;
-      const tmConf = t.prices.tripMaster?.confort || null;
-      const tmMoto = t.prices.tripMaster?.moto || null;
-
-      const pMain = yEco || hEco || tmEco || 0;
-
-      return {
-        id: t.id,
-        campaignId: id,
-        origin: t.origin,
-        destination: t.destination,
-        startNeighborhoodName: t.origin,
-        endNeighborhoodName: t.destination,
-        distanceKm: t.distanceKm,
-        durationMinutes: t.durationMin,
-        price: pMain,
-        priceFormatted: `${pMain.toLocaleString('fr-FR')} FCFA`,
-        tariffClass: 'econom',
-        priceEconom: yEco || undefined,
-        priceConfort: yConf || undefined,
-        priceConfortPlus: yConfPlus || undefined,
-        priceMoto: yMoto || undefined,
-        priceHero: hEco || undefined,
-        priceHeroStandard: hEco || undefined,
-        priceHeroConfort: hConf || undefined,
-        priceHeroSuv: hSuv || undefined,
-        priceHeroPerKm: hPerKm || undefined,
-        priceTripMaster: tmEco || undefined,
-        priceTripMasterConfort: tmConf || undefined,
-        priceTripMasterMoto: tmMoto || undefined,
-        yango_eco: yEco || undefined,
-        yango_confort: yConf || undefined,
-        yango_moto: yMoto || undefined,
-        hero_eco: hEco || undefined,
-        hero_confort: hConf || undefined,
-        hero_suv: hSuv || undefined,
-        tripmaster_eco: tmEco || undefined,
-        tripmaster_confort: tmConf || undefined,
-        tripmaster_moto: tmMoto || undefined,
-        cheaperProvider: t.cheapest?.eco || 'yango',
-        deltaPriceYangoVsHero: (yEco && hEco) ? yEco - hEco : 0,
-        prices: t.prices,
-        createdAt: t.createdAt
-      };
-    });
-
-    memoryCampaignTrips[id] = normalizedRows as any;
-    return res.json(normalizedRows);
+    memoryCampaignTrips[id] = cleanTrips as any;
+    return res.json(cleanTrips);
   }
 
   // Si aucun trajet n'est encore enregistré ou si la campagne débute, renvoyer un tableau vide [] avec statut 200 (pas d'erreur 404)

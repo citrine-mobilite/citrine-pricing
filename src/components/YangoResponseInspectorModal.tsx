@@ -4,6 +4,7 @@ import { X, Scale, CheckCircle2, ArrowRight } from 'lucide-react';
 import { InspectorComparisonTab } from './inspector/InspectorComparisonTab';
 import { InspectorJsonTab } from './inspector/InspectorJsonTab';
 import { InspectorRequestTab } from './inspector/InspectorRequestTab';
+import { getYangoPrice, getHeroPrice, getTripMasterPrice, cleanNeighborhoodName } from './pricing/pricingUtils';
 
 interface YangoResponseInspectorModalProps {
   trip: TripResult | null;
@@ -19,17 +20,17 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
 
   if (!trip) return null;
 
-  const yangoRawData = (trip as any)?.yango?.rawJson || (trip as any)?.yango || trip.rawResponse || trip.apiCallDetails?.rawResponseBody;
+  const yangoRawData = (trip as any)?.yango?.rawJson || (trip as any)?.yango || trip.rawResponse || trip.apiCallDetails?.rawResponseBody || trip.prices?.yango;
   const yangoJsonString = yangoRawData
     ? JSON.stringify(yangoRawData, null, 2)
     : 'Aucune réponse brute Yango enregistrée.';
 
-  const heroRawData = (trip as any)?.heroCab?.rawText || (trip as any)?.heroCab?.rawResponse || (trip as any)?.heroCab || trip.heroQuote?.rawResponse;
+  const heroRawData = (trip as any)?.heroCab?.rawText || (trip as any)?.heroCab?.rawResponse || (trip as any)?.heroCab || trip.heroQuote?.rawResponse || trip.prices?.heroCab;
   const heroJsonString = heroRawData
     ? (typeof heroRawData === 'string' ? heroRawData : JSON.stringify(heroRawData, null, 2))
     : 'Aucune réponse brute Hero Cab enregistrée.';
 
-  const tripMasterRawData = (trip as any)?.tripMaster?.rawText || (trip as any)?.tripMaster?.rawResponse || (trip as any)?.tripMaster || trip.tripMasterQuote?.rawResponse;
+  const tripMasterRawData = (trip as any)?.tripMaster?.rawText || (trip as any)?.tripMaster?.rawResponse || (trip as any)?.tripMaster || trip.tripMasterQuote?.rawResponse || trip.prices?.tripMaster;
   const tripMasterJsonString = tripMasterRawData
     ? (typeof tripMasterRawData === 'string' ? tripMasterRawData : JSON.stringify(tripMasterRawData, null, 2))
     : 'Aucune réponse brute Trip Master enregistrée.';
@@ -40,18 +41,21 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const pYangoEco = trip.priceEconom || trip.classes?.econom?.price || (trip.tariffClass === 'econom' ? trip.price : null);
-  const pYangoConf = trip.priceConfort || trip.classes?.business?.price || trip.classes?.comfort?.price || (trip.tariffClass === 'comfort' ? trip.price : null);
-  const pYangoConfPlus = trip.priceConfortPlus || trip.classes?.comfortplus?.price;
-  const pYangoMoto = trip.priceMoto || trip.classes?.moto?.price;
+  const pYangoEco = getYangoPrice(trip, 'econom');
+  const pYangoConf = getYangoPrice(trip, 'business');
+  const pYangoConfPlus = getYangoPrice(trip, 'comfortplus');
+  const pYangoMoto = getYangoPrice(trip, 'moto');
 
-  const pHeroEco = trip.priceHeroStandard || trip.heroQuote?.priceStandard || trip.priceHero;
-  const pHeroConf = trip.priceHeroConfort || trip.heroQuote?.priceConfort;
-  const pHeroSuv = trip.priceHeroSuv || trip.heroQuote?.priceSuv;
+  const pHeroEco = getHeroPrice(trip, 'eco');
+  const pHeroConf = getHeroPrice(trip, 'confort');
+  const pHeroSuv = getHeroPrice(trip, 'suv');
 
-  const pTripMasterEco = trip.priceTripMaster || trip.tripMasterQuote?.priceEco;
-  const pTripMasterConf = trip.priceTripMasterConfort || trip.tripMasterQuote?.priceConfort;
-  const pTripMasterMoto = trip.priceTripMasterMoto || trip.tripMasterQuote?.priceMoto;
+  const pTripMasterEco = getTripMasterPrice(trip, 'eco');
+  const pTripMasterConf = getTripMasterPrice(trip, 'confort');
+  const pTripMasterMoto = getTripMasterPrice(trip, 'moto');
+
+  const originName = cleanNeighborhoodName(trip.origin || trip.startNeighborhoodName);
+  const destName = cleanNeighborhoodName(trip.destination || trip.endNeighborhoodName);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -73,9 +77,9 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 pt-0.5">
-              <span className="font-semibold text-slate-900">{trip.startNeighborhoodName}</span>
+              <span className="font-semibold text-slate-900">{originName}</span>
               <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span className="font-semibold text-slate-900">{trip.endNeighborhoodName}</span>
+              <span className="font-semibold text-slate-900">{destName}</span>
               <span className="text-slate-300">•</span>
               <span className="font-mono text-slate-600">{trip.distanceKm} km</span>
               <span className="text-slate-300">•</span>

@@ -173,84 +173,94 @@ export interface PricingCampaign {
   };
 }
 
+export interface CanonicalTripPrices {
+  yango?: {
+    eco: number | null;
+    confort: number | null;
+    confortPlus: number | null;
+    moto: number | null;
+  };
+  heroCab?: {
+    eco: number | null;
+    confort: number | null;
+    suv: number | null;
+    perKm: number | null;
+  };
+  tripMaster?: {
+    eco: number | null;
+    confort: number | null;
+    moto: number | null;
+  };
+}
+
 export interface TripResult {
   id: string;
   campaignId: string;
-  cityId: string;
+  cityId?: string;
   cityName?: string;
-  startNeighborhoodId: string;
-  startNeighborhoodName: string;
-  startCoordinates?: [number, number]; // [lat, lng]
-  startCoords?: { lat: number; lng: number };
-  endNeighborhoodId: string;
-  endNeighborhoodName: string;
-  endCoordinates?: [number, number]; // [lat, lng]
-  endCoords?: { lat: number; lng: number };
-  distanceMeters: number;
+  origin: string;
+  destination: string;
+  startNeighborhoodName?: string;
+  endNeighborhoodName?: string;
+  startNeighborhoodId?: string;
+  endNeighborhoodId?: string;
+  distanceMeters?: number;
   distanceKm: number;
-  durationSeconds: number;
+  durationSeconds?: number;
   durationMinutes: number;
-  tariffClass: string; // main/selected class
-  price: number; // default class price
-  priceFormatted: string;
-  currency: string;
-  pricePerKm: number;
+  tariffClass?: string;
+  price?: number;
+  priceFormatted?: string;
+  currency?: string;
+  pricePerKm?: number;
   waitingTimeMinutes?: number;
 
-  // Multi-Class support (all 4 classes: econom, confort, confort+, moto)
-  classes?: Record<string, TariffQuote>;
-  availableClasses?: string[];
+  // Clean Canonical Multi-Provider Prices
+  prices: CanonicalTripPrices;
+  cheapest?: {
+    eco: string | null;
+    confort: string | null;
+    overall: string | null;
+  };
+
+  // Optional legacy flat fields (backward compatibility)
+  classes?: Record<string, any>;
   priceEconom?: number;
   priceConfort?: number;
   priceConfortPlus?: number;
   priceMoto?: number;
-
-  // Dual Provider Benchmark (Yango vs Hero)
-  heroQuote?: HeroQuote;
   priceHero?: number;
   priceHeroStandard?: number;
   priceHeroConfort?: number;
   priceHeroSuv?: number;
   priceHeroPerKm?: number;
-  heroDriversCount?: number;
-  heroClosestDriverDistanceKm?: number;
-  deltaPriceYangoVsHero?: number; // Yango price - Hero price
-  cheaperProvider?: 'yango' | 'hero' | 'tripmaster' | 'equal';
-
-  // Trip Master Cameroon Provider
-  tripMasterQuote?: {
-    distanceKm?: number;
-    durationMinutes?: number;
-    priceEco?: number;
-    priceConfort?: number;
-    priceMoto?: number;
-    rawResponse?: any;
-    latencyMs?: number;
-    httpStatus?: number;
-    errorMessage?: string;
-  };
   priceTripMaster?: number;
   priceTripMasterConfort?: number;
   priceTripMasterMoto?: number;
+  yango_eco?: number;
+  yango_confort?: number;
+  yango_confort_plus?: number;
+  yango_moto?: number;
+  hero_eco?: number;
+  hero_confort?: number;
+  hero_suv?: number;
+  hero_per_km?: number;
+  tripmaster_eco?: number;
+  tripmaster_confort?: number;
+  tripmaster_moto?: number;
+  cheaperProvider?: 'yango' | 'hero' | 'tripmaster' | 'equal';
+  deltaPriceYangoVsHero?: number;
 
-  source: 'yango_live' | 'yango_fallback' | 'yango_routestats';
+  heroQuote?: HeroQuote;
+  tripMasterQuote?: any;
+  source?: string;
   status?: 'success' | 'failed';
   errorMessage?: string;
   createdAt?: string;
-  // Raw API Inspection & Verification
   rawResponse?: any;
   requestPayload?: any;
   httpStatus?: number;
-  apiCallDetails?: {
-    endpoint: string;
-    sentAt: string;
-    latencyMs: number;
-    httpStatus?: number;
-    requestBody?: any;
-    rawResponseBody?: any;
-    error?: string;
-    source?: string;
-  };
+  apiCallDetails?: any;
 }
 
 export interface YangoSettings {

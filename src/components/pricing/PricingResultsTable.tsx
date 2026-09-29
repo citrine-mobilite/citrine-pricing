@@ -70,26 +70,26 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
 
   const columns: Column<TripResult>[] = useMemo(() => [
     {
-      key: 'startNeighborhoodName',
+      key: 'origin',
       label: 'Départ',
       sortable: true,
       render: (t) => (
         <span className="font-medium text-slate-900 block truncate max-w-[130px]">
-          {cleanNeighborhoodName(t.startNeighborhoodName)}
+          {cleanNeighborhoodName(t.origin || t.startNeighborhoodName)}
         </span>
       ),
-      exportValue: (t) => cleanNeighborhoodName(t.startNeighborhoodName)
+      exportValue: (t) => cleanNeighborhoodName(t.origin || t.startNeighborhoodName)
     },
     {
-      key: 'endNeighborhoodName',
+      key: 'destination',
       label: 'Destination',
       sortable: true,
       render: (t) => (
         <span className="font-medium text-slate-900 block truncate max-w-[130px]">
-          {cleanNeighborhoodName(t.endNeighborhoodName)}
+          {cleanNeighborhoodName(t.destination || t.endNeighborhoodName)}
         </span>
       ),
-      exportValue: (t) => cleanNeighborhoodName(t.endNeighborhoodName)
+      exportValue: (t) => cleanNeighborhoodName(t.destination || t.endNeighborhoodName)
     },
     {
       key: 'distanceKm',
@@ -255,8 +255,8 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                 const hEco = getHeroPrice(t, 'eco');
                 const tmEco = getTripMasterPrice(t, 'eco');
 
-                const orig = cleanNeighborhoodName(t.startNeighborhoodName);
-                const dest = cleanNeighborhoodName(t.endNeighborhoodName);
+                const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+                const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
                 const isHeroCheaper = hEco && yEco ? hEco < yEco : false;
                 const isYangoCheaper = hEco && yEco ? yEco < hEco : false;
 

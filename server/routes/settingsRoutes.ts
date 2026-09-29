@@ -103,6 +103,8 @@ router.post('/api/routestats', async (req: Request, res: Response) => {
     id: randomUUID(),
     campaignId: 'quick_test',
     cityId: 'quick_test_city',
+    origin: startName || 'Départ',
+    destination: endName || 'Arrivée',
     startNeighborhoodId: 'start',
     startNeighborhoodName: startName || 'Départ',
     endNeighborhoodId: 'end',
@@ -116,6 +118,16 @@ router.post('/api/routestats', async (req: Request, res: Response) => {
     priceFormatted: (yEco || hEco || tmEco || 0) > 0 ? `${(yEco || hEco || tmEco || 0).toLocaleString('fr-FR')} ${curr}` : 'Non disponible',
     currency: curr,
     pricePerKm: mainDistKm > 0 ? Math.round((yEco || hEco || tmEco || 0) / mainDistKm) : 0,
+    prices: {
+      yango: { eco: yEco > 0 ? yEco : null, confort: yConf || null, confortPlus: yConfPlus || null, moto: yMoto || null },
+      heroCab: { eco: hEco > 0 ? hEco : null, confort: hConf || null, suv: hSuv || null, perKm: null },
+      tripMaster: { eco: tmEco > 0 ? tmEco : null, confort: tmConf || null, moto: tmMoto || null }
+    },
+    cheapest: {
+      eco: cheaperProvider,
+      confort: null,
+      overall: cheaperProvider
+    },
     priceEconom: yEco > 0 ? yEco : undefined,
     priceConfort: yConf && yConf > 0 ? yConf : undefined,
     priceConfortPlus: yConfPlus && yConfPlus > 0 ? yConfPlus : undefined,

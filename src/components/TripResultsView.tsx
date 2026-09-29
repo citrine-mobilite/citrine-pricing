@@ -67,23 +67,23 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
   const neighborhoodsList = useMemo(() => {
     const set = new Set<string>();
     trips.forEach((t) => {
-      set.add(cleanNeighborhoodName(t.startNeighborhoodName));
-      set.add(cleanNeighborhoodName(t.endNeighborhoodName));
+      set.add(cleanNeighborhoodName(t.origin || t.startNeighborhoodName));
+      set.add(cleanNeighborhoodName(t.destination || t.endNeighborhoodName));
     });
     return Array.from(set).sort();
   }, [trips]);
 
   const stats = useMemo(() => {
     if (trips.length === 0) return { min: 0, max: 0, avg: 0, avgKm: 0, maxTrip: null, minTrip: null };
-    const prices = trips.map((t) => t.price || getYangoPrice(t, 'econom') || 0).filter(p => p > 0);
+    const prices = trips.map((t) => t.price || getYangoPrice(t, 'econom') || getHeroPrice(t, 'eco') || 0).filter(p => p > 0);
     const min = prices.length ? Math.min(...prices) : 0;
     const max = prices.length ? Math.max(...prices) : 0;
     const avg = prices.length ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
     const avgKm = Number(
       (trips.reduce((a, b) => a + (b.distanceKm || 0), 0) / (trips.length || 1)).toFixed(1)
     );
-    const maxTrip = trips.find((t) => (t.price || 0) === max);
-    const minTrip = trips.find((t) => (t.price || 0) === min);
+    const maxTrip = trips.find((t) => (t.price || getYangoPrice(t, 'econom') || 0) === max);
+    const minTrip = trips.find((t) => (t.price || getYangoPrice(t, 'econom') || 0) === min);
 
     return { min, max, avg, avgKm, maxTrip, minTrip };
   }, [trips]);
@@ -94,8 +94,8 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       map[o] = {};
     });
     trips.forEach((t) => {
-      const start = cleanNeighborhoodName(t.startNeighborhoodName);
-      const end = cleanNeighborhoodName(t.endNeighborhoodName);
+      const start = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const end = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
       if (map[start]) {
         map[start][end] = t;
       }
@@ -110,18 +110,18 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
 
   const columns: Column<TripResult>[] = useMemo(() => [
     {
-      key: 'startNeighborhoodName',
+      key: 'origin',
       label: 'Départ',
       sortable: true,
-      render: (t) => <span className="font-semibold text-slate-900">{cleanNeighborhoodName(t.startNeighborhoodName)}</span>,
-      exportValue: (t) => cleanNeighborhoodName(t.startNeighborhoodName)
+      render: (t) => <span className="font-semibold text-slate-900">{cleanNeighborhoodName(t.origin || t.startNeighborhoodName)}</span>,
+      exportValue: (t) => cleanNeighborhoodName(t.origin || t.startNeighborhoodName)
     },
     {
-      key: 'endNeighborhoodName',
+      key: 'destination',
       label: 'Destination',
       sortable: true,
-      render: (t) => <span className="font-semibold text-slate-900">{cleanNeighborhoodName(t.endNeighborhoodName)}</span>,
-      exportValue: (t) => cleanNeighborhoodName(t.endNeighborhoodName)
+      render: (t) => <span className="font-semibold text-slate-900">{cleanNeighborhoodName(t.destination || t.endNeighborhoodName)}</span>,
+      exportValue: (t) => cleanNeighborhoodName(t.destination || t.endNeighborhoodName)
     },
     {
       key: 'distanceKm',
