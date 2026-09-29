@@ -12,7 +12,7 @@ export const LauncherTariffClassSelector: React.FC<LauncherTariffClassSelectorPr
 }) => {
   const classes = [
     { id: 'econom', name: 'Éco / Standard', desc: 'Tarif standard Yango' },
-    { id: 'comfort', name: 'Confort / Berline', desc: 'Véhicules climatisés' }
+    { id: 'comfort', name: 'Confort', desc: 'Véhicules climatisés' }
   ];
 
   return (

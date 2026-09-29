@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download } from 'lucide-react';
+import { Lightbulb, FileText } from 'lucide-react';
 
 interface PricingResultsFilterBarProps {
   neighborhoodNames: string[];
@@ -9,6 +9,8 @@ interface PricingResultsFilterBarProps {
   onEndFilterChange: (val: string) => void;
   activeCampaignId?: string;
   totalTripsCount: number;
+  onOpenRecommendations?: () => void;
+  onOpenExecutiveReport?: () => void;
 }
 
 export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = ({
@@ -17,15 +19,9 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
   onStartFilterChange,
   endFilter,
   onEndFilterChange,
-  activeCampaignId,
-  totalTripsCount
+  onOpenRecommendations,
+  onOpenExecutiveReport
 }) => {
-  const handleDownloadFullCsv = () => {
-    if (!activeCampaignId) return;
-    const exportUrl = `/api/campaigns/${activeCampaignId}/export`;
-    window.location.href = exportUrl;
-  };
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-2.5 pb-1">
       {/* Filters : Departure & Destination dropdowns */}
@@ -69,17 +65,30 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
         )}
       </div>
 
-      {/* Direct CSV Download from Backend */}
-      {activeCampaignId && (
-        <button
-          onClick={handleDownloadFullCsv}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1F4F4A] bg-[#1F4F4A]/10 hover:bg-[#1F4F4A]/20 border border-[#1F4F4A]/30 rounded-lg transition cursor-pointer"
-          title="Télécharger l'intégralité des données directement depuis le serveur au format CSV"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>Télécharger CSV Complet ({totalTripsCount.toLocaleString('fr-FR')} trajets)</span>
-        </button>
-      )}
+      {/* Strategic Actions: Recommandations Hero & Fiche Synthèse PDF */}
+      <div className="flex items-center gap-2">
+        {onOpenRecommendations && (
+          <button
+            onClick={onOpenRecommendations}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition cursor-pointer active:scale-95 shadow-2xs"
+            title="Optimisation et recommandations tarifaires pour Hero Cab"
+          >
+            <Lightbulb className="w-3.5 h-3.5 text-amber-600" />
+            <span>Recommandations Hero</span>
+          </button>
+        )}
+
+        {onOpenExecutiveReport && (
+          <button
+            onClick={onOpenExecutiveReport}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-800 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition cursor-pointer active:scale-95 shadow-2xs"
+            title="Générer la Fiche Synthèse Exécutive (Format A4 / 1 page)"
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-500" />
+            <span>Fiche Synthèse PDF</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 };

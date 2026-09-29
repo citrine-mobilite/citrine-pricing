@@ -13,6 +13,8 @@ import { PricingLiveTracker } from './pricing/PricingLiveTracker';
 import { PricingMetricsCards } from './pricing/PricingMetricsCards';
 import { PricingResultsFilterBar } from './pricing/PricingResultsFilterBar';
 import { PricingResultsTable } from './pricing/PricingResultsTable';
+import { PricingRecommendationModal } from './pricing/PricingRecommendationModal';
+import { ExecutiveReportModal } from './ExecutiveReportModal';
 
 interface PricingUnifiedViewProps {
   cities: City[];
@@ -39,6 +41,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 }) => {
   const { user } = useAuth();
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isRecommendationsOpen, setIsRecommendationsOpen] = useState(false);
+  const [isExecutiveReportOpen, setIsExecutiveReportOpen] = useState(false);
 
   const {
     cityCampaigns,
@@ -249,9 +253,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           }
         }
 
-        // Finalisation globale de la campagne
-        await api.finalizeCampaign(campaignId);
-        if (onRefresh) await onRefresh();
+        // Finalisation globale de la campagne (uniquement si non annulée)
+        if (!cancelRequestedRef.current) {
+          await api.finalizeCampaign(campaignId);
+          if (onRefresh) await onRefresh();
+        }
       }
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: err?.message || 'Erreur de démarrage' });
@@ -262,15 +268,18 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
   const handleCancelCampaign = async () => {
     if (!activeCampaignId) return;
+    // 1. Coupe immédiatement la boucle locale de lots en 0ms
     cancelRequestedRef.current = true;
     setIsCancelling(true);
+
+    // 2. Notifie le serveur d'annuler en mémoire (ne dépend plus de Firestore)
     try {
       await api.cancelCampaign(activeCampaignId);
-      if (onRefresh) await onRefresh();
     } catch (err: any) {
-      console.error(err);
+      console.warn('[Cancel] Notification serveur:', err?.message);
     } finally {
       setIsCancelling(false);
+      if (onRefresh) onRefresh();
     }
   };
 
@@ -321,7 +330,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         campaigns={cityCampaigns}
         activeCampaignId={activeCampaignId}
         onCampaignChange={handleCampaignChange}
-        onDeleteCampaign={handleDeleteCampaign}
         onRefresh={onRefresh}
         showSingleTester={showSingleTester}
         onToggleSingleTester={() => setShowSingleTester(!showSingleTester)}
@@ -364,6 +372,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         onEndFilterChange={setEndFilter}
         activeCampaignId={activeCampaignId}
         totalTripsCount={trips.length}
+        onOpenRecommendations={() => setIsRecommendationsOpen(true)}
+        onOpenExecutiveReport={() => setIsExecutiveReportOpen(true)}
       />
 
       <PricingResultsTable
@@ -376,6 +386,24 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
       {inspectedTrip && (
         <YangoResponseInspectorModal trip={inspectedTrip} onClose={() => setInspectedTrip(null)} />
+      )}
+
+      {/* Modal Recommandations Hero Cab */}
+      <PricingRecommendationModal
+        isOpen={isRecommendationsOpen}
+        onClose={() => setIsRecommendationsOpen(false)}
+        trips={trips}
+        cityName={currentCity.name}
+      />
+
+      {/* Modal Fiche Synthèse Exécutive PDF 1 page */}
+      {activeCampaign && (
+        <ExecutiveReportModal
+          isOpen={isExecutiveReportOpen}
+          onClose={() => setIsExecutiveReportOpen(false)}
+          campaign={activeCampaign}
+          trips={trips}
+        />
       )}
     </div>
   );

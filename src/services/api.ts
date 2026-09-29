@@ -1,4 +1,5 @@
 import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings } from '../types';
+import { getCachedCampaignTrips, setCachedCampaignTrips, invalidateCampaignTripsCache } from './dbCache';
 
 const BASE_URL = '/api';
 
@@ -293,6 +294,7 @@ export const api = {
   },
 
   async deleteCampaign(id: string): Promise<void> {
+    await invalidateCampaignTripsCache(id);
     const res = await fetch(`${BASE_URL}/campaigns/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la campagne.');
   },
@@ -302,7 +304,7 @@ export const api = {
     if (!res.ok) throw new Error('Erreur lors de la suppression de toutes les campagnes.');
   },
 
-  // Trip Results
+  // Trip Results avec Cache Local PWA IndexedDB (0 lecture Firestore)
   async getCampaignResults(
     campaignId: string,
     filters?: {
@@ -315,6 +317,23 @@ export const api = {
       all?: boolean;
     }
   ): Promise<TripResult[]> {
+    // Si aucun filtre spécifique, tenter d'abord de servir depuis le cache local IndexedDB
+    const hasCustomFilters = Boolean(
+      filters?.startNeighborhood ||
+      filters?.endNeighborhood ||
+      filters?.minPrice ||
+      filters?.maxPrice ||
+      filters?.search ||
+      filters?.limit
+    );
+
+    if (!hasCustomFilters) {
+      const cached = await getCachedCampaignTrips(campaignId);
+      if (cached && cached.length > 0) {
+        return cached as TripResult[];
+      }
+    }
+
     try {
       const params = new URLSearchParams();
       params.append('all', 'true');
@@ -329,7 +348,14 @@ export const api = {
       const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/results${qs ? `?${qs}` : ''}`);
       if (res.status === 404) return [];
       if (!res.ok) throw new Error('Erreur lors de la récupération des trajets.');
-      return await res.json();
+      const data = await res.json();
+
+      // Sauvegarde dans IndexedDB si données reçues et sans filtres restrictifs
+      if (!hasCustomFilters && Array.isArray(data) && data.length > 0) {
+        setCachedCampaignTrips(campaignId, data).catch(() => {});
+      }
+
+      return data;
     } catch {
       return [];
     }

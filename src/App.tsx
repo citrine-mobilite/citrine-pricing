@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
 import { PricingUnifiedView } from './components/PricingUnifiedView';
 import { CampaignsView } from './components/CampaignsView';
+import { TemporalComparisonView } from './components/TemporalComparisonView';
 import { CitiesView } from './components/CitiesView';
 import { NeighborhoodsView } from './components/NeighborhoodsView';
 import { HistoryView } from './components/HistoryView';
@@ -13,6 +14,8 @@ import { SettingsView } from './components/SettingsView';
 import { QuotaNoticeBanner } from './components/QuotaNoticeBanner';
 import { LoginPage } from './components/LoginPage';
 import { HeroLogo } from './components/HeroLogo';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { api } from './services/api';
 import { City, Neighborhood, PricingCampaign, User } from './types';
 import { RotateCw } from 'lucide-react';
@@ -94,7 +97,7 @@ function AppContent() {
     }
   }, [isAuthenticated, user, fetchData]);
 
-  // Live polling for running campaigns so UI never hangs or spins indefinitely
+  // Soft background sync for campaigns when one is running (every 10s max, without hammering Vercel)
   useEffect(() => {
     if (!isAuthenticated) return;
     const activeCamps = campaigns.filter((c) => c.status === 'in_progress');
@@ -102,15 +105,12 @@ function AppContent() {
 
     const interval = setInterval(async () => {
       try {
-        for (const c of activeCamps) {
-          await api.stepCampaign(c.id);
-        }
         const updatedCampaigns = await api.getCampaigns();
         setCampaigns(updatedCampaigns);
       } catch (err) {
-        console.error('Error polling active campaigns:', err);
+        console.error('Error refreshing campaign list:', err);
       }
-    }, 1000);
+    }, 10000); // 10s interval instead of 1s to save 90% Vercel quota
 
     return () => clearInterval(interval);
   }, [isAuthenticated, campaigns]);
@@ -168,7 +168,7 @@ function AppContent() {
         <QuotaNoticeBanner />
 
         {/* Content Workspace */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
           <div className="max-w-7xl mx-auto">
             
             {isLoading ? (
@@ -217,6 +217,13 @@ function AppContent() {
                     onSelectCampaign={handleSelectCampaign}
                     onNavigate={setActiveTab}
                     onRefresh={fetchData}
+                  />
+                )}
+
+                {activeTab === 'temporal' && (
+                  <TemporalComparisonView
+                    campaigns={campaigns}
+                    onSelectCampaign={handleSelectCampaign}
                   />
                 )}
 
@@ -274,6 +281,18 @@ function AppContent() {
 
           </div>
         </main>
+
+        {/* Mobile Bottom Navigation Bar (PWA friendly) */}
+        <MobileBottomNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          activeCampaignCount={activeCampaigns.length}
+          onOpenMenu={() => setIsMobileMenuOpen(true)}
+          isPricingRunning={activeCampaigns.length > 0}
+        />
+
+        {/* Offline indicator */}
+        <OfflineIndicator />
 
       </div>
 

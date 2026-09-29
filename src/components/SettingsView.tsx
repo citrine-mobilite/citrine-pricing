@@ -59,7 +59,7 @@ export const SettingsView: React.FC = () => {
     mode: 'live',
     classes: [
       { id: 'econom', name: 'Éco / Standard', label: 'Tarif standard Yango Cameroun' },
-      { id: 'comfort', name: 'Confort / Berline', label: 'Véhicules climatisés récents' }
+      { id: 'comfort', name: 'Confort', label: 'Véhicules climatisés récents' }
     ]
   });
 

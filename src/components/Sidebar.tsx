@@ -1,5 +1,6 @@
 import React from 'react';
 import { HeroLogo } from './HeroLogo';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   LayoutDashboard,
   Zap,
@@ -8,7 +9,8 @@ import {
   Compass,
   History,
   Settings,
-  Users
+  Users,
+  Clock
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -30,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'pricing', label: 'Pricing', icon: Zap },
     { id: 'campaigns', label: 'Campagnes', icon: Activity, badge: activeCampaignCount > 0 ? activeCampaignCount : undefined },
+    { id: 'temporal', label: 'Évolution Prix', icon: Clock },
     { id: 'cities', label: 'Villes', icon: Building2 },
     { id: 'neighborhoods', label: 'Quartiers', icon: Compass },
     { id: 'history', label: 'Historique', icon: History },
@@ -86,6 +89,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
+      </div>
+
+      {/* Sidebar Footer with PWA Install Prompt */}
+      <div className="p-3 border-t border-[#3D8B85]/10 bg-slate-50/50">
+        <PWAInstallButton variant="full" className="w-full justify-center" />
       </div>
     </div>
   );

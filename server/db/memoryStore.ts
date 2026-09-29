@@ -115,6 +115,31 @@ export async function recordHistory(record: {
   await safeFirestoreWrite('recordHistory', () => setDoc(doc(db!, 'history', item.id), cleanFirestoreDoc(item)));
 }
 
+export async function deleteHistoryForCampaign(campaignId: string) {
+  historyRecords = historyRecords.filter(h =>
+    h.metadata?.campaignId !== campaignId &&
+    !h.description?.includes(campaignId) &&
+    !h.title?.includes(campaignId)
+  );
+
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'history'));
+      const toDelete = snap.docs.filter(d => {
+        const data = d.data();
+        return data.metadata?.campaignId === campaignId ||
+               data.description?.includes(campaignId) ||
+               data.title?.includes(campaignId);
+      });
+      for (const d of toDelete) {
+        await safeFirestoreWrite('deleteHistoryItem', () => deleteDoc(doc(db!, 'history', d.id)));
+      }
+    } catch (e) {
+      console.error('Error deleting related history for campaign:', e);
+    }
+  }
+}
+
 /**
  * Synchronisation bidirectionnelle initiale avec Firestore
  */

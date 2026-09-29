@@ -55,24 +55,24 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {isRunning ? (
             <button
               onClick={onCancelCampaign}
               disabled={isCancelling}
-              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition disabled:opacity-50 cursor-pointer min-h-[44px] sm:min-h-0 w-full sm:w-auto active:scale-95 shadow-2xs"
             >
-              <StopCircle className="w-3.5 h-3.5 text-rose-600" />
-              <span>{isCancelling ? 'Arrêt en cours...' : 'Arrêter immédiatement'}</span>
+              <StopCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{isCancelling ? 'Arrêt immédiat en cours...' : 'Arrêter immédiatement'}</span>
             </button>
           ) : (
             onRestartCampaign && (
               <button
                 onClick={onRestartCampaign}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-sm"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-sm min-h-[44px] sm:min-h-0 w-full sm:w-auto active:scale-95"
                 title="Relancer cette campagne de tarification"
               >
-                <RotateCw className="w-3.5 h-3.5 text-emerald-700" />
+                <RotateCw className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                 <span>Relancer la campagne</span>
               </button>
             )

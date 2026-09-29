@@ -1,0 +1,854 @@
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { PricingCampaign } from '../types';
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Calendar,
+  LineChart as LineChartIcon
+} from 'lucide-react';
+import Highcharts from 'highcharts';
+import exportingInit from 'highcharts/modules/exporting';
+import exportDataInit from 'highcharts/modules/export-data';
+import accessibilityInit from 'highcharts/modules/accessibility';
+
+// Initialize Highcharts modules once
+if (typeof window !== 'undefined' && typeof Highcharts === 'object') {
+  try {
+    (exportingInit as any)(Highcharts);
+    (exportDataInit as any)(Highcharts);
+    (accessibilityInit as any)(Highcharts);
+  } catch {
+    // Prevent duplicate module initialization in HMR
+  }
+}
+
+interface TemporalComparisonViewProps {
+  campaigns: PricingCampaign[];
+  onSelectCampaign?: (campaignId: string) => void;
+}
+
+type ComparisonMode =
+  | 'campaign_pair'
+  | 'today'
+  | 'yesterday_today'
+  | 'week'
+  | 'month'
+  | 'three_months'
+  | 'six_months'
+  | 'current_year'
+  | 'custom_date';
+
+type VehicleClassKey = 'eco' | 'confort' | 'suv' | 'moto';
+
+interface VehicleClassConfig {
+  key: VehicleClassKey;
+  label: string;
+}
+
+const VEHICLE_CLASSES: VehicleClassConfig[] = [
+  { key: 'eco', label: 'Standard / Éco' },
+  { key: 'confort', label: 'Confort' },
+  { key: 'suv', label: 'SUV (vs Confort+)' },
+  { key: 'moto', label: 'Moto' }
+];
+
+export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
+  campaigns
+}) => {
+  const [selectedClass, setSelectedClass] = useState<VehicleClassKey>('eco');
+  const [mode, setMode] = useState<ComparisonMode>('campaign_pair');
+
+  // Format default custom date to today YYYY-MM-DD
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  }, []);
+  const [customDate, setCustomDate] = useState<string>(todayStr);
+
+  // Sort campaigns chronologically descending (newest first)
+  const sorted = useMemo(() => {
+    return [...campaigns].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  }, [campaigns]);
+
+  // Initial selection for pairwise mode: most recent (B) vs previous (A)
+  const [campaignAId, setCampaignAId] = useState<string>(sorted[1]?.id || sorted[0]?.id || '');
+  const [campaignBId, setCampaignBId] = useState<string>(sorted[0]?.id || '');
+
+  // Helper to extract class price for a campaign
+  const getClassPrice = (c: PricingCampaign, op: 'yango' | 'hero' | 'tripmaster', cls: VehicleClassKey): number => {
+    if (!c) return 0;
+    const basePrice = c.avgPrice || 0;
+    const heroBase = c.heroStats?.avgPrice || 0;
+    const tmBase = c.tripMasterStats?.avgPrice || 0;
+
+    if (cls === 'eco') {
+      if (op === 'yango') return c.classStats?.econom?.avgPrice || basePrice;
+      if (op === 'hero') return heroBase;
+      return tmBase;
+    }
+    if (cls === 'confort') {
+      if (op === 'yango') return c.classStats?.business?.avgPrice || (basePrice ? Math.round(basePrice * 1.35) : 0);
+      if (op === 'hero') return c.classesStats?.confort?.avgPrice || (heroBase ? Math.round(heroBase * 1.35) : 0);
+      return tmBase ? Math.round(tmBase * 1.35) : 0;
+    }
+    if (cls === 'suv') {
+      if (op === 'yango') return c.classStats?.comfortplus?.avgPrice || (basePrice ? Math.round(basePrice * 1.75) : 0);
+      if (op === 'hero') return c.classesStats?.suv?.avgPrice || (heroBase ? Math.round(heroBase * 1.75) : 0);
+      return tmBase ? Math.round(tmBase * 1.75) : 0;
+    }
+    if (cls === 'moto') {
+      if (op === 'yango') return c.classStats?.moto?.avgPrice || (basePrice ? Math.round(basePrice * 0.45) : 0);
+      if (op === 'hero') return c.classesStats?.moto?.avgPrice || (heroBase ? Math.round(heroBase * 0.45) : 0);
+      return tmBase ? Math.round(tmBase * 0.45) : 0;
+    }
+    return 0;
+  };
+
+  // Helper to aggregate list of campaigns for the chosen vehicle class
+  const aggregateClassPrices = (list: PricingCampaign[], cls: VehicleClassKey) => {
+    if (list.length === 0) return { yango: 0, hero: 0, tripmaster: 0, count: 0 };
+    let sumY = 0, countY = 0;
+    let sumH = 0, countH = 0;
+    let sumT = 0, countT = 0;
+
+    for (const c of list) {
+      const y = getClassPrice(c, 'yango', cls);
+      const h = getClassPrice(c, 'hero', cls);
+      const t = getClassPrice(c, 'tripmaster', cls);
+
+      if (y > 0) { sumY += y; countY++; }
+      if (h > 0) { sumH += h; countH++; }
+      if (t > 0) { sumT += t; countT++; }
+    }
+
+    return {
+      yango: countY > 0 ? Math.round(sumY / countY) : 0,
+      hero: countH > 0 ? Math.round(sumH / countH) : 0,
+      tripmaster: countT > 0 ? Math.round(sumT / countT) : 0,
+      count: list.length
+    };
+  };
+
+  // Group campaigns into time windows (pure client-side execution)
+  const timeBuckets = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfYesterday = startOfToday - 24 * 3600 * 1000;
+    const startOf7DaysAgo = now.getTime() - 7 * 24 * 3600 * 1000;
+    const startOf14DaysAgo = now.getTime() - 14 * 24 * 3600 * 1000;
+    const startOf30DaysAgo = now.getTime() - 30 * 24 * 3600 * 1000;
+    const startOf60DaysAgo = now.getTime() - 60 * 24 * 3600 * 1000;
+    const startOf90DaysAgo = now.getTime() - 90 * 24 * 3600 * 1000;
+    const startOf180DaysAgo = now.getTime() - 180 * 24 * 3600 * 1000;
+    const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+    const startOfPrevYear = new Date(now.getFullYear() - 1, 0, 1).getTime();
+
+    // Specific Custom Date window
+    const customDateStart = customDate ? new Date(`${customDate}T00:00:00`).getTime() : 0;
+    const customDateEnd = customDateStart + 24 * 3600 * 1000;
+    const customDatePrevStart = customDateStart - 24 * 3600 * 1000;
+
+    return {
+      today: sorted.filter(c => new Date(c.startedAt).getTime() >= startOfToday),
+      yesterday: sorted.filter(c => {
+        const t = new Date(c.startedAt).getTime();
+        return t >= startOfYesterday && t < startOfToday;
+      }),
+      thisWeek: sorted.filter(c => new Date(c.startedAt).getTime() >= startOf7DaysAgo),
+      lastWeek: sorted.filter(c => {
+        const t = new Date(c.startedAt).getTime();
+        return t >= startOf14DaysAgo && t < startOf7DaysAgo;
+      }),
+      thisMonth: sorted.filter(c => new Date(c.startedAt).getTime() >= startOf30DaysAgo),
+      lastMonth: sorted.filter(c => {
+        const t = new Date(c.startedAt).getTime();
+        return t >= startOf60DaysAgo && t < startOf30DaysAgo;
+      }),
+      threeMonths: sorted.filter(c => new Date(c.startedAt).getTime() >= startOf90DaysAgo),
+      sixMonths: sorted.filter(c => new Date(c.startedAt).getTime() >= startOf180DaysAgo),
+      currentYear: sorted.filter(c => new Date(c.startedAt).getTime() >= startOfYear),
+      previousYear: sorted.filter(c => {
+        const t = new Date(c.startedAt).getTime();
+        return t >= startOfPrevYear && t < startOfYear;
+      }),
+      customDateCampaigns: sorted.filter(c => {
+        const t = new Date(c.startedAt).getTime();
+        return t >= customDateStart && t < customDateEnd;
+      }),
+      customDatePrevCampaigns: sorted.filter(c => {
+        const t = new Date(c.startedAt).getTime();
+        return t >= customDatePrevStart && t < customDateStart;
+      })
+    };
+  }, [sorted, customDate]);
+
+  // Main computed comparison metrics
+  const comparison = useMemo(() => {
+    let labelA = '';
+    let labelB = '';
+    let statsA = { yango: 0, hero: 0, tripmaster: 0, count: 0 };
+    let statsB = { yango: 0, hero: 0, tripmaster: 0, count: 0 };
+    let relevantCampaigns: PricingCampaign[] = [];
+
+    if (mode === 'campaign_pair') {
+      const campA = sorted.find(c => c.id === campaignAId);
+      const campB = sorted.find(c => c.id === campaignBId);
+      if (!campA || !campB) return null;
+
+      labelA = `${campA.cityName} (${new Date(campA.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})`;
+      labelB = `${campB.cityName} (${new Date(campB.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})`;
+      statsA = aggregateClassPrices([campA], selectedClass);
+      statsB = aggregateClassPrices([campB], selectedClass);
+      relevantCampaigns = [campB, campA];
+    } else if (mode === 'today') {
+      labelA = 'Matin';
+      labelB = 'Plus récent';
+      if (timeBuckets.today.length >= 2) {
+        const oldest = timeBuckets.today[timeBuckets.today.length - 1];
+        const latest = timeBuckets.today[0];
+        labelA = new Date(oldest.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        labelB = new Date(latest.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        statsA = aggregateClassPrices([oldest], selectedClass);
+        statsB = aggregateClassPrices([latest], selectedClass);
+      } else {
+        statsA = aggregateClassPrices(timeBuckets.today, selectedClass);
+        statsB = aggregateClassPrices(timeBuckets.today, selectedClass);
+      }
+      relevantCampaigns = timeBuckets.today.length > 0 ? timeBuckets.today : sorted.slice(0, 5);
+    } else if (mode === 'yesterday_today') {
+      labelA = 'Hier';
+      labelB = "Aujourd'hui";
+      statsA = aggregateClassPrices(timeBuckets.yesterday, selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.today, selectedClass);
+      relevantCampaigns = [...timeBuckets.today, ...timeBuckets.yesterday];
+    } else if (mode === 'week') {
+      labelA = 'Semaine précédente';
+      labelB = 'Cette semaine (7j)';
+      statsA = aggregateClassPrices(timeBuckets.lastWeek, selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.thisWeek, selectedClass);
+      relevantCampaigns = timeBuckets.thisWeek;
+    } else if (mode === 'month') {
+      labelA = 'Mois précédent';
+      labelB = 'Ce mois (30j)';
+      statsA = aggregateClassPrices(timeBuckets.lastMonth, selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.thisMonth, selectedClass);
+      relevantCampaigns = timeBuckets.thisMonth;
+    } else if (mode === 'three_months') {
+      labelA = 'Trimestre précédent';
+      labelB = '3 Derniers Mois';
+      statsA = aggregateClassPrices(timeBuckets.sixMonths.slice(timeBuckets.threeMonths.length), selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.threeMonths, selectedClass);
+      relevantCampaigns = timeBuckets.threeMonths;
+    } else if (mode === 'six_months') {
+      labelA = 'Semestre précédent';
+      labelB = '6 Derniers Mois';
+      statsA = aggregateClassPrices(sorted.slice(timeBuckets.sixMonths.length), selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.sixMonths, selectedClass);
+      relevantCampaigns = timeBuckets.sixMonths;
+    } else if (mode === 'current_year') {
+      const year = new Date().getFullYear();
+      labelA = `Année ${year - 1}`;
+      labelB = `Année en cours (${year})`;
+      statsA = aggregateClassPrices(timeBuckets.previousYear, selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.currentYear, selectedClass);
+      relevantCampaigns = timeBuckets.currentYear;
+    } else if (mode === 'custom_date') {
+      const formattedDate = new Date(`${customDate}T12:00:00`).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      labelA = 'Jour précédent';
+      labelB = formattedDate;
+      statsA = aggregateClassPrices(timeBuckets.customDatePrevCampaigns, selectedClass);
+      statsB = aggregateClassPrices(timeBuckets.customDateCampaigns, selectedClass);
+      relevantCampaigns = timeBuckets.customDateCampaigns;
+    }
+
+    const calcDelta = (a: number, b: number) => {
+      const delta = b - a;
+      const pct = a > 0 ? Number(((delta / a) * 100).toFixed(1)) : 0;
+      return { a, b, delta, pct };
+    };
+
+    return {
+      labelA,
+      labelB,
+      yango: calcDelta(statsA.yango, statsB.yango),
+      hero: calcDelta(statsA.hero, statsB.hero),
+      tripmaster: calcDelta(statsA.tripmaster, statsB.tripmaster),
+      relevantCampaigns: relevantCampaigns.length > 0 ? relevantCampaigns : sorted.slice(0, 10)
+    };
+  }, [mode, sorted, campaignAId, campaignBId, selectedClass, timeBuckets, customDate]);
+
+  // Highcharts Options configuration
+  const highchartsOptions = useMemo<Highcharts.Options>(() => {
+    if (!comparison || comparison.relevantCampaigns.length === 0) {
+      return {
+        title: { text: undefined },
+        series: []
+      };
+    }
+
+    // Sort chronologically oldest -> newest for the X axis
+    const ordered = [...comparison.relevantCampaigns].sort(
+      (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+    );
+
+    const categories = ordered.map((c) => {
+      const dateObj = new Date(c.startedAt);
+      return mode === 'today'
+        ? dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        : dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    });
+
+    const heroData = ordered.map((c) => {
+      const p = getClassPrice(c, 'hero', selectedClass);
+      return p > 0 ? p : null;
+    });
+
+    const yangoData = ordered.map((c) => {
+      const p = getClassPrice(c, 'yango', selectedClass);
+      return p > 0 ? p : null;
+    });
+
+    const tripmasterData = ordered.map((c) => {
+      const p = getClassPrice(c, 'tripmaster', selectedClass);
+      return p > 0 ? p : null;
+    });
+
+    const currentClassLabel = VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label || '';
+
+    return {
+      chart: {
+        type: 'spline',
+        backgroundColor: '#FFFFFF',
+        style: {
+          fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+        },
+        zoomType: 'x',
+        panning: { enabled: true },
+        panKey: 'shift',
+        height: 320
+      },
+      title: {
+        text: undefined
+      },
+      credits: {
+        enabled: false
+      },
+      exporting: {
+        enabled: true,
+        fallbackToExportServer: false,
+        buttons: {
+          contextButton: {
+            menuItems: [
+              'viewFullscreen',
+              'printChart',
+              'separator',
+              'downloadPNG',
+              'downloadJPEG',
+              'downloadPDF',
+              'downloadSVG'
+            ]
+          }
+        },
+        chartOptions: {
+          title: {
+            text: `Évolution des Tarifs VTC — Classe ${currentClassLabel}`,
+            style: { fontSize: '14px', fontWeight: 'bold' }
+          }
+        }
+      },
+      xAxis: {
+        categories,
+        crosshair: {
+          width: 1,
+          color: '#CBD5E1',
+          dashStyle: 'ShortDash'
+        },
+        labels: {
+          style: {
+            color: '#64748B',
+            fontSize: '11px'
+          }
+        },
+        lineColor: '#E2E8F0',
+        tickColor: '#E2E8F0'
+      },
+      yAxis: {
+        title: {
+          text: 'Prix Moyen (FCFA)',
+          style: {
+            color: '#64748B',
+            fontSize: '11px'
+          }
+        },
+        labels: {
+          formatter: function () {
+            return `${Number(this.value).toLocaleString('fr-FR')} F`;
+          },
+          style: {
+            color: '#64748B',
+            fontSize: '11px'
+          }
+        },
+        gridLineColor: '#F1F5F9',
+        gridLineDashStyle: 'Dash'
+      },
+      tooltip: {
+        shared: true,
+        useHTML: true,
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        borderColor: '#334155',
+        borderRadius: 8,
+        shadow: true,
+        style: {
+          color: '#FFFFFF'
+        },
+        formatter: function () {
+          let s = `<div style="font-size: 11px; padding: 4px; min-width: 190px;">`;
+          s += `<div style="font-weight: 600; color: #E2E8F0; margin-bottom: 6px; border-bottom: 1px solid #334155; padding-bottom: 4px;">${this.x}</div>`;
+          let heroVal: number | null = null;
+          let yangoVal: number | null = null;
+          (this.points || []).forEach(point => {
+            const val = point.y != null ? `${Number(point.y).toLocaleString('fr-FR')} FCFA` : '—';
+            if (point.series.name === 'Hero Cab') heroVal = point.y as number;
+            if (point.series.name === 'Yango') yangoVal = point.y as number;
+            s += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 3px;">
+              <span style="color: ${point.color}; font-weight: 600;">● ${point.series.name}:</span>
+              <span style="font-family: monospace; font-weight: 700; color: #FFFFFF;">${val}</span>
+            </div>`;
+          });
+          if (heroVal !== null && yangoVal !== null && heroVal > 0 && yangoVal > 0) {
+            const diff = heroVal - yangoVal;
+            const pct = ((diff / yangoVal) * 100).toFixed(1);
+            const isHeroCheaper = diff < 0;
+            const diffColor = isHeroCheaper ? '#34D399' : (diff > 0 ? '#F87171' : '#94A3B8');
+            const diffLabel = isHeroCheaper
+              ? `Hero -${Math.abs(diff).toLocaleString('fr-FR')} F (${pct}%)`
+              : (diff > 0 ? `Hero +${diff.toLocaleString('fr-FR')} F (+${pct}%)` : 'Tarifs identiques');
+            s += `<div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed #334155; display: flex; align-items: center; justify-content: space-between; font-size: 10.5px;">
+              <span style="color: #94A3B8;">Écart Hero/Yango:</span>
+              <span style="color: ${diffColor}; font-weight: 700;">${diffLabel}</span>
+            </div>`;
+          }
+          s += `</div>`;
+          return s;
+        }
+      },
+      legend: {
+        align: 'right',
+        verticalAlign: 'top',
+        itemStyle: {
+          color: '#1E293B',
+          fontSize: '12px',
+          fontWeight: '600'
+        },
+        itemHoverStyle: {
+          color: '#0F172A'
+        }
+      },
+      plotOptions: {
+        spline: {
+          lineWidth: 2.5,
+          marker: {
+            radius: 3.5,
+            symbol: 'circle'
+          }
+        }
+      },
+      series: [
+        {
+          type: 'spline',
+          name: 'Hero Cab',
+          data: heroData,
+          color: '#1F4F4A',
+          lineWidth: 3,
+          marker: {
+            fillColor: '#1F4F4A',
+            lineWidth: 2,
+            lineColor: '#FFFFFF'
+          }
+        },
+        {
+          type: 'spline',
+          name: 'Yango',
+          data: yangoData,
+          color: '#F43F5E',
+          marker: {
+            fillColor: '#F43F5E',
+            lineWidth: 2,
+            lineColor: '#FFFFFF'
+          }
+        },
+        {
+          type: 'spline',
+          name: 'Trip Master',
+          data: tripmasterData,
+          color: '#2563EB',
+          marker: {
+            fillColor: '#2563EB',
+            lineWidth: 2,
+            lineColor: '#FFFFFF'
+          }
+        }
+      ]
+    };
+  }, [comparison, mode, selectedClass]);
+
+  // Ref and Lifecycle for direct Highcharts DOM attachment (100% stable, no wrapper errors)
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<Highcharts.Chart | null>(null);
+
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    if (chartInstanceRef.current) {
+      try {
+        chartInstanceRef.current.destroy();
+      } catch {
+        // Safe destroy
+      }
+      chartInstanceRef.current = null;
+    }
+
+    if (highchartsOptions.series && highchartsOptions.series.length > 0) {
+      try {
+        chartInstanceRef.current = Highcharts.chart(chartContainerRef.current, highchartsOptions);
+      } catch (err) {
+        console.error('Highcharts init error:', err);
+      }
+    }
+
+    return () => {
+      if (chartInstanceRef.current) {
+        try {
+          chartInstanceRef.current.destroy();
+        } catch {
+          // Safe destroy
+        }
+        chartInstanceRef.current = null;
+      }
+    };
+  }, [highchartsOptions]);
+
+  const renderDelta = (pct: number, delta: number) => {
+    if (pct > 0) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700">
+          <TrendingUp className="w-3.5 h-3.5 text-rose-600" />
+          <span>+{pct}% (+{delta.toLocaleString('fr-FR')} F)</span>
+        </span>
+      );
+    }
+    if (pct < 0) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+          <TrendingDown className="w-3.5 h-3.5 text-emerald-600" />
+          <span>{pct}% ({delta.toLocaleString('fr-FR')} F)</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+        <Minus className="w-3.5 h-3.5 text-slate-400" />
+        <span>0%</span>
+      </span>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      
+      {/* Header and Controls */}
+      <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs space-y-3">
+        
+        {/* Title & Vehicle Class Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <h1 className="text-base font-semibold text-slate-900 tracking-tight">
+            Évolution des Prix
+          </h1>
+
+          {/* Vehicle Class Segmented Control */}
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg overflow-x-auto text-xs">
+            {VEHICLE_CLASSES.map((vc) => {
+              const isSelected = selectedClass === vc.key;
+              return (
+                <button
+                  key={vc.key}
+                  onClick={() => setSelectedClass(vc.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs transition cursor-pointer shrink-0 ${
+                    isSelected
+                      ? 'bg-white text-slate-900 font-semibold shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {vc.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Extended Period Mode Selector */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar text-xs">
+          <button
+            onClick={() => setMode('campaign_pair')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'campaign_pair'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Relevé vs Relevé
+          </button>
+          <button
+            onClick={() => setMode('today')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'today'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Aujourd'hui
+          </button>
+          <button
+            onClick={() => setMode('yesterday_today')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'yesterday_today'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Hier vs Aujourd'hui
+          </button>
+          <button
+            onClick={() => setMode('week')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'week'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            7 Jours
+          </button>
+          <button
+            onClick={() => setMode('month')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'month'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            30 Jours
+          </button>
+          <button
+            onClick={() => setMode('three_months')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'three_months'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            3 Mois
+          </button>
+          <button
+            onClick={() => setMode('six_months')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'six_months'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            6 Mois
+          </button>
+          <button
+            onClick={() => setMode('current_year')}
+            className={`px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'current_year'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Année en cours
+          </button>
+          <button
+            onClick={() => setMode('custom_date')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md transition cursor-pointer shrink-0 ${
+              mode === 'custom_date'
+                ? 'bg-slate-900 text-white font-medium'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Calendar className="w-3 h-3" />
+            <span>Date précise</span>
+          </button>
+        </div>
+
+        {/* Date Selector for Custom Date Mode */}
+        {mode === 'custom_date' && (
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+            <label className="text-slate-500 font-medium">Choisir un jour :</label>
+            <input
+              type="date"
+              value={customDate}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:border-slate-400"
+            />
+          </div>
+        )}
+
+        {/* Pair Pickers (if pairwise mode) */}
+        {mode === 'campaign_pair' && sorted.length >= 2 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase">Période A (Référence)</label>
+              <select
+                value={campaignAId}
+                onChange={(e) => setCampaignAId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none mt-0.5 truncate"
+              >
+                {sorted.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.cityName} — {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase">Période B (Comparée)</label>
+              <select
+                value={campaignBId}
+                onChange={(e) => setCampaignBId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none mt-0.5 truncate"
+              >
+                {sorted.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.cityName} — {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* Summary Comparison Table (Top) */}
+      {comparison && (
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-50 border-b border-slate-100 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="py-2.5 px-4">Opérateur ({VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label})</th>
+                  <th className="py-2.5 px-3 text-right">{comparison.labelA}</th>
+                  <th className="py-2.5 px-3 text-right">{comparison.labelB}</th>
+                  <th className="py-2.5 px-4 text-right">Variation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-mono">
+                
+                {/* Yango Row */}
+                <tr className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 font-sans font-medium text-slate-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                    <span>Yango</span>
+                  </td>
+                  <td className="py-3 px-3 text-right text-slate-600">
+                    {comparison.yango.a > 0 ? `${comparison.yango.a.toLocaleString('fr-FR')} F` : '—'}
+                  </td>
+                  <td className="py-3 px-3 text-right font-semibold text-slate-900">
+                    {comparison.yango.b > 0 ? `${comparison.yango.b.toLocaleString('fr-FR')} F` : '—'}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    {renderDelta(comparison.yango.pct, comparison.yango.delta)}
+                  </td>
+                </tr>
+
+                {/* Hero Cab Row */}
+                <tr className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 font-sans font-medium text-slate-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#1F4F4A] shrink-0" />
+                    <span>Hero Cab</span>
+                  </td>
+                  <td className="py-3 px-3 text-right text-slate-600">
+                    {comparison.hero.a > 0 ? `${comparison.hero.a.toLocaleString('fr-FR')} F` : '—'}
+                  </td>
+                  <td className="py-3 px-3 text-right font-semibold text-[#1F4F4A]">
+                    {comparison.hero.b > 0 ? `${comparison.hero.b.toLocaleString('fr-FR')} F` : '—'}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    {renderDelta(comparison.hero.pct, comparison.hero.delta)}
+                  </td>
+                </tr>
+
+                {/* Trip Master Row */}
+                <tr className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 font-sans font-medium text-slate-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+                    <span>Trip Master</span>
+                  </td>
+                  <td className="py-3 px-3 text-right text-slate-600">
+                    {comparison.tripmaster.a > 0 ? `${comparison.tripmaster.a.toLocaleString('fr-FR')} F` : '—'}
+                  </td>
+                  <td className="py-3 px-3 text-right font-semibold text-slate-800">
+                    {comparison.tripmaster.b > 0 ? `${comparison.tripmaster.b.toLocaleString('fr-FR')} F` : '—'}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    {renderDelta(comparison.tripmaster.pct, comparison.tripmaster.delta)}
+                  </td>
+                </tr>
+
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* HIGHCHARTS CARD WITH 3 LINES AND BUILT-IN EXPORTING */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        
+        {/* Card Header & Controls */}
+        <div className="px-4 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70">
+          <div className="flex items-center gap-2">
+            <LineChartIcon className="w-4 h-4 text-slate-600" />
+            <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+              Courbe d'Évolution Temporelle — Highcharts ({VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label})
+            </h2>
+          </div>
+
+          <div className="text-[11px] text-slate-400 font-mono">
+            Export (PDF, PNG, SVG) & Zoom intégrés
+          </div>
+        </div>
+
+        {/* Highcharts Render Container */}
+        <div className="p-3 sm:p-5">
+          {comparison && comparison.relevantCampaigns.length === 0 ? (
+            <div className="py-16 text-center text-xs text-slate-400">
+              Aucun relevé disponible pour afficher la courbe sur cette période.
+            </div>
+          ) : (
+            <div ref={chartContainerRef} className="w-full min-h-[320px]" />
+          )}
+        </div>
+
+        {/* Footer info bar */}
+        <div className="px-4 py-2.5 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span>
+            {comparison?.relevantCampaigns.length || 0} relevés analysés pour la classe {VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label}
+          </span>
+          <span className="text-slate-400">
+            Cliquez sur le menu en haut à droite du graphique pour exporter (PNG, PDF, SVG) ou imprimer
+          </span>
+        </div>
+
+      </div>
+
+    </div>
+  );
+};

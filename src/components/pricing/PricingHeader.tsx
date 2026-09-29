@@ -1,6 +1,6 @@
 import React from 'react';
 import { City, PricingCampaign } from '../../types';
-import { Play, RotateCw, Trash2, Building2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Play, RotateCw, Building2, SlidersHorizontal, Sparkles } from 'lucide-react';
 
 interface PricingHeaderProps {
   cities: City[];
@@ -9,7 +9,6 @@ interface PricingHeaderProps {
   campaigns: PricingCampaign[];
   activeCampaignId: string;
   onCampaignChange: (campaignId: string) => void;
-  onDeleteCampaign: () => void;
   onRefresh?: () => void;
   showSingleTester: boolean;
   onToggleSingleTester: () => void;
@@ -26,7 +25,6 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
   campaigns,
   activeCampaignId,
   onCampaignChange,
-  onDeleteCampaign,
   onRefresh,
   showSingleTester,
   onToggleSingleTester,
@@ -49,9 +47,6 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <h1 className="text-base font-bold text-slate-900 tracking-tight">
               Tarification & Benchmark VTC
             </h1>
-            <span className="px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-full">
-              Live Hub
-            </span>
           </div>
           <div className="flex items-center gap-2 mt-1">
             <label htmlFor="city-select" className="text-xs text-slate-500 font-medium">Ville cible :</label>
@@ -72,80 +67,75 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
       </div>
 
       {/* Right : Action Controls (Campaign Picker, Single Test, Launch Buttons) */}
-      <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto justify-end">
         {/* Campaign Picker Dropdown */}
-        {campaigns.length > 0 && (
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-            <span className="text-[11px] text-slate-400 font-medium">Relevé :</span>
-            <select
-              value={activeCampaignId}
-              onChange={(e) => onCampaignChange(e.target.value)}
-              className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none max-w-[170px] truncate"
-            >
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.cityName} - {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ({c.completedPairs || 0} tr.)
-                </option>
-              ))}
-            </select>
-
-            {activeCampaignId && (
-              <button
-                onClick={onDeleteCampaign}
-                title="Supprimer définitivement cette campagne"
-                className="p-1 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          {campaigns.length > 0 && (
+            <div className="flex-1 sm:flex-none flex items-center justify-between gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 sm:py-1">
+              <span className="text-[11px] text-slate-400 font-medium shrink-0">Relevé :</span>
+              <select
+                value={activeCampaignId}
+                onChange={(e) => onCampaignChange(e.target.value)}
+                className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none w-full sm:max-w-[190px] truncate"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        )}
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.cityName} - {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ({c.completedPairs || 0} tr.)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-        {/* Refresh button */}
-        {onRefresh && (
+          {/* Refresh button */}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Rafraîchir les données"
+              className="p-2 sm:p-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition cursor-pointer shrink-0"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Buttons Row / Grid on Mobile */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+          {/* Single Test Toggle */}
           <button
-            onClick={onRefresh}
-            title="Rafraîchir les données"
-            className="p-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition cursor-pointer"
+            onClick={onToggleSingleTester}
+            className={`col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer min-h-[40px] sm:min-h-0 ${
+              showSingleTester
+                ? 'bg-slate-800 text-white border-slate-800'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
           >
-            <RotateCw className="w-4 h-4" />
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Test Trajet Unique</span>
           </button>
-        )}
 
-        {/* Single Test Toggle */}
-        <button
-          onClick={onToggleSingleTester}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer ${
-            showSingleTester
-              ? 'bg-slate-800 text-white border-slate-800'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>Test Trajet Unique</span>
-        </button>
+          {/* Test Sample (25 pairs) */}
+          <button
+            onClick={() => onLaunch(25)}
+            disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition disabled:opacity-50 cursor-pointer shadow-sm min-h-[40px] sm:min-h-0 active:scale-95"
+            title="Lancer un échantillon rapide de 25 trajets"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="truncate">{launchingTarget === '25' ? 'Démarrage...' : 'Test 25'}</span>
+          </button>
 
-        {/* Test Sample (25 pairs) */}
-        <button
-          onClick={() => onLaunch(25)}
-          disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition disabled:opacity-50 cursor-pointer shadow-sm"
-          title="Lancer un échantillon rapide de 25 trajets"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-          <span>{launchingTarget === '25' ? 'Démarrage...' : 'Test 25 trajets'}</span>
-        </button>
-
-        {/* Full Benchmark Launch */}
-        <button
-          onClick={() => onLaunch('all')}
-          disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
-          title={`Lancer la tarification de TOUS les ${totalCombinations.toLocaleString('fr-FR')} trajets`}
-        >
-          <Play className="w-3.5 h-3.5 fill-white" />
-          <span>{launchingTarget === 'all' ? 'Lancement...' : `Tarifer Tout (${totalCombinations.toLocaleString('fr-FR')})`}</span>
-        </button>
+          {/* Full Benchmark Launch */}
+          <button
+            onClick={() => onLaunch('all')}
+            disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer min-h-[40px] sm:min-h-0 active:scale-95"
+            title={`Lancer la tarification de TOUS les ${totalCombinations.toLocaleString('fr-FR')} trajets`}
+          >
+            <Play className="w-3.5 h-3.5 fill-white shrink-0" />
+            <span className="truncate">{launchingTarget === 'all' ? 'Lancement...' : `Tout (${totalCombinations})`}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

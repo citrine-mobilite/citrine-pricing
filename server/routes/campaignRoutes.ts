@@ -9,7 +9,8 @@ import {
   memoryCampaignTrips,
   memoryCampaignCanonicalTrips,
   activePricingSessions,
-  recordHistory
+  recordHistory,
+  deleteHistoryForCampaign
 } from '../db/memoryStore.js';
 import { PricingCampaign, CanonicalTrip } from '../types.js';
 import {
@@ -204,16 +205,16 @@ router.post('/api/campaigns/:id/step', async (req: Request, res: Response) => {
   return res.json({ success: true, campaign });
 });
 
-// 4. Interruption manuelle
-router.post('/api/campaigns/:id/cancel', async (req: Request, res: Response) => {
+// 4. Interruption manuelle d'urgence (100% découplée et indépendante de Firestore)
+router.post('/api/campaigns/:id/cancel', (req: Request, res: Response) => {
   const { id } = req.params;
   const session = activePricingSessions.get(id);
-  const chunkCancelled = cancelChunkCampaignSession(id);
 
   if (session) {
     session.cancelled = true;
-    session.abortController.abort();
+    try { session.abortController.abort(); } catch {}
     session.campaign.status = 'cancelled';
+    activePricingSessions.delete(id);
   }
 
   const camp = memoryCampaigns.find(c => c.id === id);
@@ -221,11 +222,10 @@ router.post('/api/campaigns/:id/cancel', async (req: Request, res: Response) => 
     camp.status = 'cancelled';
   }
 
-  if (db) {
-    await safeFirestoreWrite('cancelCamp', () => setDoc(doc(db!, 'campaigns', id), { status: 'cancelled' }, { merge: true }));
-  }
+  cancelChunkCampaignSession(id);
 
-  return res.json({ success: true, message: 'Arrêt de la campagne effectué.' });
+  // Réponse immédiate en 0ms au client sans attendre Firestore !
+  return res.json({ success: true, message: 'Arrêt immédiat de la campagne effectué en mémoire.' });
 });
 
 // 5. Suppression globale
@@ -267,12 +267,13 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
 router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const idx = memoryCampaigns.findIndex(c => c.id === id);
-  const deletedCamp = idx >= 0 ? memoryCampaigns.splice(idx, 1)[0] : null;
+  if (idx >= 0) memoryCampaigns.splice(idx, 1);
   delete memoryCampaignTrips[id];
   delete memoryCampaignCanonicalTrips[id];
 
   if (db) {
     await safeFirestoreWrite('deleteCamp', () => deleteDoc(doc(db!, 'campaigns', id)));
+    await safeFirestoreWrite('deleteCanonical', () => deleteDoc(doc(db!, 'canonical_trips', id)));
     await safeFirestoreWrite('deleteRes', () => deleteDoc(doc(db!, 'campaign_results', id)));
     // Supprimer également les éventuelles partitions additionnelles
     for (let p = 2; p <= 10; p++) {
@@ -280,28 +281,26 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
     }
   }
 
-  await recordHistory({
-    action: 'delete_campaign',
-    eventType: 'campaign',
-    title: `Campagne supprimée : ${deletedCamp?.cityName || id}`,
-    description: `Suppression définitive de la campagne ${id} et de ses données associées.`
-  });
+  // Supprimer tous les historiques liés à cette campagne
+  await deleteHistoryForCampaign(id);
 
-  return res.json({ success: true, message: 'Campagne supprimée avec succès.' });
+  return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
 });
 
-// 7. Résultats des trajets (Exploite notre JSON canonique pour garantir < 1 Mo)
+// 7. Résultats des trajets (Exploite notre cache RAM et JSON canonique pour garantir 0 lecture Firestore)
 router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   // 1. Session active en cours
   const session = activePricingSessions.get(id);
   if (session) {
+    res.setHeader('X-Cache', 'HIT-SESSION');
     return res.json(session.trips);
   }
 
-  // 2. Cache mémoire rapide
+  // 2. Cache mémoire RAM serveur instantané (2ms, 0 lecture Firestore)
   if (memoryCampaignTrips[id] && memoryCampaignTrips[id].length > 0) {
+    res.setHeader('X-Cache', 'HIT-RAM');
     return res.json(memoryCampaignTrips[id]);
   }
 

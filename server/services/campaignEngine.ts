@@ -1,7 +1,14 @@
 import { randomUUID } from 'crypto';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { City, Neighborhood, PricingCampaign, TripResult, CanonicalTrip } from '../types.js';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, saveCanonicalCampaignResults, initCanonicalCampaignResults } from '../db/firestore.js';
+import {
+  db,
+  cleanFirestoreDoc,
+  safeFirestoreWrite,
+  saveCanonicalCampaignBatch,
+  saveCanonicalCampaignResults,
+  initCanonicalCampaignResults
+} from '../db/firestore.js';
 import {
   activePricingSessions,
   memoryCampaigns,
@@ -55,9 +62,25 @@ export function cancelChunkCampaignSession(campaignId: string): boolean {
   if (session) {
     session.campaign.status = 'cancelled';
     campaignSessions.delete(campaignId);
-    return true;
   }
-  return false;
+  const memCamp = memoryCampaigns.find(c => c.id === campaignId);
+  if (memCamp) {
+    memCamp.status = 'cancelled';
+  }
+
+  // Notification d'arrière-plan sans blocage ("Fire & Forget")
+  // Même si Firestore est en panne ou hors quota, l'arrêt en RAM prend effet en 0ms
+  if (db) {
+    const firestorePromise = setDoc(doc(db, 'campaigns', campaignId), { status: 'cancelled' }, { merge: true });
+    Promise.race([
+      firestorePromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore timeout')), 1500))
+    ]).catch((err) => {
+      console.warn('[Firestore] Notification d\'arrêt Firestore en arrière-plan ignorée:', err?.message);
+    });
+  }
+
+  return true;
 }
 
 /**
@@ -318,14 +341,11 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
   session.campaign.completedBatches = session.completedBatches;
   session.campaign.durationSeconds = Math.max(1, Math.round((Date.now() - session.startedAtMs) / 1000));
 
-  // Sauvegarde progressive Firestore
-  if (session.canonicalTrips.length > 0) {
-    await saveCanonicalCampaignResults(campaignId, session.city.name, session.canonicalTrips);
-  }
-  if (db) {
-    await safeFirestoreWrite('updateCampaignProgress', async () => {
-      await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(session!.campaign), { merge: true });
-    });
+  // Solution B: Exactement 1 seule écriture Firestore par lot de 10 trajets !
+  // Document dédié: {campaignId}_lot_{chunkIndex} (~2.5 Ko, 400x sous le plafond de 1 Mo).
+  // Zéro réécriture cumulative des lots précédents.
+  if (chunkCanonicalTrips.length > 0) {
+    await saveCanonicalCampaignBatch(campaignId, session.city.name, chunkIndex, chunkCanonicalTrips);
   }
 
   // Synchro mémoire
@@ -419,15 +439,11 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
 
   campaign.canonicalTripsCount = canonicalTrips.length;
 
-  // Persistance Firestore finale
+  // Persistance Firestore finale (1 seule écriture finale pour mettre à jour les statistiques globales et le statut 'completed')
   if (db) {
     await safeFirestoreWrite('finalizeCampaignMeta', async () => {
       await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
     });
-  }
-
-  if (canonicalTrips.length > 0) {
-    await saveCanonicalCampaignResults(campaignId, campaign.cityName, canonicalTrips);
   }
 
   const existingIdx = memoryCampaigns.findIndex(c => c.id === campaignId);
@@ -435,6 +451,14 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
     memoryCampaigns[existingIdx] = campaign;
   } else {
     memoryCampaigns.unshift(campaign);
+  }
+
+  // Cache mémoire RAM serveur immédiat (0 lecture Firestore pour les futures consultations)
+  if (session?.trips && session.trips.length > 0) {
+    memoryCampaignTrips[campaignId] = session.trips;
+  }
+  if (canonicalTrips && canonicalTrips.length > 0) {
+    memoryCampaignCanonicalTrips[campaignId] = canonicalTrips;
   }
 
   campaignSessions.delete(campaignId);

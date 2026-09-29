@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, Firestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { getFirestore, Firestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 import { CanonicalTrip } from '../types.js';
@@ -81,6 +81,35 @@ export async function initCanonicalCampaignResults(campaignId: string, cityName:
 }
 
 /**
+ * Solution B: Enregistrement d'un lot individuel (1 écriture par lot)
+ * Poids du document: ~2.5 Ko (400 fois sous le plafond de 1 Mo).
+ * Aucune réécriture cumulative des lots précédents.
+ * Exactement 1 écriture par lot de 10 trajets.
+ */
+export async function saveCanonicalCampaignBatch(
+  campaignId: string,
+  cityName: string,
+  chunkIndex: number,
+  chunkTrips: CanonicalTrip[]
+): Promise<void> {
+  if (!db || chunkTrips.length === 0) return;
+
+  const docId = `${campaignId}_lot_${chunkIndex}`;
+  const payload = cleanFirestoreDoc({
+    campaignId,
+    cityName,
+    chunkIndex,
+    tripsCount: chunkTrips.length,
+    canonicalTrips: chunkTrips,
+    savedAt: new Date().toISOString()
+  });
+
+  await safeFirestoreWrite(`saveBatch_${chunkIndex}`, async () => {
+    await setDoc(doc(db!, 'campaign_results', docId), payload);
+  });
+}
+
+/**
  * Stockage partitionné garanti < 500 Ko pour respecter strictly la limite Firestore de 1 Mo
  * Chaque document est plafonné à 1 000 trajets canoniques maximum (~280 Ko).
  */
@@ -125,11 +154,40 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
   if (!db) return [];
 
   try {
+    let allTrips: CanonicalTrip[] = [];
+
+    // 1. Solution B : D'abord rechercher par lots indépendants (campaignId == campaignId)
+    try {
+      const batchQuery = query(
+        collection(db, 'campaign_results'),
+        where('campaignId', '==', campaignId)
+      );
+      const batchSnap = await getDocs(batchQuery);
+      if (!batchSnap.empty) {
+        const batchDocs = batchSnap.docs.map(d => d.data());
+        // Filtrer uniquement les documents de lots (ceux avec chunkIndex)
+        const pureLots = batchDocs.filter(b => typeof b.chunkIndex === 'number');
+        if (pureLots.length > 0) {
+          pureLots.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
+          for (const b of pureLots) {
+            if (Array.isArray(b.canonicalTrips)) {
+              allTrips.push(...b.canonicalTrips);
+            }
+          }
+          if (allTrips.length > 0) {
+            return allTrips;
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[Firestore] loadCanonicalCampaignResults batch search:`, e?.message);
+    }
+
+    // 2. Rétrocompatibilité : Recherche par document maître partitionné
     const firstSnap = await getDoc(doc(db, 'campaign_results', campaignId));
     if (!firstSnap.exists()) return [];
 
     const firstData = firstSnap.data();
-    let allTrips: CanonicalTrip[] = [];
 
     if (Array.isArray(firstData.canonicalTrips)) {
       allTrips = allTrips.concat(firstData.canonicalTrips);
