@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { exportToExcel, exportToPdf } from '../utils/exportUtils';
+import { exportToExcel, exportToPdf, exportCanonicalJson } from '../utils/exportUtils';
 import { Column, DataTableProps } from './datatable/types';
 import { DataTableHeader } from './datatable/DataTableHeader';
 import { DataTableBody } from './datatable/DataTableBody';
@@ -158,6 +158,10 @@ export function DataTable<T extends Record<string, any>>({
     exportToPdf(exportTitle, exportSubtitle, headers, rows, exportFileName);
   };
 
+  const handleExportJson = () => {
+    exportCanonicalJson(sortedData, exportFileName, exportTitle);
+  };
+
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-hidden transition-all">
       <DataTableHeader
@@ -171,6 +175,7 @@ export function DataTable<T extends Record<string, any>>({
         onExportExcel={handleExportExcel}
         onExportCsv={handleExportCsv}
         onExportPdf={handleExportPdf}
+        onExportJson={handleExportJson}
         actions={actions}
       />
 

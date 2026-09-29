@@ -36,7 +36,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
 
   const selectDemoAccount = (demoEmail: string) => {
     setEmail(demoEmail);
-    setPassword('demo1234');
+    setPassword('c!tr!n$@2026');
     setError(null);
   };
 
@@ -154,11 +154,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
           <div className="grid grid-cols-3 gap-1.5">
             <button
               type="button"
-              onClick={() => selectDemoAccount('admin@citrine-pricing.cm')}
+              onClick={() => selectDemoAccount('citrinemobilite@gmail.com')}
               className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition cursor-pointer"
             >
-              <div className="text-[11px] font-semibold text-slate-900">Landry</div>
-              <div className="text-[10px] text-slate-400 truncate">admin@...</div>
+              <div className="text-[11px] font-semibold text-slate-900">Admin</div>
+              <div className="text-[10px] text-slate-400 truncate">citrine...</div>
             </button>
 
             <button

@@ -259,6 +259,11 @@ export const api = {
     if (!res.ok) throw new Error('Erreur lors de la suppression de la campagne.');
   },
 
+  async deleteAllCampaigns(): Promise<void> {
+    const res = await fetch(`${BASE_URL}/campaigns`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Erreur lors de la suppression de toutes les campagnes.');
+  },
+
   // Trip Results
   async getCampaignResults(
     campaignId: string,
@@ -336,6 +341,12 @@ export const api = {
     return res.json();
   },
 
+  async getLastYangoRawJson(): Promise<{ timestamp: string; rawJson: any; rawText: string }> {
+    const res = await fetch(`${BASE_URL}/yango/last-raw-json`);
+    if (!res.ok) return { timestamp: '', rawJson: null, rawText: '' };
+    return res.json();
+  },
+
   // Hero Settings
   async getHeroSettings(): Promise<HeroSettings> {
     const res = await fetch(`${BASE_URL}/settings/hero`);
@@ -379,5 +390,10 @@ export const api = {
 
   async deleteHistoryItem(id: string): Promise<void> {
     await fetch(`${BASE_URL}/history/${id}`, { method: 'DELETE' });
+  },
+
+  async clearAllHistory(): Promise<void> {
+    const res = await fetch(`${BASE_URL}/history`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Erreur lors de la suppression de tout l’historique.');
   }
 };

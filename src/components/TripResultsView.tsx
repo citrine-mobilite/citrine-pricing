@@ -5,6 +5,13 @@ import { DataTable, Column } from './DataTable';
 import { TripResultsHeader } from './trips/TripResultsHeader';
 import { TripMetricsGrid } from './trips/TripMetricsGrid';
 import { TripMatrixView } from './trips/TripMatrixView';
+import {
+  cleanNeighborhoodName,
+  renderCellPrice,
+  getYangoPrice,
+  getHeroPrice,
+  getTripMasterPrice
+} from './pricing/pricingUtils';
 
 interface TripResultsViewProps {
   campaigns: PricingCampaign[];
@@ -34,26 +41,49 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       .finally(() => setIsLoading(false));
   }, [currentCampaign?.id]);
 
+  const normalizedTrips = useMemo(() => {
+    return trips.map((t) => {
+      const yEco = getYangoPrice(t, 'econom');
+      const yConf = getYangoPrice(t, 'business');
+      const hEco = getHeroPrice(t, 'eco');
+      const hConf = getHeroPrice(t, 'confort');
+      const tmEco = getTripMasterPrice(t, 'eco');
+      const tmConf = getTripMasterPrice(t, 'confort');
+      const tmMoto = getTripMasterPrice(t, 'moto');
+
+      return {
+        ...t,
+        yango_eco: yEco ?? undefined,
+        yango_confort: yConf ?? undefined,
+        hero_eco: hEco ?? undefined,
+        hero_confort: hConf ?? undefined,
+        tripmaster_eco: tmEco ?? undefined,
+        tripmaster_confort: tmConf ?? undefined,
+        tripmaster_moto: tmMoto ?? undefined
+      };
+    });
+  }, [trips]);
+
   const neighborhoodsList = useMemo(() => {
     const set = new Set<string>();
     trips.forEach((t) => {
-      set.add(t.startNeighborhoodName);
-      set.add(t.endNeighborhoodName);
+      set.add(cleanNeighborhoodName(t.startNeighborhoodName));
+      set.add(cleanNeighborhoodName(t.endNeighborhoodName));
     });
     return Array.from(set).sort();
   }, [trips]);
 
   const stats = useMemo(() => {
     if (trips.length === 0) return { min: 0, max: 0, avg: 0, avgKm: 0, maxTrip: null, minTrip: null };
-    const prices = trips.map((t) => t.price).filter(p => p > 0);
+    const prices = trips.map((t) => t.price || getYangoPrice(t, 'econom') || 0).filter(p => p > 0);
     const min = prices.length ? Math.min(...prices) : 0;
     const max = prices.length ? Math.max(...prices) : 0;
     const avg = prices.length ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
     const avgKm = Number(
       (trips.reduce((a, b) => a + (b.distanceKm || 0), 0) / (trips.length || 1)).toFixed(1)
     );
-    const maxTrip = trips.find((t) => t.price === max);
-    const minTrip = trips.find((t) => t.price === min);
+    const maxTrip = trips.find((t) => (t.price || 0) === max);
+    const minTrip = trips.find((t) => (t.price || 0) === min);
 
     return { min, max, avg, avgKm, maxTrip, minTrip };
   }, [trips]);
@@ -64,8 +94,10 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       map[o] = {};
     });
     trips.forEach((t) => {
-      if (map[t.startNeighborhoodName]) {
-        map[t.startNeighborhoodName][t.endNeighborhoodName] = t;
+      const start = cleanNeighborhoodName(t.startNeighborhoodName);
+      const end = cleanNeighborhoodName(t.endNeighborhoodName);
+      if (map[start]) {
+        map[start][end] = t;
       }
     });
     return map;
@@ -81,49 +113,79 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       key: 'startNeighborhoodName',
       label: 'Départ',
       sortable: true,
-      render: (t) => <span className="font-semibold text-slate-900">{t.startNeighborhoodName}</span>
+      render: (t) => <span className="font-semibold text-slate-900">{cleanNeighborhoodName(t.startNeighborhoodName)}</span>,
+      exportValue: (t) => cleanNeighborhoodName(t.startNeighborhoodName)
     },
     {
       key: 'endNeighborhoodName',
       label: 'Destination',
       sortable: true,
-      render: (t) => <span className="font-semibold text-slate-900">{t.endNeighborhoodName}</span>
+      render: (t) => <span className="font-semibold text-slate-900">{cleanNeighborhoodName(t.endNeighborhoodName)}</span>,
+      exportValue: (t) => cleanNeighborhoodName(t.endNeighborhoodName)
     },
     {
       key: 'distanceKm',
-      label: 'Distance',
+      label: 'Dist.',
       sortable: true,
       align: 'right',
-      render: (t) => <span className="font-mono text-xs">{t.distanceKm} km</span>
+      render: (t) => <span className="font-mono text-xs">{t.distanceKm} km</span>,
+      exportValue: (t) => `${t.distanceKm} km`
     },
     {
-      key: 'durationMinutes',
-      label: 'Durée',
+      key: 'yango_eco',
+      label: 'Yango Éco',
       sortable: true,
       align: 'right',
-      render: (t) => <span className="font-mono text-xs">{t.durationMinutes} min</span>
+      render: (t) => renderCellPrice(getYangoPrice(t, 'econom'), 'yango'),
+      exportValue: (t) => getYangoPrice(t, 'econom') || ''
     },
     {
-      key: 'price',
-      label: 'Prix Yango',
+      key: 'yango_confort',
+      label: 'Yango Confort',
       sortable: true,
       align: 'right',
-      render: (t) => (
-        <span className="font-mono font-bold text-slate-900">
-          {t.price?.toLocaleString('fr-FR')} FCFA
-        </span>
-      )
+      render: (t) => renderCellPrice(getYangoPrice(t, 'business'), 'yango'),
+      exportValue: (t) => getYangoPrice(t, 'business') || ''
     },
     {
-      key: 'priceHero',
-      label: 'Prix Hero Cab',
+      key: 'hero_eco',
+      label: 'Hero Éco',
       sortable: true,
       align: 'right',
-      render: (t) => (
-        <span className="font-mono font-bold text-teal-700">
-          {t.priceHero ? `${t.priceHero.toLocaleString('fr-FR')} FCFA` : '—'}
-        </span>
-      )
+      render: (t) => renderCellPrice(getHeroPrice(t, 'eco'), 'hero'),
+      exportValue: (t) => getHeroPrice(t, 'eco') || ''
+    },
+    {
+      key: 'hero_confort',
+      label: 'Hero Confort',
+      sortable: true,
+      align: 'right',
+      render: (t) => renderCellPrice(getHeroPrice(t, 'confort'), 'hero'),
+      exportValue: (t) => getHeroPrice(t, 'confort') || ''
+    },
+    {
+      key: 'tripmaster_eco',
+      label: 'TM Éco',
+      sortable: true,
+      align: 'right',
+      render: (t) => renderCellPrice(getTripMasterPrice(t, 'eco'), 'tripmaster'),
+      exportValue: (t) => getTripMasterPrice(t, 'eco') || ''
+    },
+    {
+      key: 'tripmaster_confort',
+      label: 'TM Confort',
+      sortable: true,
+      align: 'right',
+      render: (t) => renderCellPrice(getTripMasterPrice(t, 'confort'), 'tripmaster'),
+      exportValue: (t) => getTripMasterPrice(t, 'confort') || ''
+    },
+    {
+      key: 'tripmaster_moto',
+      label: 'TM Moto',
+      sortable: true,
+      align: 'right',
+      render: (t) => renderCellPrice(getTripMasterPrice(t, 'moto'), 'tripmaster'),
+      exportValue: (t) => getTripMasterPrice(t, 'moto') || ''
     },
     {
       key: 'cheaperProvider',
@@ -134,12 +196,15 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
           className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
             t.cheaperProvider === 'hero'
               ? 'bg-teal-100 text-teal-800'
+              : t.cheaperProvider === 'tripmaster'
+              ? 'bg-blue-100 text-blue-800'
               : 'bg-amber-100 text-amber-800'
           }`}
         >
-          {t.cheaperProvider === 'hero' ? 'Hero Cab' : 'Yango'}
+          {t.cheaperProvider === 'hero' ? 'Hero Cab' : t.cheaperProvider === 'tripmaster' ? 'Trip Master' : 'Yango'}
         </span>
-      )
+      ),
+      exportValue: (t) => t.cheaperProvider || 'yango'
     }
   ], []);
 
@@ -159,8 +224,10 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       {viewMode === 'table' ? (
         <DataTable
           columns={columns}
-          data={trips}
+          data={normalizedTrips}
           isLoading={isLoading}
+          pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
+          defaultPageSize={25}
           searchPlaceholder="Rechercher par départ ou arrivée..."
           searchKeys={['startNeighborhoodName', 'endNeighborhoodName']}
           exportFileName={`trajets_${currentCampaign?.cityName?.toLowerCase() || 'vtc'}`}

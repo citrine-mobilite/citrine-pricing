@@ -10,15 +10,15 @@ import { NeighborhoodsView } from './components/NeighborhoodsView';
 import { HistoryView } from './components/HistoryView';
 import { UsersView } from './components/UsersView';
 import { SettingsView } from './components/SettingsView';
-import { LoginModal } from './components/LoginModal';
+import { LoginPage } from './components/LoginPage';
+import { HeroLogo } from './components/HeroLogo';
 import { api } from './services/api';
 import { City, Neighborhood, PricingCampaign, User } from './types';
 import { RotateCw } from 'lucide-react';
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   // Core Data States loaded dynamically from database
   const [cities, setCities] = useState<City[]>([]);
@@ -88,11 +88,14 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isAuthenticated && user) {
+      fetchData();
+    }
+  }, [isAuthenticated, user, fetchData]);
 
   // Live polling for running campaigns so UI never hangs or spins indefinitely
   useEffect(() => {
+    if (!isAuthenticated) return;
     const hasActiveCampaign = campaigns.some((c) => c.status === 'in_progress');
     if (!hasActiveCampaign) return;
 
@@ -106,7 +109,19 @@ function AppContent() {
     }, 500);
 
     return () => clearInterval(interval);
-  }, [campaigns]);
+  }, [isAuthenticated, campaigns]);
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center space-y-3">
+        <HeroLogo size="xl" showSubtitle={true} className="animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <LoginPage />;
+  }
 
   const activeCampaigns = campaigns.filter((c) => c.status === 'in_progress');
 
@@ -164,6 +179,7 @@ function AppContent() {
                     campaigns={campaigns}
                     onNavigate={setActiveTab}
                     onSelectCampaign={handleSelectCampaign}
+                    onRefresh={fetchData}
                     onLaunchCity={(cityId) => {
                       setSelectedCityId(cityId);
                       setActiveTab('pricing');
@@ -253,11 +269,6 @@ function AppContent() {
         </main>
 
       </div>
-
-      {/* Login Modal */}
-      {showLoginModal && (
-        <LoginModal onClose={() => setShowLoginModal(false)} />
-      )}
 
     </div>
   );

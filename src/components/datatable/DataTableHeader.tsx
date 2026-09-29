@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, FileSpreadsheet, FileText, Download, X } from 'lucide-react';
+import { Search, FileSpreadsheet, FileText, Download, FileCode, X } from 'lucide-react';
 
 interface DataTableHeaderProps {
   search: string;
@@ -9,6 +9,7 @@ interface DataTableHeaderProps {
   onExportExcel: () => void;
   onExportCsv: () => void;
   onExportPdf: () => void;
+  onExportJson?: () => void;
   actions?: React.ReactNode;
 }
 
@@ -20,6 +21,7 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
   onExportExcel,
   onExportCsv,
   onExportPdf,
+  onExportJson,
   actions
 }) => {
   return (
@@ -44,7 +46,7 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
         )}
       </div>
 
-      {/* Right Buttons: Actions, Excel, CSV, PDF */}
+      {/* Right Buttons: Actions, Excel, CSV, JSON, PDF */}
       <div className="flex items-center gap-2 self-end sm:self-auto">
         {actions}
 
@@ -73,6 +75,18 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
             CSV {totalCount > 0 && `(${totalCount.toLocaleString('fr-FR')})`}
           </span>
         </button>
+
+        {onExportJson && (
+          <button
+            onClick={onExportJson}
+            disabled={totalCount === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="Exporter le JSON canonique ultra-léger (Départ, Arrivée, Prix par agrégateur et classe)"
+          >
+            <FileCode className="w-3.5 h-3.5 text-amber-600" />
+            <span className="hidden md:inline">JSON Léger</span>
+          </button>
+        )}
 
         <button
           onClick={onExportPdf}

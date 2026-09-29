@@ -2,7 +2,7 @@ import React from 'react';
 
 interface HeroLogoProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   showSubtitle?: boolean;
 }
 
@@ -15,7 +15,9 @@ export const HeroLogo: React.FC<HeroLogoProps> = ({
     sm: 'h-6',
     md: 'h-8',
     lg: 'h-10',
-    xl: 'h-14'
+    xl: 'h-14',
+    '2xl': 'h-20',
+    '3xl': 'h-28'
   };
 
   return (

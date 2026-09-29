@@ -1,0 +1,305 @@
+import { Router, Request, Response } from 'express';
+import { randomUUID } from 'crypto';
+import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { db, cleanFirestoreDoc, safeFirestoreWrite } from '../db/firestore.js';
+import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory } from '../db/memoryStore.js';
+import { City, Neighborhood } from '../types.js';
+
+const router = Router();
+
+// Cities
+router.get('/api/cities', async (_req: Request, res: Response) => {
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'cities'));
+      if (!snap.empty) {
+        const dbCities = snap.docs.map(d => ({ id: d.id, ...d.data() } as City));
+        setCities(dbCities);
+      }
+    } catch (e: any) {
+      console.warn('[Firestore] get cities error:', e.message);
+    }
+  }
+
+  // Injecter le nombre de quartiers
+  const enriched = cities.map(c => ({
+    ...c,
+    neighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id).length,
+    activeNeighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id && n.active).length
+  }));
+
+  return res.json(enriched);
+});
+
+router.post('/api/cities', async (req: Request, res: Response) => {
+  const { name, country, currency, currencySymbol, center, autoSchedule } = req.body;
+  if (!name || !country || !currency) {
+    return res.status(400).json({ error: 'Nom, pays et devise sont obligatoires.' });
+  }
+
+  const newCity: City = {
+    id: `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`,
+    name: name.trim(),
+    country: country.trim(),
+    currency: currency.trim().toUpperCase(),
+    currencySymbol: currencySymbol || currency,
+    center: center || { lat: 4.0511, lng: 9.7679 },
+    active: true,
+    autoSchedule: autoSchedule || { enabled: false, slots: ['08:00', '18:00'] }
+  };
+
+  cities.push(newCity);
+  await safeFirestoreWrite('createCity', () => setDoc(doc(db!, 'cities', newCity.id), cleanFirestoreDoc(newCity)));
+
+  await recordHistory({
+    action: 'create_city',
+    eventType: 'cities',
+    title: `Nouvelle ville ajoutée: ${newCity.name}`,
+    description: `${newCity.country} - Devise: ${newCity.currency}`
+  });
+
+  return res.status(201).json(newCity);
+});
+
+router.put('/api/cities/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const city = cities.find(c => c.id === id);
+  if (!city) {
+    return res.status(404).json({ error: 'Ville introuvable.' });
+  }
+
+  const { name, country, currency, currencySymbol, center, active, autoSchedule } = req.body;
+  if (name !== undefined) city.name = name.trim();
+  if (country !== undefined) city.country = country.trim();
+  if (currency !== undefined) city.currency = currency.trim().toUpperCase();
+  if (currencySymbol !== undefined) city.currencySymbol = currencySymbol;
+  if (center !== undefined) city.center = center;
+  if (active !== undefined) city.active = Boolean(active);
+  if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
+
+  await safeFirestoreWrite('updateCity', () => setDoc(doc(db!, 'cities', id), cleanFirestoreDoc(city), { merge: true }));
+  return res.json(city);
+});
+
+router.delete('/api/cities/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const idx = cities.findIndex(c => c.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Ville introuvable.' });
+  }
+
+  const deleted = cities.splice(idx, 1)[0];
+  const remainingNbs = neighborhoods.filter(n => n.cityId !== id);
+  setNeighborhoods(remainingNbs);
+
+  await safeFirestoreWrite('deleteCity', () => deleteDoc(doc(db!, 'cities', id)));
+
+  await recordHistory({
+    action: 'delete_city',
+    eventType: 'cities',
+    title: `Ville supprimée: ${deleted.name}`,
+    description: `Suppression de ${deleted.name} et de tous ses quartiers associés.`
+  });
+
+  return res.json({ success: true, message: 'Ville et quartiers associés supprimés.' });
+});
+
+// Neighborhoods
+router.get('/api/neighborhoods', async (req: Request, res: Response) => {
+  const { cityId } = req.query;
+
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'neighborhoods'));
+      if (!snap.empty) {
+        const dbNbs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
+        setNeighborhoods(dbNbs);
+      }
+    } catch (e: any) {
+      console.warn('[Firestore] get neighborhoods error:', e.message);
+    }
+  }
+
+  let list = neighborhoods;
+  if (cityId) {
+    list = list.filter(n => n.cityId === String(cityId));
+  }
+
+  // Injecter le nom de la ville
+  const enriched = list.map(n => {
+    const c = cities.find(city => city.id === n.cityId);
+    return {
+      ...n,
+      cityName: c?.name || 'Inconnue'
+    };
+  });
+
+  return res.json(enriched);
+});
+
+router.post('/api/neighborhoods', async (req: Request, res: Response) => {
+  const { cityId, name, lat, lng, zoneType, active } = req.body;
+  if (!cityId || !name || lat === undefined || lng === undefined) {
+    return res.status(400).json({ error: 'cityId, nom, latitude et longitude sont obligatoires.' });
+  }
+
+  const city = cities.find(c => c.id === cityId);
+  if (!city) {
+    return res.status(404).json({ error: 'Ville parente introuvable.' });
+  }
+
+  const newNb: Neighborhood = {
+    id: `nb_${randomUUID()}`,
+    cityId,
+    name: name.trim(),
+    lat: Number(lat),
+    lng: Number(lng),
+    active: active !== undefined ? Boolean(active) : true,
+    zoneType: zoneType || 'commercial',
+    createdAt: new Date().toISOString()
+  };
+
+  neighborhoods.push(newNb);
+  await safeFirestoreWrite('createNb', () => setDoc(doc(db!, 'neighborhoods', newNb.id), cleanFirestoreDoc(newNb)));
+
+  return res.status(201).json({ ...newNb, cityName: city.name });
+});
+
+router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const nb = neighborhoods.find(n => n.id === id);
+  if (!nb) {
+    return res.status(404).json({ error: 'Quartier introuvable.' });
+  }
+
+  const { name, lat, lng, zoneType, active } = req.body;
+  if (name !== undefined) nb.name = name.trim();
+  if (lat !== undefined) nb.lat = Number(lat);
+  if (lng !== undefined) nb.lng = Number(lng);
+  if (zoneType !== undefined) nb.zoneType = zoneType;
+  if (active !== undefined) nb.active = Boolean(active);
+
+  await safeFirestoreWrite('updateNb', () => setDoc(doc(db!, 'neighborhoods', id), cleanFirestoreDoc(nb), { merge: true }));
+  return res.json(nb);
+});
+
+router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const idx = neighborhoods.findIndex(n => n.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Quartier introuvable.' });
+  }
+
+  neighborhoods.splice(idx, 1);
+  await safeFirestoreWrite('deleteNb', () => deleteDoc(doc(db!, 'neighborhoods', id)));
+  return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
+});
+
+router.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Response) => {
+  const { cityId } = req.params;
+  const countBefore = neighborhoods.length;
+  const filtered = neighborhoods.filter(n => n.cityId !== cityId);
+  setNeighborhoods(filtered);
+  const deletedCount = countBefore - filtered.length;
+
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'neighborhoods'));
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => {
+        if (d.data().cityId === cityId) {
+          batch.delete(d.ref);
+        }
+      });
+      await batch.commit();
+    } catch (e: any) {
+      console.warn('[Firestore] Batch delete error:', e.message);
+    }
+  }
+
+  return res.json({ success: true, message: `${deletedCount} quartier(s) supprimé(s).` });
+});
+
+router.post('/api/neighborhoods/batch-toggle', async (req: Request, res: Response) => {
+  const { cityId, active } = req.body;
+  if (!cityId || active === undefined) {
+    return res.status(400).json({ error: 'cityId et statut active requis.' });
+  }
+
+  const boolActive = Boolean(active);
+  neighborhoods.forEach(n => {
+    if (n.cityId === cityId) {
+      n.active = boolActive;
+    }
+  });
+
+  return res.json({ success: true, active: boolActive });
+});
+
+router.post('/api/neighborhoods/seed-city', async (req: Request, res: Response) => {
+  const { cityId } = req.body;
+  const city = cities.find(c => c.id === cityId);
+  if (!city) {
+    return res.status(404).json({ error: 'Ville introuvable.' });
+  }
+
+  return res.json({
+    success: true,
+    message: 'Utilisez le bouton Import Excel pour ajouter de nouveaux quartiers.',
+    neighborhoods: neighborhoods.filter(n => n.cityId === cityId)
+  });
+});
+
+router.post('/api/neighborhoods/import-batch', async (req: Request, res: Response) => {
+  const { cityId, neighborhoods: importedList } = req.body;
+  if (!cityId || !Array.isArray(importedList) || importedList.length === 0) {
+    return res.status(400).json({ error: 'cityId et une liste non-vide de quartiers sont requis.' });
+  }
+
+  const city = cities.find(c => c.id === cityId);
+  if (!city) {
+    return res.status(404).json({ error: 'Ville introuvable.' });
+  }
+
+  const createdNeighborhoods: Neighborhood[] = [];
+  importedList.forEach((item: any) => {
+    if (item.name && item.lat !== undefined && item.lng !== undefined) {
+      const nb: Neighborhood = {
+        id: randomUUID(),
+        cityId,
+        name: String(item.name).trim(),
+        lat: Number(item.lat),
+        lng: Number(item.lng),
+        active: item.active ?? true,
+        zoneType: item.zoneType || 'commercial',
+        createdAt: new Date().toISOString()
+      };
+      createdNeighborhoods.push(nb);
+    }
+  });
+
+  neighborhoods.push(...createdNeighborhoods);
+
+  if (createdNeighborhoods.length > 0 && db) {
+    await safeFirestoreWrite('importBatchNeighborhoods', async () => {
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < createdNeighborhoods.length; i += BATCH_SIZE) {
+        const chunk = createdNeighborhoods.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db!);
+        for (const nb of chunk) {
+          const cleaned = cleanFirestoreDoc({ ...nb, cityName: city.name });
+          batch.set(doc(db!, 'neighborhoods', nb.id), cleaned, { merge: true });
+        }
+        await batch.commit();
+      }
+    });
+  }
+
+  return res.status(201).json({
+    success: true,
+    count: createdNeighborhoods.length,
+    message: `${createdNeighborhoods.length} quartiers importés avec succès.`
+  });
+});
+
+export default router;

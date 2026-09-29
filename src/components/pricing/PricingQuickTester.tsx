@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Neighborhood } from '../../types';
-import { SlidersHorizontal, ArrowRight, RotateCw, Code, Layers } from 'lucide-react';
+import { SlidersHorizontal, ArrowRight, RotateCw, Code, Layers, Copy, Check } from 'lucide-react';
 import { HeroLogo } from '../HeroLogo';
 
 interface PricingQuickTesterProps {
@@ -26,6 +26,25 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
   quickTestResult,
   onInspectResult
 }) => {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopyProviderData = (key: 'yango' | 'hero' | 'tripmaster') => {
+    let payload = '';
+    if (key === 'yango') {
+      const data = quickTestResult?.yango?.rawJson || quickTestResult?.yango || quickTestResult?.rawResponse;
+      payload = typeof data === 'string' ? data : JSON.stringify(data || quickTestResult, null, 2);
+    } else if (key === 'hero') {
+      const data = quickTestResult?.heroCab?.rawText || quickTestResult?.heroCab?.rawResponse || quickTestResult?.heroCab || quickTestResult?.hero;
+      payload = typeof data === 'string' ? data : JSON.stringify(data || {}, null, 2);
+    } else if (key === 'tripmaster') {
+      const data = quickTestResult?.tripMaster?.rawText || quickTestResult?.tripMaster?.rawResponse || quickTestResult?.tripMaster;
+      payload = typeof data === 'string' ? data : JSON.stringify(data || {}, null, 2);
+    }
+
+    navigator.clipboard.writeText(payload);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
   // Extract Yango prices
   const yEco = quickTestResult?.yango?.classes?.econom?.price || quickTestResult?.priceEconom || quickTestResult?.price;
   const yConf = quickTestResult?.yango?.classes?.business?.price || quickTestResult?.yango?.classes?.comfort?.price || quickTestResult?.priceConfort;
@@ -147,7 +166,17 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
                 <strong className="text-red-900 font-bold uppercase text-[11px] flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-red-600 inline-block" /> Yango (4 Classes)
                 </strong>
-                <span className="text-[10px] text-red-600 font-medium bg-red-100/60 px-1.5 py-0.5 rounded">Live</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopyProviderData('yango')}
+                    title="Copier la réponse brute Yango"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded transition cursor-pointer"
+                  >
+                    {copiedKey === 'yango' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'yango' ? 'Copié !' : 'Copier'}</span>
+                  </button>
+                  <span className="text-[10px] text-red-600 font-medium bg-red-100/60 px-1.5 py-0.5 rounded">Live</span>
+                </div>
               </div>
               <div className="space-y-1 text-[11px]">
                 <div className="flex items-center justify-between">
@@ -183,7 +212,17 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
                 <strong className="text-teal-900 font-bold uppercase text-[11px] flex items-center gap-1.5">
                   <HeroLogo className="w-3 h-3 text-teal-700" /> Hero Cab (4 Classes)
                 </strong>
-                <span className="text-[10px] text-teal-700 font-medium bg-teal-100/60 px-1.5 py-0.5 rounded">Live</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopyProviderData('hero')}
+                    title="Copier la réponse brute Hero Cab"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-teal-800 bg-teal-100 hover:bg-teal-200 rounded transition cursor-pointer"
+                  >
+                    {copiedKey === 'hero' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'hero' ? 'Copié !' : 'Copier'}</span>
+                  </button>
+                  <span className="text-[10px] text-teal-700 font-medium bg-teal-100/60 px-1.5 py-0.5 rounded">Live</span>
+                </div>
               </div>
               <div className="space-y-1 text-[11px]">
                 <div className="flex items-center justify-between">
@@ -219,7 +258,17 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
                 <strong className="text-purple-900 font-bold uppercase text-[11px] flex items-center gap-1.5">
                   <Layers className="w-3 h-3 text-purple-700" /> Trip Master (3 Classes)
                 </strong>
-                <span className="text-[10px] text-purple-700 font-medium bg-purple-100/60 px-1.5 py-0.5 rounded">Live</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopyProviderData('tripmaster')}
+                    title="Copier la réponse brute Trip Master"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-purple-800 bg-purple-100 hover:bg-purple-200 rounded transition cursor-pointer"
+                  >
+                    {copiedKey === 'tripmaster' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'tripmaster' ? 'Copié !' : 'Copier'}</span>
+                  </button>
+                  <span className="text-[10px] text-purple-700 font-medium bg-purple-100/60 px-1.5 py-0.5 rounded">Live</span>
+                </div>
               </div>
               <div className="space-y-1 text-[11px]">
                 <div className="flex items-center justify-between">

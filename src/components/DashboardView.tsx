@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { City, PricingCampaign } from '../types';
 import { api } from '../services/api';
-import { ArrowRight, Activity } from 'lucide-react';
+import { ArrowRight, Activity, Trash2 } from 'lucide-react';
 import { DataTable, Column } from './DataTable';
 import { DashboardMetricCards } from './dashboard/DashboardMetricCards';
 import { DashboardCityCardsGrid } from './dashboard/DashboardCityCardsGrid';
@@ -14,6 +14,7 @@ interface DashboardViewProps {
   onNavigate: (tab: string) => void;
   onSelectCampaign: (campaignId: string) => void;
   onLaunchCity: (cityId: string) => void;
+  onRefresh?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -21,13 +22,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   campaigns,
   onNavigate,
   onSelectCampaign,
-  onLaunchCity
+  onLaunchCity,
+  onRefresh
 }) => {
   const [selectedCityForLaunch, setSelectedCityForLaunch] = useState<City | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
 
   const activeCities = cities.filter((c) => c.active);
   const activeCampaigns = campaigns.filter((c) => c.status === 'in_progress');
+
+  const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const res = await Swal.fire({
+      title: 'Supprimer cette campagne ?',
+      text: 'Toutes les données associées à cette campagne seront définitivement supprimées.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Oui, supprimer',
+      cancelButtonText: 'Annuler'
+    });
+    if (res.isConfirmed) {
+      try {
+        await api.deleteCampaign(id);
+        onRefresh?.();
+        Swal.fire({
+          icon: 'success',
+          title: 'Campagne supprimée',
+          text: 'La campagne a été supprimée avec succès.',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Impossible de supprimer la campagne.', 'error');
+      }
+    }
+  };
   const totalTrips = campaigns.reduce((acc, curr) => acc + (curr.completedPairs || 0), 0);
   const totalErrors = campaigns.reduce((acc, curr) => acc + (curr.failedPairs || 0), 0);
   const successRate = totalTrips + totalErrors > 0
@@ -132,19 +163,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       label: 'Actions',
       align: 'right',
       render: (c) => (
-        <button
-          onClick={() => {
-            onSelectCampaign(c.id);
-            onNavigate('pricing');
-          }}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F4F4A] hover:underline"
-        >
-          <span>Détails</span>
-          <ArrowRight className="w-3 h-3" />
-        </button>
+        <div className="flex items-center justify-end gap-2.5">
+          <button
+            onClick={() => {
+              onSelectCampaign(c.id);
+              onNavigate('pricing');
+            }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F4F4A] hover:underline cursor-pointer"
+          >
+            <span>Détails</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+          <button
+            onClick={(e) => handleDeleteCampaign(c.id, e)}
+            title="Supprimer cette campagne"
+            className="p-1 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )
     }
-  ], [onSelectCampaign, onNavigate]);
+  ], [onSelectCampaign, onNavigate, onRefresh]);
 
   return (
     <div className="space-y-6">
@@ -152,8 +192,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         activeCitiesCount={activeCities.length}
         totalCitiesCount={cities.length}
         activeCampaignsCount={activeCampaigns.length}
-        totalTrips={totalTrips}
-        successRate={successRate}
       />
 
       <DashboardCityCardsGrid

@@ -19,18 +19,19 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
 
   if (!trip) return null;
 
-  const yangoJsonString = trip.rawResponse
-    ? JSON.stringify(trip.rawResponse, null, 2)
-    : (trip.apiCallDetails?.rawResponseBody
-      ? JSON.stringify(trip.apiCallDetails.rawResponseBody, null, 2)
-      : 'Aucune réponse brute Yango enregistrée.');
+  const yangoRawData = (trip as any)?.yango?.rawJson || (trip as any)?.yango || trip.rawResponse || trip.apiCallDetails?.rawResponseBody;
+  const yangoJsonString = yangoRawData
+    ? JSON.stringify(yangoRawData, null, 2)
+    : 'Aucune réponse brute Yango enregistrée.';
 
-  const heroJsonString = trip.heroQuote?.rawResponse
-    ? JSON.stringify(trip.heroQuote.rawResponse, null, 2)
+  const heroRawData = (trip as any)?.heroCab?.rawText || (trip as any)?.heroCab?.rawResponse || (trip as any)?.heroCab || trip.heroQuote?.rawResponse;
+  const heroJsonString = heroRawData
+    ? (typeof heroRawData === 'string' ? heroRawData : JSON.stringify(heroRawData, null, 2))
     : 'Aucune réponse brute Hero Cab enregistrée.';
 
-  const tripMasterJsonString = trip.tripMasterQuote?.rawResponse
-    ? JSON.stringify(trip.tripMasterQuote.rawResponse, null, 2)
+  const tripMasterRawData = (trip as any)?.tripMaster?.rawText || (trip as any)?.tripMaster?.rawResponse || (trip as any)?.tripMaster || trip.tripMasterQuote?.rawResponse;
+  const tripMasterJsonString = tripMasterRawData
+    ? (typeof tripMasterRawData === 'string' ? tripMasterRawData : JSON.stringify(tripMasterRawData, null, 2))
     : 'Aucune réponse brute Trip Master enregistrée.';
 
   const handleCopy = (text: string) => {

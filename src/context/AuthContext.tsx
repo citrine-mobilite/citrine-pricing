@@ -33,10 +33,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role = 'admin';
         }
 
+        let userName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur';
+        if (
+          fbUser.email === 'citrinemobilite@gmail.com' ||
+          fbUser.email === 'landrymouns@gmail.com' ||
+          fbUser.email === 'admin@vtc-pricing.internal' ||
+          userName.toLowerCase().includes('landry')
+        ) {
+          userName = 'Admin Citrine';
+        }
+
         const currentUser: User = {
           id: fbUser.uid,
           email: fbUser.email || '',
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
+          name: userName,
           role,
           active: true,
           createdAt: new Date().toISOString(),
@@ -50,22 +60,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const savedUser = localStorage.getItem('vtc_pricing_user');
         if (savedUser) {
           try {
-            setUser(JSON.parse(savedUser));
+            const parsed = JSON.parse(savedUser);
+            if (parsed.name && parsed.name.toLowerCase().includes('landry')) {
+              parsed.name = 'Citrine Mobilité (Super Admin)';
+              localStorage.setItem('vtc_pricing_user', JSON.stringify(parsed));
+            }
+            setUser(parsed);
           } catch {
             localStorage.removeItem('vtc_pricing_user');
+            setUser(null);
           }
         } else {
-          // Default initial Admin user for testing
-          const defaultAdmin: User = {
-            id: 'usr_admin_01',
-            email: 'citrinemobilite@gmail.com',
-            name: 'Citrine Admin',
-            role: 'admin',
-            active: true,
-            createdAt: '2026-01-10T08:00:00.000Z'
-          };
-          setUser(defaultAdmin);
-          localStorage.setItem('vtc_pricing_user', JSON.stringify(defaultAdmin));
+          setUser(null);
         }
         setIsLoading(false);
       }
@@ -75,14 +81,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, pass: string) => {
-    setIsLoading(true);
-    try {
-      const res = await api.login(email, pass);
-      setUser(res.user);
-      localStorage.setItem('vtc_pricing_user', JSON.stringify(res.user));
-    } finally {
-      setIsLoading(false);
-    }
+    const res = await api.login(email, pass);
+    setUser(res.user);
+    localStorage.setItem('vtc_pricing_user', JSON.stringify(res.user));
   };
 
   const signInWithGoogle = async () => {

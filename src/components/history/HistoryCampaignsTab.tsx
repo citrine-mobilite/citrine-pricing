@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
+import Swal from 'sweetalert2';
 import { PricingCampaign, City } from '../../types';
+import { api } from '../../services/api';
 import { DataTable, Column } from '../DataTable';
-import { ArrowRight, Calendar, LayoutGrid, Table, RotateCw, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowRight, Calendar, LayoutGrid, Table, RotateCw, Clock, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 
 interface HistoryCampaignsTabProps {
   campaigns: PricingCampaign[];
@@ -23,6 +25,69 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   onRefresh
 }) => {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+
+  const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const res = await Swal.fire({
+      title: 'Supprimer cette campagne ?',
+      text: 'Toutes les données associées seront définitivement supprimées de la base.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Oui, supprimer',
+      cancelButtonText: 'Annuler'
+    });
+    if (res.isConfirmed) {
+      try {
+        await api.deleteCampaign(id);
+        onRefresh();
+        Swal.fire({
+          icon: 'success',
+          title: 'Campagne supprimée',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Erreur lors de la suppression.', 'error');
+      }
+    }
+  };
+
+  const handleDeleteAllCompleted = async () => {
+    const completedCampaigns = campaigns.filter(c => c.status === 'completed');
+    if (completedCampaigns.length === 0) {
+      Swal.fire('Information', 'Aucune campagne terminée à supprimer.', 'info');
+      return;
+    }
+    const res = await Swal.fire({
+      title: 'Supprimer toutes les campagnes terminées ?',
+      text: `${completedCampaigns.length} campagne(s) terminée(s) et leurs trajets seront définitivement supprimés.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Oui, tout supprimer',
+      cancelButtonText: 'Annuler'
+    });
+    if (res.isConfirmed) {
+      try {
+        for (const c of completedCampaigns) {
+          await api.deleteCampaign(c.id);
+        }
+        onRefresh();
+        Swal.fire({
+          icon: 'success',
+          title: 'Historique des campagnes vidé',
+          text: `${completedCampaigns.length} campagne(s) supprimée(s).`,
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Erreur lors de la suppression.', 'error');
+      }
+    }
+  };
 
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter((c) => {
@@ -161,16 +226,25 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
       label: 'Actions',
       align: 'right',
       render: (c) => (
-        <button
-          onClick={() => {
-            onSelectCampaign(c.id);
-            onNavigate('pricing');
-          }}
-          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#1F4F4A] hover:bg-[#1F4F4A]/10 rounded-lg transition cursor-pointer"
-        >
-          <span>Voir tableau</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => {
+              onSelectCampaign(c.id);
+              onNavigate('pricing');
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#1F4F4A] hover:bg-[#1F4F4A]/10 rounded-lg transition cursor-pointer"
+          >
+            <span>Voir tableau</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => handleDeleteCampaign(c.id, e)}
+            title="Supprimer cette campagne"
+            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )
     }
   ], [onSelectCampaign, onNavigate]);
@@ -226,13 +300,23 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onRefresh}
-          className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition cursor-pointer"
-        >
-          <RotateCw className="w-3.5 h-3.5" />
-          <span>Actualiser</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDeleteAllCompleted}
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200/80 rounded-lg transition cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Vider les terminées</span>
+          </button>
+
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition cursor-pointer"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            <span>Actualiser</span>
+          </button>
+        </div>
       </div>
 
       {/* Cards View Grouped By Day */}
@@ -322,17 +406,26 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                           </div>
                         </div>
 
-                        {/* Action button */}
-                        <button
-                          onClick={() => {
-                            onSelectCampaign(c.id);
-                            onNavigate('pricing');
-                          }}
-                          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#1F4F4A] bg-[#1F4F4A]/10 hover:bg-[#1F4F4A] hover:text-white rounded-lg transition cursor-pointer"
-                        >
-                          <span>Voir les résultats</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              onSelectCampaign(c.id);
+                              onNavigate('pricing');
+                            }}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#1F4F4A] bg-[#1F4F4A]/10 hover:bg-[#1F4F4A] hover:text-white rounded-lg transition cursor-pointer"
+                          >
+                            <span>Voir les résultats</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteCampaign(c.id, e)}
+                            title="Supprimer cette campagne"
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 rounded-lg transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

@@ -54,30 +54,26 @@ service cloud.firestore {
     // Staff and public profile lookup, creation of users with valid ID
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if isValidId(userId);
-      allow delete: if isAdmin() && isValidId(userId);
+      allow create, update, delete: if isValidId(userId);
     }
 
     // CITIES COLLECTION:
     // Catalog of operating cities and regions
     match /cities/{cityId} {
       allow read: if true;
-      allow create, update: if isValidId(cityId);
-      allow delete: if isAdmin() && isValidId(cityId);
+      allow create, update, delete: if isValidId(cityId);
 
       // NEIGHBORHOODS SUB-COLLECTION:
       match /neighborhoods/{neighborhoodId} {
         allow read: if true;
-        allow create, update: if isValidId(neighborhoodId);
-        allow delete: if (isAdmin() || isResponsable()) && isValidId(neighborhoodId);
+        allow create, update, delete: if isValidId(neighborhoodId);
       }
     }
 
     // NEIGHBORHOODS TOP-LEVEL COLLECTION:
     match /neighborhoods/{neighborhoodId} {
       allow read: if true;
-      allow create, update: if isValidId(neighborhoodId);
-      allow delete: if (isAdmin() || isResponsable()) && isValidId(neighborhoodId);
+      allow create, update, delete: if isValidId(neighborhoodId);
     }
 
     // PRICING CAMPAIGNS:

@@ -122,6 +122,7 @@ export async function loginWithGoogle(): Promise<User> {
 
     const userRef = doc(db, 'users', fbUser.uid);
     let userRole: 'admin' | 'responsable' | 'employe' = 'employe';
+    let userName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur';
 
     // Auto-grant admin to project owner emails
     if (
@@ -130,12 +131,15 @@ export async function loginWithGoogle(): Promise<User> {
       fbUser.email === 'admin@vtc-pricing.internal'
     ) {
       userRole = 'admin';
+      userName = 'Admin Citrine';
+    } else if (userName.toLowerCase().includes('landry')) {
+      userName = 'Admin Citrine';
     }
 
     const userData: User = {
       id: fbUser.uid,
       email: fbUser.email || '',
-      name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
+      name: userName,
       role: userRole,
       active: true,
       createdAt: new Date().toISOString(),

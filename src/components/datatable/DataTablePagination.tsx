@@ -55,7 +55,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
           >
             {pageSizeOptions.map((opt) => (
               <option key={opt} value={opt}>
-                {opt}
+                {opt >= 999999 ? "Tous (Tout afficher)" : opt}
               </option>
             ))}
           </select>

@@ -45,6 +45,38 @@ export const HistoryAuditTab: React.FC<HistoryAuditTabProps> = ({
     }
   };
 
+  const handleClearAllHistory = async () => {
+    if (auditLogs.length === 0) {
+      Swal.fire('Information', 'Le journal d’audit est déjà vide.', 'info');
+      return;
+    }
+    const res = await Swal.fire({
+      title: 'Vider tout l’historique d’audit ?',
+      text: 'Tous les événements enregistrés seront définitivement supprimés.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Oui, tout vider',
+      cancelButtonText: 'Annuler'
+    });
+    if (res.isConfirmed) {
+      try {
+        await api.clearAllHistory();
+        onReload();
+        Swal.fire({
+          icon: 'success',
+          title: 'Historique vidé',
+          text: 'Le journal d’audit a été vidé avec succès.',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Erreur lors de la suppression.', 'error');
+      }
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-4">
       {/* Top Filter Bar */}
@@ -66,14 +98,25 @@ export const HistoryAuditTab: React.FC<HistoryAuditTabProps> = ({
           </select>
         </div>
 
-        <button
-          onClick={onReload}
-          disabled={loadingAudit}
-          className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
-        >
-          <RotateCw className={`w-3.5 h-3.5 ${loadingAudit ? 'animate-spin' : ''}`} />
-          <span>Actualiser journal</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleClearAllHistory}
+            disabled={loadingAudit || auditLogs.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200/80 rounded-lg transition disabled:opacity-50 cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Vider l'historique</span>
+          </button>
+
+          <button
+            onClick={onReload}
+            disabled={loadingAudit}
+            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${loadingAudit ? 'animate-spin' : ''}`} />
+            <span>Actualiser journal</span>
+          </button>
+        </div>
       </div>
 
       {/* Audit Timeline */}

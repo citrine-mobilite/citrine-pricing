@@ -3,60 +3,140 @@ import { TripResult } from '../../types';
 
 export const cleanNeighborhoodName = (name: string | null | undefined): string => {
   if (!name) return '—';
-  const commaIndex = name.indexOf(',');
-  if (commaIndex !== -1) {
-    return name.substring(0, commaIndex).trim();
-  }
-  return name.trim();
+  // Enlever uniquement le suffixe pays redondant (ex: ", Cameroun" ou ", Cameroon") et conserver le nom complet
+  return name.replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
 };
 
-export const renderCellPrice = (price: number | null | undefined, accent?: 'yango' | 'hero') => {
-  if (!price || price <= 0 || isNaN(price)) {
+export const parseAnyPrice = (val: any): number | null => {
+  if (val === null || val === undefined || val === '') return null;
+  if (typeof val === 'number') {
+    return isNaN(val) || val <= 0 ? null : Math.round(val);
+  }
+  if (typeof val === 'string') {
+    const clean = val.replace(/CFA|FCFA|XAF/gi, '').replace(/\s+/g, '').replace(/,/g, '.').replace(/[^\d.]/g, '');
+    const num = parseFloat(clean);
+    return isNaN(num) || num <= 0 ? null : Math.round(num);
+  }
+  return null;
+};
+
+export const renderCellPrice = (price: any, accent?: 'yango' | 'hero' | 'tripmaster') => {
+  const p = parseAnyPrice(price);
+  if (!p) {
     return <span className="text-slate-300 font-mono text-[11px]">—</span>;
   }
-  const color = accent === 'hero' ? 'text-teal-700 font-bold' : 'text-slate-900 font-bold';
+  let color = 'text-slate-900 font-bold';
+  if (accent === 'hero') color = 'text-teal-700 font-bold';
+  else if (accent === 'tripmaster') color = 'text-blue-700 font-bold';
   return (
     <span className={`font-mono text-xs ${color}`}>
-      {price.toLocaleString('fr-FR')} <span className="text-[10px] text-slate-400 font-normal">F</span>
+      {p.toLocaleString('fr-FR')} <span className="text-[10px] text-slate-400 font-normal">F</span>
     </span>
   );
 };
 
 export const getYangoPrice = (t: TripResult, className: 'econom' | 'business' | 'comfortplus' | 'moto'): number | null => {
-  if (className === 'econom') return t.priceEconom || t.classes?.econom?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'econom')?.price || (t.tariffClass === 'econom' ? t.price : null);
-  if (className === 'business') return t.priceConfort || t.classes?.business?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort')?.price || null;
-  if (className === 'comfortplus') return t.priceConfortPlus || t.classes?.comfortplus?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'comfortplus' || c.className?.toLowerCase() === 'confort+')?.price || null;
-  if (className === 'moto') return t.priceMoto || t.classes?.moto?.price || (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'moto')?.price || null;
+  if (!t) return null;
+  const anyT = t as any;
+  if (className === 'econom') {
+    return parseAnyPrice(
+      anyT.yango_eco ??
+      t.priceEconom ??
+      anyT.price_econom ??
+      t.classes?.econom?.price ??
+      (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'econom')?.price ??
+      (t.tariffClass === 'econom' ? t.price : null) ??
+      t.price
+    );
+  }
+  if (className === 'business') {
+    return parseAnyPrice(
+      anyT.yango_confort ??
+      t.priceConfort ??
+      anyT.price_confort ??
+      t.classes?.business?.price ??
+      t.classes?.comfort?.price ??
+      (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'business')?.price
+    );
+  }
+  if (className === 'comfortplus') {
+    return parseAnyPrice(
+      anyT.yango_confort_plus ??
+      t.priceConfortPlus ??
+      anyT.price_confort_plus ??
+      t.classes?.comfortplus?.price ??
+      (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'comfortplus' || c.className?.toLowerCase() === 'confort+')?.price
+    );
+  }
+  if (className === 'moto') {
+    return parseAnyPrice(
+      anyT.yango_moto ??
+      t.priceMoto ??
+      anyT.price_moto ??
+      t.classes?.moto?.price ??
+      (Object.values(t.classes || {}) as any[]).find((c: any) => c.className?.toLowerCase() === 'moto')?.price
+    );
+  }
   return null;
 };
 
 export const getHeroPrice = (t: TripResult, className: 'eco' | 'confort' | 'suv' | 'perkm'): number | null => {
+  if (!t) return null;
+  const anyT = t as any;
   const hQ = t.heroQuote as any;
+
   if (className === 'eco') {
-    let p = t.priceHeroStandard || hQ?.priceStandard || hQ?.priceEco || hQ?.price || t.priceHero || null;
+    let p = parseAnyPrice(
+      anyT.hero_eco ??
+      t.priceHeroStandard ??
+      anyT.price_hero_standard ??
+      t.priceHero ??
+      hQ?.priceStandard ??
+      hQ?.priceEco ??
+      hQ?.price
+    );
     if (!p && hQ?.classes) {
-      p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco')?.price || null;
+      const found = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'standard' || c.className?.toLowerCase() === 'eco');
+      p = parseAnyPrice(found?.price);
     }
     return p;
   }
   if (className === 'confort') {
-    let p = t.priceHeroConfort || hQ?.priceConfort || null;
+    let p = parseAnyPrice(
+      anyT.hero_confort ??
+      t.priceHeroConfort ??
+      anyT.price_hero_confort ??
+      hQ?.priceConfort ??
+      hQ?.priceComfort
+    );
     if (!p && hQ?.classes) {
-      p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort')?.price || null;
+      const found = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'confort' || c.className?.toLowerCase() === 'comfort');
+      p = parseAnyPrice(found?.price);
     }
     return p;
   }
   if (className === 'suv') {
-    let p = t.priceHeroSuv || hQ?.priceSuv || null;
+    let p = parseAnyPrice(
+      anyT.hero_suv ??
+      t.priceHeroSuv ??
+      anyT.price_hero_suv ??
+      hQ?.priceSuv
+    );
     if (!p && hQ?.classes) {
-      p = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'suv')?.price || null;
+      const found = (Object.values(hQ.classes) as any[]).find((c: any) => c.className?.toLowerCase() === 'suv');
+      p = parseAnyPrice(found?.price);
     }
     return p;
   }
   if (className === 'perkm') {
-    let p = t.priceHeroPerKm || hQ?.pricePerKm || null;
+    let p = parseAnyPrice(
+      anyT.hero_per_km ??
+      t.priceHeroPerKm ??
+      anyT.price_hero_per_km ??
+      hQ?.pricePerKm
+    );
     if (!p && t.distanceKm && t.distanceKm > 0) {
-      const heroBasePrice = t.priceHeroStandard || t.priceHeroConfort || t.priceHero || hQ?.priceStandard || hQ?.price;
+      const heroBasePrice = getHeroPrice(t, 'eco') || getHeroPrice(t, 'confort');
       if (heroBasePrice && heroBasePrice > 0) {
         p = Math.round(heroBasePrice / t.distanceKm);
       }
@@ -67,10 +147,41 @@ export const getHeroPrice = (t: TripResult, className: 'eco' | 'confort' | 'suv'
 };
 
 export const getTripMasterPrice = (t: TripResult, className: 'eco' | 'confort' | 'moto'): number | null => {
+  if (!t) return null;
+  const anyT = t as any;
   const tmQ = t.tripMasterQuote as any;
-  if (className === 'eco') return t.priceTripMaster || tmQ?.priceEco || tmQ?.price || null;
-  if (className === 'confort') return t.priceTripMasterConfort || tmQ?.priceConfort || null;
-  if (className === 'moto') return t.priceTripMasterMoto || tmQ?.priceMoto || null;
+
+  if (className === 'eco') {
+    return parseAnyPrice(
+      anyT.tripmaster_eco ??
+      t.priceTripMaster ??
+      anyT.priceTripMasterEco ??
+      anyT.price_tripmaster_eco ??
+      anyT.tripMasterPrices?.eco ??
+      tmQ?.priceEco ??
+      tmQ?.price
+    );
+  }
+  if (className === 'confort') {
+    return parseAnyPrice(
+      anyT.tripmaster_confort ??
+      t.priceTripMasterConfort ??
+      anyT.priceTripMasterConf ??
+      anyT.price_tripmaster_confort ??
+      anyT.tripMasterPrices?.confort ??
+      tmQ?.priceConfort
+    );
+  }
+  if (className === 'moto') {
+    return parseAnyPrice(
+      anyT.tripmaster_moto ??
+      t.priceTripMasterMoto ??
+      anyT.priceTripMasterMotorcycle ??
+      anyT.price_tripmaster_moto ??
+      anyT.tripMasterPrices?.moto ??
+      tmQ?.priceMoto
+    );
+  }
   return null;
 };
 

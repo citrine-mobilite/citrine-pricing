@@ -8,6 +8,7 @@ export interface User {
   active: boolean;
   createdAt: string;
   lastLoginAt?: string;
+  passwordHash?: string;
 }
 
 export interface City {

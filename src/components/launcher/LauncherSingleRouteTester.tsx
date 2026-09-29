@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Neighborhood } from '../../types';
-import { Sparkles, ArrowRight, RotateCw, Layers } from 'lucide-react';
+import { Sparkles, ArrowRight, RotateCw, Layers, Copy, Check } from 'lucide-react';
 import { HeroLogo } from '../HeroLogo';
 
 interface LauncherSingleRouteTesterProps {
@@ -24,6 +24,25 @@ export const LauncherSingleRouteTester: React.FC<LauncherSingleRouteTesterProps>
   onRunSingleTest,
   singleTestResult
 }) => {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopyProviderData = (key: 'yango' | 'hero' | 'tripmaster') => {
+    let payload = '';
+    if (key === 'yango') {
+      const data = singleTestResult?.yango?.rawJson || singleTestResult?.yango || singleTestResult?.rawResponse;
+      payload = typeof data === 'string' ? data : JSON.stringify(data || singleTestResult, null, 2);
+    } else if (key === 'hero') {
+      const data = singleTestResult?.heroCab?.rawText || singleTestResult?.heroCab?.rawResponse || singleTestResult?.heroCab || singleTestResult?.hero;
+      payload = typeof data === 'string' ? data : JSON.stringify(data || {}, null, 2);
+    } else if (key === 'tripmaster') {
+      const data = singleTestResult?.tripMaster?.rawText || singleTestResult?.tripMaster?.rawResponse || singleTestResult?.tripMaster;
+      payload = typeof data === 'string' ? data : JSON.stringify(data || {}, null, 2);
+    }
+
+    navigator.clipboard.writeText(payload);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
   // Extract Yango prices
   const yEco = singleTestResult?.yango?.classes?.econom?.price || singleTestResult?.priceEconom || singleTestResult?.price;
   const yConf = singleTestResult?.yango?.classes?.business?.price || singleTestResult?.yango?.classes?.comfort?.price || singleTestResult?.priceConfort;
@@ -123,7 +142,17 @@ export const LauncherSingleRouteTester: React.FC<LauncherSingleRouteTesterProps>
                 <strong className="text-red-900 font-bold uppercase text-[11px] flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-red-600 inline-block" /> Yango
                 </strong>
-                <span className="text-[10px] text-red-600 font-medium">4 Classes</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopyProviderData('yango')}
+                    title="Copier la réponse brute Yango"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded transition cursor-pointer"
+                  >
+                    {copiedKey === 'yango' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'yango' ? 'Copié !' : 'Copier'}</span>
+                  </button>
+                  <span className="text-[10px] text-red-600 font-medium">4 Classes</span>
+                </div>
               </div>
               <div className="space-y-1 text-[11px]">
                 <div className="flex justify-between">
@@ -159,7 +188,17 @@ export const LauncherSingleRouteTester: React.FC<LauncherSingleRouteTesterProps>
                 <strong className="text-teal-900 font-bold uppercase text-[11px] flex items-center gap-1">
                   <HeroLogo className="w-3 h-3 text-teal-700" /> Hero Cab
                 </strong>
-                <span className="text-[10px] text-teal-700 font-medium">4 Classes</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopyProviderData('hero')}
+                    title="Copier la réponse brute Hero Cab"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-teal-800 bg-teal-100 hover:bg-teal-200 rounded transition cursor-pointer"
+                  >
+                    {copiedKey === 'hero' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'hero' ? 'Copié !' : 'Copier'}</span>
+                  </button>
+                  <span className="text-[10px] text-teal-700 font-medium">4 Classes</span>
+                </div>
               </div>
               <div className="space-y-1 text-[11px]">
                 <div className="flex justify-between">
@@ -195,7 +234,17 @@ export const LauncherSingleRouteTester: React.FC<LauncherSingleRouteTesterProps>
                 <strong className="text-purple-900 font-bold uppercase text-[11px] flex items-center gap-1">
                   <Layers className="w-3 h-3 text-purple-700" /> Trip Master
                 </strong>
-                <span className="text-[10px] text-purple-700 font-medium">3 Classes</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopyProviderData('tripmaster')}
+                    title="Copier la réponse brute Trip Master"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-purple-800 bg-purple-100 hover:bg-purple-200 rounded transition cursor-pointer"
+                  >
+                    {copiedKey === 'tripmaster' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'tripmaster' ? 'Copié !' : 'Copier'}</span>
+                  </button>
+                  <span className="text-[10px] text-purple-700 font-medium">3 Classes</span>
+                </div>
               </div>
               <div className="space-y-1 text-[11px]">
                 <div className="flex justify-between">
