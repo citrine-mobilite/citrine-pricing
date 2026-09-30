@@ -57,8 +57,8 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
       sumYangoEco += y;
       sumDist += t.distanceKm || 0;
 
-      const orig = cleanNeighborhoodName(t.startNeighborhoodName);
-      const dest = cleanNeighborhoodName(t.endNeighborhoodName);
+      const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
       const savings = y - h; // > 0 means Hero is cheaper
 
       if (h < y) {

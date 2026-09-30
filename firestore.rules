@@ -91,10 +91,17 @@ service cloud.firestore {
     }
 
     // CAMPAIGN RESULTS (Consolidated single document per campaign to save quota):
-    match /campaign_results/{campaignId} {
+    match /campaign_results/{resultId} {
       allow read: if true;
-      allow create, update: if isValidId(campaignId);
-      allow delete: if isValidId(campaignId);
+      allow create, update: if isValidId(resultId);
+      allow delete: if isValidId(resultId);
+    }
+
+    // CANONICAL TRIPS COLLECTION:
+    match /canonical_trips/{tripId} {
+      allow read: if true;
+      allow create, update: if isValidId(tripId);
+      allow delete: if isValidId(tripId);
     }
 
     // SYSTEM SETTINGS (Yango, Hero & General config):

@@ -50,7 +50,7 @@ export const TripMetricsGrid: React.FC<TripMetricsGridProps> = ({
         </div>
         {stats.minTrip && (
           <p className="text-[10px] text-slate-500 truncate mt-0.5">
-            {stats.minTrip.startNeighborhoodName} ➔ {stats.minTrip.endNeighborhoodName}
+            {stats.minTrip.origin || stats.minTrip.startNeighborhoodName} ➔ {stats.minTrip.destination || stats.minTrip.endNeighborhoodName}
           </p>
         )}
       </div>
@@ -65,7 +65,7 @@ export const TripMetricsGrid: React.FC<TripMetricsGridProps> = ({
         </div>
         {stats.maxTrip && (
           <p className="text-[10px] text-slate-500 truncate mt-0.5">
-            {stats.maxTrip.startNeighborhoodName} ➔ {stats.maxTrip.endNeighborhoodName}
+            {stats.maxTrip.origin || stats.maxTrip.startNeighborhoodName} ➔ {stats.maxTrip.destination || stats.maxTrip.endNeighborhoodName}
           </p>
         )}
       </div>

@@ -48,22 +48,22 @@ export function exportCanonicalJson(
   const cleanName = (n: string) => (n || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
 
   const formattedTrips = trips.map(t => {
-    const orig = cleanName(t.startNeighborhoodName || t.startName);
-    const dest = cleanName(t.endNeighborhoodName || t.endName);
+    const orig = cleanName(t.origin || t.startNeighborhoodName || t.startName);
+    const dest = cleanName(t.destination || t.endNeighborhoodName || t.endName);
 
-    const yEco = t.yango_eco ?? t.priceEconom ?? t.price ?? null;
-    const yConf = t.yango_confort ?? t.priceConfort ?? null;
-    const yConfPlus = t.yango_confort_plus ?? t.priceConfortPlus ?? null;
-    const yMoto = t.yango_moto ?? t.priceMoto ?? null;
+    const yEco = t.prices?.yango?.eco ?? t.yango_eco ?? t.priceEconom ?? t.price ?? null;
+    const yConf = t.prices?.yango?.confort ?? t.yango_confort ?? t.priceConfort ?? null;
+    const yConfPlus = t.prices?.yango?.confortPlus ?? t.yango_confort_plus ?? t.priceConfortPlus ?? null;
+    const yMoto = t.prices?.yango?.moto ?? t.yango_moto ?? t.priceMoto ?? null;
 
-    const hEco = t.hero_eco ?? t.priceHeroStandard ?? t.priceHero ?? null;
-    const hConf = t.hero_confort ?? t.priceHeroConfort ?? null;
-    const hSuv = t.hero_suv ?? t.priceHeroSuv ?? null;
-    const hPerKm = t.hero_per_km ?? t.priceHeroPerKm ?? null;
+    const hEco = t.prices?.heroCab?.eco ?? t.hero_eco ?? t.priceHeroStandard ?? t.priceHero ?? null;
+    const hConf = t.prices?.heroCab?.confort ?? t.hero_confort ?? t.priceHeroConfort ?? null;
+    const hSuv = t.prices?.heroCab?.suv ?? t.hero_suv ?? t.priceHeroSuv ?? null;
+    const hPerKm = t.prices?.heroCab?.perKm ?? t.hero_per_km ?? t.priceHeroPerKm ?? null;
 
-    const tmEco = t.tripmaster_eco ?? t.priceTripMaster ?? null;
-    const tmConf = t.tripmaster_confort ?? t.priceTripMasterConfort ?? null;
-    const tmMoto = t.tripmaster_moto ?? t.priceTripMasterMoto ?? null;
+    const tmEco = t.prices?.tripMaster?.eco ?? t.tripmaster_eco ?? t.priceTripMaster ?? null;
+    const tmConf = t.prices?.tripMaster?.confort ?? t.tripmaster_confort ?? t.priceTripMasterConfort ?? null;
+    const tmMoto = t.prices?.tripMaster?.moto ?? t.tripmaster_moto ?? t.priceTripMasterMoto ?? null;
 
     return {
       origin: orig,
@@ -482,8 +482,8 @@ export function exportConsolidatedExcel(
       flatRows.push({
         'Date & Heure': camp.dateStr,
         'Campagne / Ville': `${camp.campaignName} (${camp.cityName})`,
-        'Départ': (t.startNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim(),
-        'Destination': (t.endNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim(),
+        'Départ': (t.origin || t.startNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim(),
+        'Destination': (t.destination || t.endNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim(),
         'Dist.': t.distanceKm ? `${t.distanceKm} km` : '—',
         'Yango Éco': getVal(t.yango_eco, t.price, t.priceEconom, t.vehiclePrices?.eco, t.vehiclePrices?.standard),
         'Yango Confort': getVal(t.yango_confort, t.priceConfort, t.vehiclePrices?.confort),
@@ -605,22 +605,22 @@ export function exportConsolidatedPdf(
           </thead>
           <tbody>
             ${camp.trips.map(t => {
-              const dNmStart = (t.startNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
-              const dNmEnd = (t.endNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
+              const dNmStart = (t.origin || t.startNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
+              const dNmEnd = (t.destination || t.endNeighborhoodName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
               
-              const yEco = getPriceStr(t.yango_eco, t.price, t.priceEconom, t.vehiclePrices?.eco, t.vehiclePrices?.standard);
-              const yConf = getPriceStr(t.yango_confort, t.priceConfort, t.vehiclePrices?.confort);
-              const yConfPlus = getPriceStr(t.yango_confort_plus, t.priceConfortPlus, t.vehiclePrices?.confort_plus);
-              const yMoto = getPriceStr(t.yango_moto, t.priceMoto, t.vehiclePrices?.moto);
+              const yEco = getPriceStr(t.prices?.yango?.eco, t.yango_eco, t.price, t.priceEconom, t.vehiclePrices?.eco, t.vehiclePrices?.standard);
+              const yConf = getPriceStr(t.prices?.yango?.confort, t.yango_confort, t.priceConfort, t.vehiclePrices?.confort);
+              const yConfPlus = getPriceStr(t.prices?.yango?.confortPlus, t.yango_confort_plus, t.priceConfortPlus, t.vehiclePrices?.confort_plus);
+              const yMoto = getPriceStr(t.prices?.yango?.moto, t.yango_moto, t.priceMoto, t.vehiclePrices?.moto);
 
-              const hEco = getPriceStr(t.hero_eco, t.priceHero, t.priceHeroStandard, t.heroPrices?.eco, t.heroPrices?.standard, (t.heroQuote as any)?.priceStandard);
-              const hConf = getPriceStr(t.hero_confort, t.priceHeroConfort, t.heroPrices?.confort, (t.heroQuote as any)?.priceConfort);
-              const hSuv = getPriceStr(t.hero_suv, t.priceHeroSuv, t.heroPrices?.suv, (t.heroQuote as any)?.priceSuv);
-              const hPerKm = getPriceStr(t.hero_per_km, t.priceHeroPerKm, t.heroPrices?.perKm, (t.heroQuote as any)?.pricePerKm);
+              const hEco = getPriceStr(t.prices?.heroCab?.eco, t.hero_eco, t.priceHero, t.priceHeroStandard, t.heroPrices?.eco, t.heroPrices?.standard, (t.heroQuote as any)?.priceStandard);
+              const hConf = getPriceStr(t.prices?.heroCab?.confort, t.hero_confort, t.priceHeroConfort, t.heroPrices?.confort, (t.heroQuote as any)?.priceConfort);
+              const hSuv = getPriceStr(t.prices?.heroCab?.suv, t.hero_suv, t.priceHeroSuv, t.heroPrices?.suv, (t.heroQuote as any)?.priceSuv);
+              const hPerKm = getPriceStr(t.prices?.heroCab?.perKm, t.hero_per_km, t.priceHeroPerKm, t.heroPrices?.perKm, (t.heroQuote as any)?.pricePerKm);
 
-              const tmEco = getPriceStr(t.tripmaster_eco, t.priceTripMaster, t.priceTripMasterEco, t.tripMasterPrices?.eco, (t.tripMasterQuote as any)?.priceEco);
-              const tmConf = getPriceStr(t.tripmaster_confort, t.priceTripMasterConfort, t.tripMasterPrices?.confort, (t.tripMasterQuote as any)?.priceConfort);
-              const tmMoto = getPriceStr(t.tripmaster_moto, t.priceTripMasterMoto, t.tripMasterPrices?.moto, (t.tripMasterQuote as any)?.priceMoto);
+              const tmEco = getPriceStr(t.prices?.tripMaster?.eco, t.tripmaster_eco, t.priceTripMaster, t.priceTripMasterEco, t.tripMasterPrices?.eco, (t.tripMasterQuote as any)?.priceEco);
+              const tmConf = getPriceStr(t.prices?.tripMaster?.confort, t.tripmaster_confort, t.priceTripMasterConfort, t.tripMasterPrices?.confort, (t.tripMasterQuote as any)?.priceConfort);
+              const tmMoto = getPriceStr(t.prices?.tripMaster?.moto, t.tripmaster_moto, t.priceTripMasterMoto, t.tripMasterPrices?.moto, (t.tripMasterQuote as any)?.priceMoto);
 
               return `
                 <tr style="font-size: 9.5px;">

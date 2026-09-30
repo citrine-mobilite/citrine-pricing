@@ -66,7 +66,7 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
               <span>{isCancelling ? 'Arrêt immédiat en cours...' : 'Arrêter immédiatement'}</span>
             </button>
           ) : (
-            onRestartCampaign && (
+            campaign.status !== 'completed' && onRestartCampaign && (
               <button
                 onClick={onRestartCampaign}
                 className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-sm min-h-[44px] sm:min-h-0 w-full sm:w-auto active:scale-95"

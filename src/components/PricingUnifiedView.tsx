@@ -85,10 +85,18 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   const [isQuickTesting, setIsQuickTesting] = useState<boolean>(false);
   const [quickTestResult, setQuickTestResult] = useState<any>(null);
   const [launchingTarget, setLaunchingTarget] = useState<string | null>(null);
+  const [liveCampaignOverride, setLiveCampaignOverride] = useState<PricingCampaign | null>(null);
   const [trips, setTrips] = useState<TripResult[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [startFilter, setStartFilter] = useState('');
   const [endFilter, setEndFilter] = useState('');
+
+  const displayedCampaign = useMemo(() => {
+    if (liveCampaignOverride && liveCampaignOverride.id === activeCampaignId) {
+      return liveCampaignOverride;
+    }
+    return activeCampaign;
+  }, [liveCampaignOverride, activeCampaign, activeCampaignId]);
 
   // Suivi de l'état des campagnes pour déclencher le SweetAlert Récapitulatif
   const alertedCampaignsRef = React.useRef<Set<string>>(new Set());
@@ -221,6 +229,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       if (result?.campaign) {
         onCampaignStarted(result.campaign.id);
         handleCampaignChange(result.campaign.id);
+        setLiveCampaignOverride(result.campaign);
+        setTrips([]);
 
         const campaignId = result.campaign.id;
         const totalChunks = result.totalChunks || 1;
@@ -236,10 +246,9 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
             if (cancelRequestedRef.current) break;
             try {
               const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
-              if (chunkRes.chunkTrips && chunkRes.chunkTrips.length > 0) {
-                setTrips(prev => [...prev, ...chunkRes.chunkTrips]);
+              if (chunkRes.campaign) {
+                setLiveCampaignOverride(chunkRes.campaign);
               }
-              if (onRefresh) await onRefresh();
               success = true;
               break;
             } catch (chunkErr) {
@@ -255,7 +264,12 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
         // Finalisation globale de la campagne (uniquement si non annulée)
         if (!cancelRequestedRef.current) {
-          await api.finalizeCampaign(campaignId);
+          const finalRes = await api.finalizeCampaign(campaignId);
+          if (finalRes?.campaign) {
+            setLiveCampaignOverride(finalRes.campaign);
+          }
+          const finalTrips = await api.getCampaignResults(campaignId);
+          setTrips(finalTrips || []);
           if (onRefresh) await onRefresh();
         }
       }
@@ -315,8 +329,10 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   );
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
-      if (startFilter && t.startNeighborhoodName !== startFilter) return false;
-      if (endFilter && t.endNeighborhoodName !== endFilter) return false;
+      const orig = t.origin || t.startNeighborhoodName;
+      const dest = t.destination || t.endNeighborhoodName;
+      if (startFilter && orig !== startFilter && !orig?.includes(startFilter)) return false;
+      if (endFilter && dest !== endFilter && !dest?.includes(endFilter)) return false;
       return true;
     });
   }, [trips, startFilter, endFilter]);
@@ -336,7 +352,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         totalCombinations={totalCombinations}
         launchingTarget={launchingTarget}
         onLaunch={handleLaunch}
-        activeCampaign={activeCampaign}
+        activeCampaign={displayedCampaign}
       />
 
       {showSingleTester && (
@@ -353,12 +369,12 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         />
       )}
 
-      {activeCampaign && (
+      {displayedCampaign && (
         <PricingLiveTracker
-          campaign={activeCampaign}
+          campaign={displayedCampaign}
           isCancelling={isCancelling}
           onCancelCampaign={handleCancelCampaign}
-          onRestartCampaign={() => handleLaunch(activeCampaign.sampleLimit || 'all')}
+          onRestartCampaign={() => handleLaunch(displayedCampaign.sampleLimit || 'all')}
         />
       )}
 
@@ -380,7 +396,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         trips={filteredTrips}
         isLoading={isLoadingTrips}
         cityName={currentCity.name}
-        isPricingRunning={activeCampaign?.status === 'in_progress'}
+        isPricingRunning={displayedCampaign?.status === 'in_progress'}
         onInspectTrip={setInspectedTrip}
       />
 
@@ -397,11 +413,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       />
 
       {/* Modal Fiche Synthèse Exécutive PDF 1 page */}
-      {activeCampaign && (
+      {displayedCampaign && (
         <ExecutiveReportModal
           isOpen={isExecutiveReportOpen}
           onClose={() => setIsExecutiveReportOpen(false)}
-          campaign={activeCampaign}
+          campaign={displayedCampaign}
           trips={trips}
         />
       )}

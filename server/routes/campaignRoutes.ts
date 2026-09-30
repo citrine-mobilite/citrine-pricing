@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, loadCanonicalCampaignResults, initCanonicalCampaignResults } from '../db/firestore.js';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, loadCanonicalCampaignResults, initCanonicalCampaignResults, deleteCanonicalCampaign } from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
@@ -54,6 +54,16 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
   }
 
   list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+  // Nettoyage des anciennes campagnes orphelines (évite l'apparition de campagnes fantômes "en cours")
+  list = list.map(c => {
+    if (c.status === 'in_progress' && !activePricingSessions.has(c.id)) {
+      const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
+      return { ...c, status: isActuallyFinished ? 'completed' : 'cancelled' };
+    }
+    return c;
+  });
+
   return res.json(list);
 });
 
@@ -241,12 +251,16 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
   if (db) {
     try {
       const snap = await getDocs(collection(db, 'campaigns'));
-      for (const d of snap.docs) {
-        await safeFirestoreWrite('deleteCamp', () => deleteDoc(d.ref));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
       }
       const resSnap = await getDocs(collection(db, 'campaign_results'));
-      for (const d of resSnap.docs) {
-        await safeFirestoreWrite('deleteRes', () => deleteDoc(d.ref));
+      if (!resSnap.empty) {
+        const batch = writeBatch(db);
+        resSnap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
       }
     } catch (e: any) {
       console.warn('[Firestore] Delete all campaigns error:', e.message);
@@ -272,13 +286,7 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   delete memoryCampaignCanonicalTrips[id];
 
   if (db) {
-    await safeFirestoreWrite('deleteCamp', () => deleteDoc(doc(db!, 'campaigns', id)));
-    await safeFirestoreWrite('deleteCanonical', () => deleteDoc(doc(db!, 'canonical_trips', id)));
-    await safeFirestoreWrite('deleteRes', () => deleteDoc(doc(db!, 'campaign_results', id)));
-    // Supprimer également les éventuelles partitions additionnelles
-    for (let p = 2; p <= 10; p++) {
-      await safeFirestoreWrite(`deleteResPart${p}`, () => deleteDoc(doc(db!, 'campaign_results', `${id}_part${p}`)));
-    }
+    await deleteCanonicalCampaign(id);
   }
 
   // Supprimer tous les historiques liés à cette campagne

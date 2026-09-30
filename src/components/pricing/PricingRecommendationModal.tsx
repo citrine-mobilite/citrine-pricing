@@ -112,8 +112,8 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
       if (!h || !y) continue;
       totalComparable++;
 
-      const orig = cleanNeighborhoodName(t.startNeighborhoodName);
-      const dest = cleanNeighborhoodName(t.endNeighborhoodName);
+      const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
       const delta = h - y;
 
       if (h < y) {

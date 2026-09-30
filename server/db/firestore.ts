@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, Firestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where } from 'firebase/firestore';
+import { getFirestore, Firestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 import { CanonicalTrip } from '../types.js';
@@ -259,4 +259,33 @@ function legacyToCanonical(t: any): CanonicalTrip {
     status: t.status || 'success',
     createdAt: t.createdAt
   };
+}
+
+/**
+ * Suppression propre et atomique de tous les documents d'une campagne
+ */
+export async function deleteCanonicalCampaign(campaignId: string): Promise<void> {
+  if (!db) return;
+
+  await safeFirestoreWrite('deleteCanonicalCampaign', async () => {
+    // 1. Supprimer le document principal de campagne
+    await deleteDoc(doc(db!, 'campaigns', campaignId)).catch(() => {});
+    // 2. Supprimer le document de résultats consolidé
+    await deleteDoc(doc(db!, 'campaign_results', campaignId)).catch(() => {});
+    
+    // 3. Rechercher et supprimer en un seul batch tous les lots et partitions existants
+    try {
+      const q = query(collection(db!, 'campaign_results'), where('campaignId', '==', campaignId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const batch = writeBatch(db!);
+        snap.docs.forEach((d) => {
+          batch.delete(d.ref);
+        });
+        await batch.commit();
+      }
+    } catch {
+      // Ignore if no batches found
+    }
+  });
 }

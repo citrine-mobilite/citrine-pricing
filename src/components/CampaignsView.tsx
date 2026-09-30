@@ -138,7 +138,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       align: 'right',
       render: (c) => (
         <div className="flex items-center justify-end gap-2">
-          {c.status !== 'in_progress' && (
+          {c.status !== 'in_progress' && c.status !== 'completed' && (
             <button
               onClick={() => handleRestart(c)}
               className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition"

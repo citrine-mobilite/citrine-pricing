@@ -41,6 +41,7 @@ export interface CampaignSessionState {
   canonicalTrips: CanonicalTrip[];
   trips: TripResult[];
   completedPairs: number;
+  successfulPairs?: number;
   failedPairs: number;
   completedBatches: number;
   startedAtMs: number;
@@ -303,10 +304,15 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
       session.canonicalTrips.push(canonicalTrip);
       session.trips.push(tripRow);
 
-      if (yEco || hEco || tmEco) session.completedPairs++;
-      else session.failedPairs++;
+      if (yEco || hEco || tmEco) {
+        session.successfulPairs = (session.successfulPairs || 0) + 1;
+      } else {
+        session.failedPairs++;
+      }
+      session.completedPairs++;
     } catch {
       session.failedPairs++;
+      session.completedPairs++;
     }
   }));
 
@@ -382,6 +388,7 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
   }
 
   const completed = canonicalTrips.length;
+  campaign.completedPairs = completed;
   campaign.status = 'completed';
   campaign.finishedAt = new Date().toISOString();
   campaign.completedAt = campaign.finishedAt;

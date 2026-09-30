@@ -202,6 +202,24 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
     }
   ], [onInspectTrip]);
 
+  if (isPricingRunning) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-12 flex flex-col items-center justify-center space-y-4 shadow-sm min-h-[320px]">
+        <div className="relative flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full border-3 border-slate-100 border-t-[#1F4F4A] animate-spin" />
+        </div>
+        <div className="text-center space-y-1.5 max-w-md">
+          <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+            Tarification en cours d'exécution...
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Traitement séquentiel des trajets par lots de 10. Le tableau complet s'affichera automatiquement dès la fin du relevé.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Mobile View Toggle Switch (Cards vs Table) */}
