@@ -4,9 +4,10 @@ import { calculateDistanceKm } from './geoUtils.js';
 export type DoualaArrondissement = 'Douala 1er' | 'Douala 2e' | 'Douala 3e' | 'Douala 4e' | 'Douala 5e' | 'Autre';
 
 /**
- * Nettoie le nom d'un quartier pour en extraire la racine simple
+ * Nettoie le nom d'un quartier en conservant son libellé complet spécifique (ex: "Akwa (Nord)", "Ndogbatti I")
+ * et en retirant uniquement les mentions administratives situées après la première virgule.
  * Ex: "Bali, DOUALA 1ER, LITTORAL, Cameroun" -> "bali"
- * Ex: "Akwa (Nord), Douala 1er" -> "akwa"
+ * Ex: "Akwa (Nord), Douala 1er" -> "akwa (nord)" (différent de "Akwa (Sud)")
  */
 export function cleanNeighborhoodBaseName(name: string | null | undefined): string {
   if (!name) return '';
@@ -15,10 +16,6 @@ export function cleanNeighborhoodBaseName(name: string | null | undefined): stri
   if (commaIdx !== -1) {
     clean = clean.substring(0, commaIdx).trim();
   }
-  // Enlever parenthèses éventuelles
-  clean = clean.replace(/\(.*?\)/g, '').trim();
-  // Enlever chiffres de subdivision "Ndogbatti I" -> "Ndogbatti"
-  clean = clean.replace(/\s+(I|II|III|IV|V|\d+)\.?$/i, '').trim();
   return clean.toLowerCase();
 }
 
@@ -57,38 +54,44 @@ export function detectArrondissement(n: { name: string; district?: string }): Do
 
 /**
  * Règles de connectivité d'arrondissements :
- * - Douala 1er -> teste Douala 1er (intra), Douala 2e, Douala 3e, Douala 5e
- * - Douala 2e   -> teste Douala 1er, Douala 2e (intra), Douala 3e
- * - Douala 3e   -> teste Douala 1er, Douala 3e (intra), Douala 5e
- * - Douala 4e   -> teste Douala 1er, Douala 2e, Douala 4e (intra)
- * - Douala 5e   -> teste Douala 1er, Douala 2e, Douala 3e, Douala 5e (intra)
+ * - Douala 1er -> teste Douala 1er (intra), Douala 2e, Douala 3e, Douala 5e, Douala 4e
+ * - Douala 2e   -> teste Douala 1er, Douala 2e (intra), Douala 3e, Douala 5e
+ * - Douala 3e   -> teste Douala 1er, Douala 3e (intra), Douala 5e, Douala 2e
+ * - Douala 4e   -> teste Douala 1er, Douala 5e, Douala 4e (intra)
+ * - Douala 5e   -> teste Douala 1er, Douala 4e, Douala 3e, Douala 5e (intra)
  * Les destinations d'un même arrondissement peuvent se tester entre elles (ex: Akwa vers Bonanjo).
  */
 export const ALLOWED_ARRONDISSEMENT_TARGETS: Record<DoualaArrondissement, DoualaArrondissement[]> = {
-  'Douala 1er': ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 5e'],
-  'Douala 2e': ['Douala 1er', 'Douala 2e', 'Douala 3e'],
-  'Douala 3e': ['Douala 1er', 'Douala 3e', 'Douala 5e'],
-  'Douala 4e': ['Douala 1er', 'Douala 2e', 'Douala 4e'],
-  'Douala 5e': ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 5e'],
+  'Douala 1er': ['Douala 1er', 'Douala 5e', 'Douala 3e', 'Douala 4e'],
+  'Douala 2e': ['Douala 2e', 'Douala 3e', 'Douala 5e', 'Douala 1er'],
+  'Douala 3e': ['Douala 3e', 'Douala 5e', 'Douala 2e', 'Douala 1er'],
+  'Douala 4e': ['Douala 4e', 'Douala 5e', 'Douala 1er'],
+  'Douala 5e': ['Douala 5e', 'Douala 4e', 'Douala 3e', 'Douala 1er'],
   'Autre': ['Autre', 'Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e']
 };
 
 export interface RouteMatrixOptions {
-  maxCallsPerDestPerOriginArr?: number; // Défaut: 5 (une destination ne peut être appelée que 5 fois depuis chaque arrondissement)
-  maxDestsPerOrigin?: number;           // Défaut: 25 (chaque quartier d'origine ne peut être tiré que 25 fois max, ex: Bali max 25 fois)
-  maxGlobalPairs?: number;              // Défaut: 15 000 (plafond global de sécurité)
-  minDistanceKm?: number;               // Défaut: 0.4 km (interdit Akwa -> Akwa / sur-place)
+  maxCallsPerDestPerTargetArr?: number; // Défaut: 5 (max 5 destinations par arrondissement cible pour chaque quartier)
+  maxDestsPerOrigin?: number;           // Défaut: 25 (sécurité globale par quartier)
+  maxGlobalPairs?: number;              // Défaut: 20 000 (plafond global de sécurité)
+  minDistanceKm?: number;               // Défaut: 0.3 km (interdit trajets sur-place)
 }
 
 /**
- * Génère la matrice intelligente de trajets pour un benchmark réaliste et représentatif :
- * 1. Élimine formellement les trajets sur-place (même quartier ou même nom de base ou distance < 400m, ex: jamais Akwa -> Akwa).
- * 2. Les quartiers d'un même arrondissement peuvent se tester entre eux (ex: Akwa -> Bonanjo).
- * 3. Applique les règles de connectivité inter-arrondissements (Douala 1er -> 1er, 2e, 3e, 5e, etc.).
- * 4. Règle clé demandée : Une destination ne peut être appelée que 5 fois par chaque arrondissement
- *    (ex: Akwa peut être appelée max 5 fois depuis Douala 1er, max 5 fois depuis Douala 2e, etc.).
- * 5. Chaque quartier d'origine ne peut avoir que 25 destinations max (ex: Bali max 25 trajets).
- * 6. Plafond global garanti inférieur à 15 000 trajets.
+ * Génère la matrice intelligente et contrôlée de trajets pour un benchmark VTC :
+ * 
+ * Règles strictes :
+ * 1. Connectivité contrôlée par arrondissement :
+ *    - Douala 1er -> 1er, 5e, 3e
+ *    - Douala 2e   -> 2e, 3e, 5e
+ *    - Douala 3e   -> 3e, 5e, 2e
+ *    - Douala 4e   -> 4e, 5e
+ *    - Douala 5e   -> 5e, 4e, 3e
+ * 2. Un quartier ne peut jamais être sa propre destination (distance >= 300m, noms distincts).
+ * 3. Maximum 5 destinations par arrondissement cible pour chaque quartier (ex: Bali max 5 dans 1er, 5 dans 5e, 5 dans 3e = max 15 paires).
+ * 4. Paires bidirectionnelles et uniques :
+ *    A -> B et B -> A sont traitées comme une seule et même paire. Une paire déjà créée n'est jamais dupliquée.
+ * 5. Respect simultané des quotas pour les deux quartiers de la paire.
  */
 export function generateBenchmarkPairs(
   neighborhoods: Neighborhood[],
@@ -97,19 +100,33 @@ export function generateBenchmarkPairs(
   const activeNbs = neighborhoods.filter((n) => n.active);
   if (activeNbs.length < 2) return [];
 
-  const maxCallsPerDestPerArr = options?.maxCallsPerDestPerOriginArr ?? 5;
-  const maxPerOrigin = options?.maxDestsPerOrigin ?? 25;
-  const maxGlobal = options?.maxGlobalPairs ?? 15000;
-  const minDistanceKm = options?.minDistanceKm ?? 0.4;
+  const maxPerTargetArr = options?.maxCallsPerDestPerTargetArr ?? 5;
+  const maxGlobal = options?.maxGlobalPairs ?? 20000;
+  const minDistanceKm = options?.minDistanceKm ?? 0.3;
 
   const isDouala = activeNbs.some((n) => detectArrondissement(n) !== 'Autre');
-
-  // Suivi : destId -> { [originArrondissement]: nombre_d_appels }
-  const destCallsFromArr = new Map<string, Map<string, number>>();
-  // Suivi : originId -> nombre_de_trajets_generes
-  const originTripsCount = new Map<string, number>();
-
   const pairs: Array<{ origin: Neighborhood; dest: Neighborhood }> = [];
+  const seenPairKeys = new Set<string>();
+
+  // Suivi des connexions par quartier et par arrondissement cible : nbId -> Map(arrondissementCible -> count)
+  const quotaTracker = new Map<string, Map<string, number>>();
+
+  const getQuotaCount = (nbId: string, targetArr: string): number => {
+    return quotaTracker.get(nbId)?.get(targetArr) || 0;
+  };
+
+  const incrementQuota = (nbId: string, targetArr: string) => {
+    let map = quotaTracker.get(nbId);
+    if (!map) {
+      map = new Map<string, number>();
+      quotaTracker.set(nbId, map);
+    }
+    map.set(targetArr, (map.get(targetArr) || 0) + 1);
+  };
+
+  const getPairKey = (id1: string, id2: string): string => {
+    return id1 < id2 ? `${id1}---${id2}` : `${id2}---${id1}`;
+  };
 
   for (let i = 0; i < activeNbs.length; i++) {
     if (pairs.length >= maxGlobal) break;
@@ -119,72 +136,85 @@ export function generateBenchmarkPairs(
     const originBaseName = cleanNeighborhoodBaseName(origin.name);
 
     if (isDouala && originArr !== 'Autre') {
-      const targetArrs = ALLOWED_ARRONDISSEMENT_TARGETS[originArr] || ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 5e'];
+      const targetArrs = ALLOWED_ARRONDISSEMENT_TARGETS[originArr] || ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e'];
 
-      // Préparer les candidats éligibles triés par distance
-      const candidates: Array<{ dest: Neighborhood; dist: number; destArr: DoualaArrondissement }> = [];
-      for (const dest of activeNbs) {
-        if (dest.id === origin.id) continue;
-        if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
-
-        const destArr = detectArrondissement(dest);
-        if (!targetArrs.includes(destArr)) continue;
-
-        const dist = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
-        if (dist < minDistanceKm) continue;
-
-        candidates.push({ dest, dist, destArr });
-      }
-
-      // Trier par gradient de distance pour équilibrer trajets courts, moyens et longs
-      candidates.sort((a, b) => a.dist - b.dist);
-
-      // Parcourir les arrondissements cibles autorisés
       for (const targetArr of targetArrs) {
-        if ((originTripsCount.get(origin.id) || 0) >= maxPerOrigin || pairs.length >= maxGlobal) break;
+        if (pairs.length >= maxGlobal) break;
+        if (getQuotaCount(origin.id, targetArr) >= maxPerTargetArr) continue;
 
-        const arrCandidates = candidates.filter((c) => c.destArr === targetArr);
-        for (const c of arrCandidates) {
-          if ((originTripsCount.get(origin.id) || 0) >= maxPerOrigin || pairs.length >= maxGlobal) break;
+        // Récupérer les candidats éligibles dans cet arrondissement cible
+        const candidates: Array<{ dest: Neighborhood; dist: number }> = [];
 
-          let destMap = destCallsFromArr.get(c.dest.id);
-          if (!destMap) {
-            destMap = new Map();
-            destCallsFromArr.set(c.dest.id, destMap);
-          }
+        for (const dest of activeNbs) {
+          if (dest.id === origin.id) continue;
+          if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
 
-          const currentCalls = destMap.get(originArr) || 0;
-          // Règle stricte : cette destination ne peut être appelée que max 5 fois depuis cet arrondissement
-          if (currentCalls >= maxCallsPerDestPerArr) continue;
+          const destArr = detectArrondissement(dest);
+          if (destArr !== targetArr) continue;
 
-          pairs.push({ origin, dest: c.dest });
-          destMap.set(originArr, currentCalls + 1);
-          originTripsCount.set(origin.id, (originTripsCount.get(origin.id) || 0) + 1);
+          const pairKey = getPairKey(origin.id, dest.id);
+          if (seenPairKeys.has(pairKey)) continue;
+
+          // Vérifier si la destination a aussi de la place dans son quota pour l'arrondissement d'origine
+          if (getQuotaCount(dest.id, originArr) >= maxPerTargetArr) continue;
+
+          const dist = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
+          if (dist < minDistanceKm) continue;
+
+          candidates.push({ dest, dist });
+        }
+
+        // Trier par distance pour un échantillonnage progressif
+        candidates.sort((a, b) => a.dist - b.dist);
+
+        for (const cand of candidates) {
+          if (pairs.length >= maxGlobal) break;
+          if (getQuotaCount(origin.id, targetArr) >= maxPerTargetArr) break;
+          if (getQuotaCount(cand.dest.id, originArr) >= maxPerTargetArr) continue;
+
+          const pairKey = getPairKey(origin.id, cand.dest.id);
+          if (seenPairKeys.has(pairKey)) continue;
+
+          seenPairKeys.add(pairKey);
+          incrementQuota(origin.id, targetArr);
+          incrementQuota(cand.dest.id, originArr);
+
+          pairs.push({ origin, dest: cand.dest });
         }
       }
     } else {
       // Pour les autres villes (ex: Yaoundé)
-      const candidates = activeNbs.filter((dest) => {
-        if (dest.id === origin.id) return false;
-        if (cleanNeighborhoodBaseName(dest.name) === originBaseName) return false;
+      const maxPerOrigin = options?.maxDestsPerOrigin ?? 15;
+      const candidates: Array<{ dest: Neighborhood; dist: number }> = [];
+
+      for (const dest of activeNbs) {
+        if (dest.id === origin.id) continue;
+        if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
+
+        const pairKey = getPairKey(origin.id, dest.id);
+        if (seenPairKeys.has(pairKey)) continue;
+
         const dist = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
-        return dist >= minDistanceKm;
-      });
+        if (dist < minDistanceKm) continue;
 
-      for (const dest of candidates) {
-        if ((originTripsCount.get(origin.id) || 0) >= maxPerOrigin || pairs.length >= maxGlobal) break;
+        candidates.push({ dest, dist });
+      }
 
-        let destMap = destCallsFromArr.get(dest.id);
-        if (!destMap) {
-          destMap = new Map();
-          destCallsFromArr.set(dest.id, destMap);
-        }
-        const currentCalls = destMap.get(originArr) || 0;
-        if (currentCalls >= maxCallsPerDestPerArr) continue;
+      candidates.sort((a, b) => a.dist - b.dist);
 
-        pairs.push({ origin, dest });
-        destMap.set(originArr, currentCalls + 1);
-        originTripsCount.set(origin.id, (originTripsCount.get(origin.id) || 0) + 1);
+      for (const cand of candidates) {
+        if (pairs.length >= maxGlobal) break;
+        if (getQuotaCount(origin.id, 'all') >= maxPerOrigin) break;
+        if (getQuotaCount(cand.dest.id, 'all') >= maxPerOrigin) continue;
+
+        const pairKey = getPairKey(origin.id, cand.dest.id);
+        if (seenPairKeys.has(pairKey)) continue;
+
+        seenPairKeys.add(pairKey);
+        incrementQuota(origin.id, 'all');
+        incrementQuota(cand.dest.id, 'all');
+
+        pairs.push({ origin, dest: cand.dest });
       }
     }
   }
