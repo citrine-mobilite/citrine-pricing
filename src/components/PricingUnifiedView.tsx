@@ -188,9 +188,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       setTrips([]);
       return;
     }
-    const currentCamp = campaigns.find(c => c.id === activeCampaignId);
+    const currentCamp = (liveCampaignOverride && liveCampaignOverride.id === activeCampaignId)
+      ? liveCampaignOverride
+      : campaigns.find(c => c.id === activeCampaignId);
+
     if (currentCamp?.status === 'in_progress') {
-      setTrips([]);
       setIsLoadingTrips(false);
       return;
     }
@@ -209,7 +211,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
 
     return () => { isMounted = false; };
-  }, [activeCampaignId, campaigns]);
+  }, [activeCampaignId, campaigns, liveCampaignOverride]);
 
   const handleLaunch = async (overrideLimit: number | 'all') => {
     if (totalCombinations === 0) return;
@@ -235,32 +237,39 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         const campaignId = result.campaign.id;
         const totalChunks = result.totalChunks || 1;
 
-        // Exécution séquentielle des lots (Client-Driven Chunking)
-        for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          if (cancelRequestedRef.current) {
-            console.log('[Campaign] Annulation demandée, arrêt immédiat de la boucle de lots.');
-            break;
-          }
-          let success = false;
-          for (let attempt = 1; attempt <= 2; attempt++) {
+        // Exécution en parallèle contrôlé des lots (Client-Driven Chunking avec 3 workers parallèles)
+        const CONCURRENCY = 3;
+        const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
+        let currentIndex = 0;
+
+        const runWorker = async () => {
+          while (currentIndex < chunkIndices.length) {
             if (cancelRequestedRef.current) break;
-            try {
-              const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
-              if (chunkRes.campaign) {
-                setLiveCampaignOverride(chunkRes.campaign);
+            const chunkIdx = chunkIndices[currentIndex++];
+            
+            let success = false;
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              if (cancelRequestedRef.current) break;
+              try {
+                const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
+                if (chunkRes.campaign) {
+                  setLiveCampaignOverride(chunkRes.campaign);
+                }
+                success = true;
+                break;
+              } catch (chunkErr) {
+                console.warn(`Tentative ${attempt}/2 échouée pour le lot ${chunkIdx}:`, chunkErr);
+                if (attempt < 2) await new Promise(r => setTimeout(r, 500));
               }
-              success = true;
-              break;
-            } catch (chunkErr) {
-              console.warn(`Tentative ${attempt}/2 échouée pour le lot ${chunkIdx}:`, chunkErr);
-              if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+            }
+            if (!success && !cancelRequestedRef.current) {
+              console.error(`Le lot ${chunkIdx} n'a pas pu être traité après 2 essais.`);
             }
           }
-          if (cancelRequestedRef.current) break;
-          if (!success) {
-            console.error(`Le lot ${chunkIdx} n'a pas pu être traité après 2 essais.`);
-          }
-        }
+        };
+
+        const pool = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker());
+        await Promise.all(pool);
 
         // Finalisation globale de la campagne (uniquement si non annulée)
         if (!cancelRequestedRef.current) {

@@ -50,7 +50,7 @@ export interface CampaignSessionState {
 // Map local des sessions actives
 export const campaignSessions = new Map<string, CampaignSessionState>();
 
-function fetchWithTimeout<T>(promise: Promise<T>, ms = 7000, fallback: T): Promise<T> {
+function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T> {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((resolve) => {
     timeoutId = setTimeout(() => resolve(fallback), ms);

@@ -206,7 +206,6 @@ function AppContent() {
                     onRefresh={fetchData}
                     onCampaignStarted={(campId) => {
                       setSelectedCampaignId(campId);
-                      fetchData();
                     }}
                   />
                 )}

@@ -40,15 +40,24 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
     }
   }
 
-  if (list.length === 0) {
-    list = [...memoryCampaigns];
+  // Fusion avec memoryCampaigns (l'état RAM serveur plus récent l'emporte sur un snapshot Firestore retardataire)
+  for (const memCamp of memoryCampaigns) {
+    const idx = list.findIndex(c => c.id === memCamp.id);
+    if (idx >= 0) {
+      // Si la version mémoire est completed ou plus avancée en completedPairs, elle prime
+      if (memCamp.status === 'completed' || (memCamp.completedPairs || 0) >= (list[idx].completedPairs || 0)) {
+        list[idx] = { ...list[idx], ...memCamp };
+      }
+    } else {
+      list.unshift({ ...memCamp });
+    }
   }
 
   // Fusion avec les campagnes actives en mémoire (Chunking sessions & Worker sessions)
   for (const [id, session] of campaignSessions.entries()) {
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
-      list[idx] = { ...session.campaign };
+      list[idx] = { ...list[idx], ...session.campaign };
     } else {
       list.unshift({ ...session.campaign });
     }
@@ -56,7 +65,7 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
   for (const [id, session] of activePricingSessions.entries()) {
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
-      list[idx] = { ...session.campaign };
+      list[idx] = { ...list[idx], ...session.campaign };
     } else {
       list.unshift({ ...session.campaign });
     }
@@ -68,11 +77,14 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
   list = list.map(c => {
     const isActiveInRam = campaignSessions.has(c.id) || activePricingSessions.has(c.id);
     if (c.status === 'in_progress' && !isActiveInRam) {
+      const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
+      if (isActuallyFinished) {
+        return { ...c, status: 'completed' };
+      }
       const ageMs = Date.now() - new Date(c.startedAt || 0).getTime();
-      // Si la campagne date de plus de 15 minutes et n'est plus en RAM, elle a été interrompue
-      if (ageMs > 15 * 60 * 1000) {
-        const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
-        return { ...c, status: isActuallyFinished ? 'completed' : 'cancelled' };
+      // Si la campagne date de plus de 10 minutes et n'est plus en RAM, elle a été terminée ou interrompue
+      if (ageMs > 10 * 60 * 1000) {
+        return { ...c, status: 'cancelled' };
       }
     }
     return c;
