@@ -18,7 +18,8 @@ import {
   processCampaignChunk,
   finalizeCampaignExecution,
   cancelChunkCampaignSession,
-  cleanNeighborhoodName
+  cleanNeighborhoodName,
+  campaignSessions
 } from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount } from '../../src/utils/routeMatrix.js';
 
@@ -43,7 +44,15 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
     list = [...memoryCampaigns];
   }
 
-  // Fusion avec les campagnes actives en mémoire
+  // Fusion avec les campagnes actives en mémoire (Chunking sessions & Worker sessions)
+  for (const [id, session] of campaignSessions.entries()) {
+    const idx = list.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      list[idx] = { ...session.campaign };
+    } else {
+      list.unshift({ ...session.campaign });
+    }
+  }
   for (const [id, session] of activePricingSessions.entries()) {
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
@@ -57,9 +66,14 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
 
   // Nettoyage des anciennes campagnes orphelines (évite l'apparition de campagnes fantômes "en cours")
   list = list.map(c => {
-    if (c.status === 'in_progress' && !activePricingSessions.has(c.id)) {
-      const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
-      return { ...c, status: isActuallyFinished ? 'completed' : 'cancelled' };
+    const isActiveInRam = campaignSessions.has(c.id) || activePricingSessions.has(c.id);
+    if (c.status === 'in_progress' && !isActiveInRam) {
+      const ageMs = Date.now() - new Date(c.startedAt || 0).getTime();
+      // Si la campagne date de plus de 15 minutes et n'est plus en RAM, elle a été interrompue
+      if (ageMs > 15 * 60 * 1000) {
+        const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
+        return { ...c, status: isActuallyFinished ? 'completed' : 'cancelled' };
+      }
     }
     return c;
   });
@@ -70,6 +84,10 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
 // 2. Détail d'une campagne
 router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const chunkSession = campaignSessions.get(id);
+  if (chunkSession) {
+    return res.json(chunkSession.campaign);
+  }
   const session = activePricingSessions.get(id);
   if (session) {
     return res.json(session.campaign);
