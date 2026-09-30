@@ -111,16 +111,17 @@ export async function saveCanonicalCampaignBatch(
 
 /**
  * Stockage partitionné garanti < 500 Ko pour respecter strictly la limite Firestore de 1 Mo
- * Chaque document est plafonné à 1 000 trajets canoniques maximum (~280 Ko).
+ * Plafonné à 2 500 trajets canoniques par document (~450 Ko, 2x sous la limite de 1 Mo).
+ * Une campagne standard de 1 300 trajets tient dans EXACTEMENT 1 seul document Firestore (1 écriture unique).
  */
 export async function saveCanonicalCampaignResults(
   campaignId: string,
   cityName: string,
   canonicalTrips: CanonicalTrip[]
 ): Promise<void> {
-  if (!db) return;
+  if (!db || canonicalTrips.length === 0) return;
 
-  const CHUNK_SIZE = 1000; // ~280 Ko par chunk, largement sous la limite de 1 048 576 octets
+  const CHUNK_SIZE = 2500; // ~450 Ko par document, largement sous la limite de 1 048 576 octets
   const totalChunks = Math.ceil(canonicalTrips.length / CHUNK_SIZE) || 1;
 
   for (let i = 0; i < totalChunks; i++) {
@@ -144,11 +145,11 @@ export async function saveCanonicalCampaignResults(
     });
   }
 
-  console.log(`[Firestore] ${canonicalTrips.length} trajets canoniques stockés en ${totalChunks} partie(s) (< 400 Ko par doc).`);
+  console.log(`[Firestore Quota Shield] ${canonicalTrips.length} trajets canoniques stockés en ${totalChunks} écriture(s) (< 500 Ko).`);
 }
 
 /**
- * Chargement et recombinaison de tous les fragments d'une campagne
+ * Chargement direct (1 seule lecture Firestore pour récupérer l'intégralité des trajets de la campagne)
  */
 export async function loadCanonicalCampaignResults(campaignId: string): Promise<CanonicalTrip[]> {
   if (!db) return [];
@@ -156,7 +157,40 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
   try {
     let allTrips: CanonicalTrip[] = [];
 
-    // 1. Solution B : D'abord rechercher par lots indépendants (campaignId == campaignId)
+    // 1. Recherche directe ultra-rapide par ID de document (1 seule lecture directe O(1))
+    const firstSnap = await getDoc(doc(db, 'campaign_results', campaignId));
+    if (firstSnap.exists()) {
+      const firstData = firstSnap.data();
+
+      if (Array.isArray(firstData.canonicalTrips)) {
+        allTrips = allTrips.concat(firstData.canonicalTrips);
+      } else if (firstData.data && typeof firstData.data === 'object') {
+        // Rétrocompatibilité avec les anciennes campagnes partitionnées par worker
+        const rawWorkers = Object.values(firstData.data).flat() as any[];
+        allTrips = rawWorkers.map(legacyToCanonical);
+      }
+
+      if (firstData.hasMoreParts && firstData.totalParts > 1) {
+        for (let p = 2; p <= firstData.totalParts; p++) {
+          const partSnap = await getDoc(doc(db, 'campaign_results', `${campaignId}_part${p}`));
+          if (partSnap.exists()) {
+            const partData = partSnap.data();
+            if (Array.isArray(partData.canonicalTrips)) {
+              allTrips = allTrips.concat(partData.canonicalTrips);
+            } else if (partData.data) {
+              const rawWorkers = Object.values(partData.data).flat() as any[];
+              allTrips = allTrips.concat(rawWorkers.map(legacyToCanonical));
+            }
+          }
+        }
+      }
+
+      if (allTrips.length > 0) {
+        return allTrips;
+      }
+    }
+
+    // 2. Rétrocompatibilité avec les anciens lots si le document maître n'existe pas
     try {
       const batchQuery = query(
         collection(db, 'campaign_results'),
@@ -165,7 +199,6 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
       const batchSnap = await getDocs(batchQuery);
       if (!batchSnap.empty) {
         const batchDocs = batchSnap.docs.map(d => d.data());
-        // Filtrer uniquement les documents de lots (ceux avec chunkIndex)
         const pureLots = batchDocs.filter(b => typeof b.chunkIndex === 'number');
         if (pureLots.length > 0) {
           pureLots.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
@@ -174,42 +207,10 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
               allTrips.push(...b.canonicalTrips);
             }
           }
-          if (allTrips.length > 0) {
-            return allTrips;
-          }
         }
       }
     } catch (e: any) {
       console.warn(`[Firestore] loadCanonicalCampaignResults batch search:`, e?.message);
-    }
-
-    // 2. Rétrocompatibilité : Recherche par document maître partitionné
-    const firstSnap = await getDoc(doc(db, 'campaign_results', campaignId));
-    if (!firstSnap.exists()) return [];
-
-    const firstData = firstSnap.data();
-
-    if (Array.isArray(firstData.canonicalTrips)) {
-      allTrips = allTrips.concat(firstData.canonicalTrips);
-    } else if (firstData.data && typeof firstData.data === 'object') {
-      // Rétrocompatibilité avec les anciennes campagnes partitionnées par worker
-      const rawWorkers = Object.values(firstData.data).flat() as any[];
-      allTrips = rawWorkers.map(legacyToCanonical);
-    }
-
-    if (firstData.hasMoreParts && firstData.totalParts > 1) {
-      for (let p = 2; p <= firstData.totalParts; p++) {
-        const partSnap = await getDoc(doc(db, 'campaign_results', `${campaignId}_part${p}`));
-        if (partSnap.exists()) {
-          const partData = partSnap.data();
-          if (Array.isArray(partData.canonicalTrips)) {
-            allTrips = allTrips.concat(partData.canonicalTrips);
-          } else if (partData.data) {
-            const rawWorkers = Object.values(partData.data).flat() as any[];
-            allTrips = allTrips.concat(rawWorkers.map(legacyToCanonical));
-          }
-        }
-      }
     }
 
     return allTrips;

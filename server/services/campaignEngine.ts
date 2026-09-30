@@ -16,7 +16,8 @@ import {
   memoryCampaignCanonicalTrips,
   neighborhoods,
   cities,
-  recordHistory
+  recordHistory,
+  ensureSynced
 } from '../db/memoryStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
@@ -151,6 +152,7 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
 
   // Reconstitution si le serveur a redémarré (cold start Serverless)
   if (!session) {
+    await ensureSynced();
     let camp = memoryCampaigns.find(c => c.id === campaignId);
     if (!camp && db) {
       try {

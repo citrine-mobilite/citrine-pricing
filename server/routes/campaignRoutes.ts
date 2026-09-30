@@ -10,7 +10,8 @@ import {
   memoryCampaignCanonicalTrips,
   activePricingSessions,
   recordHistory,
-  deleteHistoryForCampaign
+  deleteHistoryForCampaign,
+  ensureSynced
 } from '../db/memoryStore.js';
 import { PricingCampaign, CanonicalTrip } from '../types.js';
 import {
@@ -124,6 +125,7 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
 
 // 3. Lancement d'une campagne (Test rapide ou complète)
 router.post('/api/campaigns/start', async (req: Request, res: Response) => {
+  await ensureSynced();
   const { cityId, sampleLimit, triggerType, isTestSample, triggeredByUserId, triggeredByUserName } = req.body;
   if (!cityId) {
     return res.status(400).json({ error: 'cityId est obligatoire.' });

@@ -95,6 +95,15 @@ export function setHistoryRecords(newRecords: any[]) {
   historyRecords = newRecords;
 }
 
+let syncPromise: Promise<void> | null = null;
+
+export function ensureSynced(): Promise<void> {
+  if (!syncPromise) {
+    syncPromise = syncFromFirestore();
+  }
+  return syncPromise;
+}
+
 export async function recordHistory(record: {
   action: string;
   eventType: 'campaign' | 'system' | 'settings' | 'users' | 'neighborhoods' | 'cities';
