@@ -26,20 +26,28 @@ import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount } from '..
 
 const router = Router();
 
-// 1. Liste des campagnes
-router.get('/api/campaigns', async (_req: Request, res: Response) => {
+// 1. Liste des campagnes (avec cache RAM serveur TTL 60s - 0 lecture Firestore redondante)
+let lastCampaignsFirestoreFetch = 0;
+let cachedFirestoreCampaigns: PricingCampaign[] = [];
+
+router.get('/api/campaigns', async (req: Request, res: Response) => {
+  const forceRefresh = req.query.forceRefresh === 'true';
+  const now = Date.now();
   let list: PricingCampaign[] = [];
 
-  if (db) {
+  if (db && (cachedFirestoreCampaigns.length === 0 || forceRefresh || now - lastCampaignsFirestoreFetch > 60000)) {
     try {
       const snap = await getDocs(collection(db, 'campaigns'));
       if (!snap.empty) {
-        list = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+        cachedFirestoreCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+        lastCampaignsFirestoreFetch = now;
       }
     } catch (e: any) {
       console.warn('[Firestore] get campaigns error:', e.message);
     }
   }
+
+  list = [...cachedFirestoreCampaigns];
 
   // Fusion avec memoryCampaigns (l'état RAM serveur plus récent l'emporte sur un snapshot Firestore retardataire)
   for (const memCamp of memoryCampaigns) {
@@ -74,18 +82,12 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
 
   list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
-  // Nettoyage des anciennes campagnes orphelines (évite l'apparition de campagnes fantômes "en cours")
+  // Nettoyage des campagnes réellement terminées
   list = list.map(c => {
-    const isActiveInRam = campaignSessions.has(c.id) || activePricingSessions.has(c.id);
-    if (c.status === 'in_progress' && !isActiveInRam) {
+    if (c.status === 'in_progress') {
       const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
       if (isActuallyFinished) {
         return { ...c, status: 'completed' };
-      }
-      const ageMs = Date.now() - new Date(c.startedAt || 0).getTime();
-      // Si la campagne date de plus de 10 minutes et n'est plus en RAM, elle a été terminée ou interrompue
-      if (ageMs > 10 * 60 * 1000) {
-        return { ...c, status: 'cancelled' };
       }
     }
     return c;

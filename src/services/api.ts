@@ -76,12 +76,33 @@ export const api = {
     }
   },
 
-  // Cities (avec cache 24h côté serveur / BD)
+  // Cities (avec cache navigateur 24h et 0 lecture Firestore)
   async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
+    const CACHE_KEY = 'citrine_cities_cache_v2';
+    const TTL_MS = 24 * 60 * 60 * 1000; // 24 heures
+
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < TTL_MS && Array.isArray(data) && data.length > 0) {
+            return data;
+          }
+        }
+      } catch {}
+    }
+
     try {
       const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
       const res = await fetch(url);
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+        } catch {}
+        return data;
+      }
     } catch (e) {
       console.warn('[API Client] getCities error:', e);
     }
@@ -89,6 +110,7 @@ export const api = {
   },
 
   async createCity(data: Partial<City>): Promise<City> {
+    try { localStorage.removeItem('citrine_cities_cache_v2'); } catch {}
     const res = await fetch(`${BASE_URL}/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -102,6 +124,7 @@ export const api = {
   },
 
   async updateCity(id: string, data: Partial<City>): Promise<City> {
+    try { localStorage.removeItem('citrine_cities_cache_v2'); } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -112,19 +135,41 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<void> {
+    try { localStorage.removeItem('citrine_cities_cache_v2'); } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
   },
 
-  // Neighborhoods (avec cache 24h côté serveur / BD)
+  // Neighborhoods (avec cache navigateur 24h et 0 lecture Firestore)
   async getNeighborhoods(cityId?: string, forceRefresh: boolean = false): Promise<Neighborhood[]> {
+    const CACHE_KEY = `citrine_nbs_cache_v2_${cityId || 'all'}`;
+    const TTL_MS = 24 * 60 * 60 * 1000; // 24 heures
+
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < TTL_MS && Array.isArray(data) && data.length > 0) {
+            return data;
+          }
+        }
+      } catch {}
+    }
+
     try {
       const params = new URLSearchParams();
       if (cityId) params.append('cityId', cityId);
       if (forceRefresh) params.append('forceRefresh', 'true');
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+        } catch {}
+        return data;
+      }
     } catch (e) {
       console.warn('[API Client] getNeighborhoods error:', e);
     }
@@ -132,6 +177,9 @@ export const api = {
   },
 
   async createNeighborhood(data: Partial<Neighborhood>): Promise<Neighborhood> {
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache_v2')).forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -145,6 +193,9 @@ export const api = {
   },
 
   async updateNeighborhood(id: string, data: Partial<Neighborhood>): Promise<Neighborhood> {
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache_v2')).forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -155,6 +206,9 @@ export const api = {
   },
 
   async deleteNeighborhood(id: string): Promise<void> {
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache_v2')).forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression du quartier.');
   },
@@ -203,16 +257,53 @@ export const api = {
     return res.json();
   },
 
-  // Campaigns
+  // Campaigns (avec cache local 7 jours - conserve les anciennes et fusionne les nouvelles)
   async getCampaigns(cityId?: string): Promise<PricingCampaign[]> {
+    const CACHE_KEY = `citrine_campaigns_v7_${cityId || 'all'}`;
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    let cachedList: PricingCampaign[] = [];
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const { data, timestamp } = JSON.parse(raw);
+        if (Date.now() - timestamp < SEVEN_DAYS_MS && Array.isArray(data)) {
+          cachedList = data;
+        }
+      }
+    } catch {}
+
     try {
       const url = cityId ? `${BASE_URL}/campaigns?cityId=${encodeURIComponent(cityId)}` : `${BASE_URL}/campaigns`;
       const res = await fetch(url);
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const freshList: PricingCampaign[] = await res.json();
+        const map = new Map<string, PricingCampaign>();
+
+        // Intégration prioritaire des campagnes en cache (1 semaine)
+        for (const c of cachedList) {
+          map.set(c.id, c);
+        }
+        // Mise à jour avec les campagnes fraîches renvoyées par le serveur
+        for (const c of freshList) {
+          map.set(c.id, c);
+        }
+
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+        );
+
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: merged, timestamp: Date.now() }));
+        } catch {}
+
+        return merged;
+      }
     } catch (e) {
-      console.warn('[API Client] getCampaigns error:', e);
+      console.warn('[API Client] getCampaigns network error:', e);
     }
-    return [];
+
+    return cachedList;
   },
 
   async getCampaign(id: string): Promise<PricingCampaign | null> {

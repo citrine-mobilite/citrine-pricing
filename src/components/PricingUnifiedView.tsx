@@ -237,19 +237,49 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         const campaignId = result.campaign.id;
         const totalChunks = result.totalChunks || 1;
 
-        // Exécution séquentielle fluide et stable des lots (1 lot à la fois pour éviter tout goulot d'étranglement API)
+        // Exécution séquentielle fluide et stable des lots avec retry automatique (jusqu'à 3 essais par lot)
+        const processChunkWithRetry = async (chunkIdx: number) => {
+          let lastErr: any = null;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            if (cancelRequestedRef.current) break;
+            try {
+              return await api.processCampaignChunk(campaignId, chunkIdx);
+            } catch (err: any) {
+              lastErr = err;
+              console.warn(`[Campaign] Tentative ${attempt}/3 échouée sur lot ${chunkIdx}:`, err?.message);
+              if (attempt < 3) {
+                await new Promise(r => setTimeout(r, 1200));
+              }
+            }
+          }
+          throw lastErr || new Error(`Échec du lot ${chunkIdx}`);
+        };
+
         for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
           if (cancelRequestedRef.current) {
             console.log('[Campaign] Annulation demandée, arrêt immédiat de la boucle de lots.');
             break;
           }
           try {
-            const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
-            if (chunkRes.campaign) {
-              setLiveCampaignOverride(chunkRes.campaign);
+            const chunkRes = await processChunkWithRetry(chunkIdx);
+            if (chunkRes?.campaign) {
+              setLiveCampaignOverride(prev => {
+                // Toujours conserver la valeur maximale de completedPairs pour éviter tout scintillement vers le bas
+                if (prev && (prev.completedPairs || 0) > (chunkRes.campaign.completedPairs || 0)) {
+                  return { ...chunkRes.campaign, completedPairs: prev.completedPairs };
+                }
+                return chunkRes.campaign;
+              });
+            }
+            if (chunkRes?.chunkTrips && chunkRes.chunkTrips.length > 0) {
+              setTrips(prev => {
+                const existingKeys = new Set(prev.map(t => `${t.origin}-${t.destination}`));
+                const fresh = chunkRes.chunkTrips.filter(t => !existingKeys.has(`${t.origin}-${t.destination}`));
+                return [...prev, ...fresh];
+              });
             }
           } catch (chunkErr) {
-            console.warn(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
+            console.error(`Erreur définitive sur le lot ${chunkIdx}:`, chunkErr);
           }
         }
 

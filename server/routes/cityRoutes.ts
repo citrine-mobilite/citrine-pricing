@@ -7,9 +7,11 @@ import { City, Neighborhood } from '../types.js';
 
 const router = Router();
 
-// Cities
-router.get('/api/cities', async (_req: Request, res: Response) => {
-  if (db) {
+// Cities (Servies depuis la RAM en priorité - 0 lecture Firestore)
+router.get('/api/cities', async (req: Request, res: Response) => {
+  const forceRefresh = req.query.forceRefresh === 'true';
+
+  if (db && (cities.length === 0 || forceRefresh)) {
     try {
       const snap = await getDocs(collection(db, 'cities'));
       if (!snap.empty) {
@@ -104,11 +106,11 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Ville et quartiers associés supprimés.' });
 });
 
-// Neighborhoods
+// Neighborhoods (Servis depuis la RAM en priorité - 0 lecture Firestore)
 router.get('/api/neighborhoods', async (req: Request, res: Response) => {
-  const { cityId } = req.query;
+  const { cityId, forceRefresh } = req.query;
 
-  if (db) {
+  if (db && (neighborhoods.length === 0 || forceRefresh === 'true')) {
     try {
       const snap = await getDocs(collection(db, 'neighborhoods'));
       if (!snap.empty) {

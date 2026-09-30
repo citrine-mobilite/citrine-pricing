@@ -7,7 +7,8 @@ import {
   safeFirestoreWrite,
   saveCanonicalCampaignBatch,
   saveCanonicalCampaignResults,
-  initCanonicalCampaignResults
+  initCanonicalCampaignResults,
+  loadCanonicalCampaignResults
 } from '../db/firestore.js';
 import {
   activePricingSessions,
@@ -182,6 +183,10 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
       });
     }
 
+    if (camp.status !== 'cancelled') {
+      camp.status = 'in_progress';
+    }
+
     session = {
       campaign: camp,
       city,
@@ -318,7 +323,12 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
     }
   }));
 
-  session.completedBatches++;
+  const previousChunksPairs = session.chunks
+    .filter(c => c.chunkIndex < chunkIndex)
+    .reduce((sum, c) => sum + c.pairs.length, 0);
+
+  session.completedPairs = previousChunksPairs + targetChunk.pairs.length;
+  session.completedBatches = chunkIndex;
   session.campaign.completedPairs = session.completedPairs;
   session.campaign.failedPairs = session.failedPairs;
   session.campaign.completedBatches = session.completedBatches;
@@ -355,7 +365,10 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
     throw new Error(`Campagne ${campaignId} introuvable pour finalisation.`);
   }
 
-  const canonicalTrips = session ? session.canonicalTrips : memoryCampaignCanonicalTrips[campaignId] || [];
+  let canonicalTrips = session ? session.canonicalTrips : memoryCampaignCanonicalTrips[campaignId] || [];
+  if (canonicalTrips.length === 0 && db) {
+    canonicalTrips = await loadCanonicalCampaignResults(campaignId);
+  }
 
   let sumYangoEco = 0;
   let countYango = 0;

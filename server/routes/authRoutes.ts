@@ -137,9 +137,10 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
   });
 });
 
-// 2. User management
-router.get('/api/users', async (_req: Request, res: Response) => {
-  if (db) {
+// 2. User management (Servis depuis la RAM en priorité - 0 lecture Firestore)
+router.get('/api/users', async (req: Request, res: Response) => {
+  const forceRefresh = req.query.forceRefresh === 'true';
+  if (db && (users.length === 0 || forceRefresh)) {
     try {
       const snap = await getDocs(collection(db, 'users'));
       if (!snap.empty) {

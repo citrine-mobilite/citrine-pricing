@@ -48,10 +48,13 @@ export async function getCachedCampaignTrips(campaignId: string): Promise<any[] 
 
       req.onsuccess = () => {
         if (req.result && Array.isArray(req.result.trips) && req.result.trips.length > 0) {
-          resolve(req.result.trips);
-        } else {
-          resolve(null);
+          const age = Date.now() - (req.result.cachedAt || 0);
+          if (age < 7 * 24 * 60 * 60 * 1000) {
+            resolve(req.result.trips);
+            return;
+          }
         }
+        resolve(null);
       };
 
       req.onerror = () => {
