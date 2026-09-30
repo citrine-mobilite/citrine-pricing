@@ -142,7 +142,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   let pairs = generateBenchmarkPairs(activeNbs);
   const totalPossible = calculatePossibleBenchmarkPairsCount(activeNbs);
 
-  const limit = sampleLimit ? parseInt(String(sampleLimit), 10) : (isTestSample ? 10 : undefined);
+  const limit = (sampleLimit && sampleLimit !== 'all') ? parseInt(String(sampleLimit), 10) : (isTestSample ? 25 : undefined);
   if (limit && limit > 0 && limit < pairs.length) {
     pairs = pairs.slice(0, limit);
   }

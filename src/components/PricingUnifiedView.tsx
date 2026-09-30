@@ -237,39 +237,21 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         const campaignId = result.campaign.id;
         const totalChunks = result.totalChunks || 1;
 
-        // Exécution en parallèle contrôlé des lots (Client-Driven Chunking avec 3 workers parallèles)
-        const CONCURRENCY = 3;
-        const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
-        let currentIndex = 0;
-
-        const runWorker = async () => {
-          while (currentIndex < chunkIndices.length) {
-            if (cancelRequestedRef.current) break;
-            const chunkIdx = chunkIndices[currentIndex++];
-            
-            let success = false;
-            for (let attempt = 1; attempt <= 2; attempt++) {
-              if (cancelRequestedRef.current) break;
-              try {
-                const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
-                if (chunkRes.campaign) {
-                  setLiveCampaignOverride(chunkRes.campaign);
-                }
-                success = true;
-                break;
-              } catch (chunkErr) {
-                console.warn(`Tentative ${attempt}/2 échouée pour le lot ${chunkIdx}:`, chunkErr);
-                if (attempt < 2) await new Promise(r => setTimeout(r, 500));
-              }
-            }
-            if (!success && !cancelRequestedRef.current) {
-              console.error(`Le lot ${chunkIdx} n'a pas pu être traité après 2 essais.`);
-            }
+        // Exécution séquentielle fluide et stable des lots (1 lot à la fois pour éviter tout goulot d'étranglement API)
+        for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+          if (cancelRequestedRef.current) {
+            console.log('[Campaign] Annulation demandée, arrêt immédiat de la boucle de lots.');
+            break;
           }
-        };
-
-        const pool = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker());
-        await Promise.all(pool);
+          try {
+            const chunkRes = await api.processCampaignChunk(campaignId, chunkIdx);
+            if (chunkRes.campaign) {
+              setLiveCampaignOverride(chunkRes.campaign);
+            }
+          } catch (chunkErr) {
+            console.warn(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
+          }
+        }
 
         // Finalisation globale de la campagne (uniquement si non annulée)
         if (!cancelRequestedRef.current) {
@@ -325,7 +307,12 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
       setQuickTestResult(res);
     } catch (err: any) {
-      alert(err.message || 'Erreur lors du test.');
+      Swal.fire({
+        icon: 'error',
+        title: 'Erreur lors du test',
+        text: err.message || 'Impossible de calculer le tarif pour ce trajet.',
+        confirmButtonColor: '#1F4F4A'
+      });
     } finally {
       setIsQuickTesting(false);
     }
