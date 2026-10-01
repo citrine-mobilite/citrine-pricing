@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { User, City, Neighborhood, PricingCampaign, TripResult, ActivePricingSession, CanonicalTrip } from '../types.js';
 import { db, cleanFirestoreDoc, safeFirestoreWrite } from './firestore.js';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
 
 // Hachage sécurisé bcrypt avec salt pour l'administrateur
 const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('c!tr!n$@2026', 10);
@@ -60,16 +61,7 @@ export let cities: City[] = [
   }
 ];
 
-export let neighborhoods: Neighborhood[] = [
-  { id: 'nb_dla_akwa', cityId: 'city_douala', name: 'Akwa', lat: 4.0503, lng: 9.7042, active: true, zoneType: 'commercial' },
-  { id: 'nb_dla_bonanjo', cityId: 'city_douala', name: 'Bonanjo', lat: 4.0433, lng: 9.6892, active: true, zoneType: 'center' },
-  { id: 'nb_dla_bonapriso', cityId: 'city_douala', name: 'Bonapriso', lat: 4.0270, lng: 9.7020, active: true, zoneType: 'residential' },
-  { id: 'nb_dla_deido', cityId: 'city_douala', name: 'Deido', lat: 4.0670, lng: 9.7120, active: true, zoneType: 'popular' },
-  { id: 'nb_dla_bali', cityId: 'city_douala', name: 'Bali', lat: 4.0380, lng: 9.6970, active: true, zoneType: 'residential' },
-  { id: 'nb_dla_makepe', cityId: 'city_douala', name: 'Makèpè', lat: 4.0840, lng: 9.7420, active: true, zoneType: 'residential' },
-  { id: 'nb_dla_bepanda', cityId: 'city_douala', name: 'Bépanda', lat: 4.0620, lng: 9.7300, active: true, zoneType: 'popular' },
-  { id: 'nb_dla_ndogbong', cityId: 'city_douala', name: 'Ndogbong', lat: 4.0530, lng: 9.7480, active: true, zoneType: 'commercial' }
-];
+export let neighborhoods: Neighborhood[] = (defaultNeighborhoods as unknown as Neighborhood[]) || [];
 
 export let memoryCampaigns: PricingCampaign[] = [];
 export const memoryCampaignTrips: Record<string, TripResult[]> = {};

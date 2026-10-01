@@ -29,7 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile
 }) => {
   const navigation = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'dashboard', label: 'Accueil', icon: LayoutDashboard },
     { id: 'pricing', label: 'Pricing', icon: Zap },
     { id: 'campaigns', label: 'Campagnes', icon: Activity, badge: activeCampaignCount > 0 ? activeCampaignCount : undefined },
     { id: 'temporal', label: 'Évolution Prix', icon: Clock },

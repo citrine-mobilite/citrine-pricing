@@ -77,31 +77,18 @@ export const api = {
   },
 
   // Cities (avec cache navigateur 24h et 0 lecture Firestore)
+  // Cities (Toujours frais depuis le serveur)
   async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
-    const CACHE_KEY = 'citrine_cities_cache_v2';
-    const TTL_MS = 24 * 60 * 60 * 1000; // 24 heures
-
-    if (!forceRefresh) {
-      try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < TTL_MS && Array.isArray(data) && data.length > 0) {
-            return data;
-          }
-        }
-      } catch {}
-    }
+    try {
+      // Purge proactive des anciens caches persistants
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_cities_cache') || k.startsWith('citrine_nbs_cache_v')).forEach(k => localStorage.removeItem(k));
+    } catch {}
 
     try {
       const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
-        } catch {}
-        return data;
+        return await res.json();
       }
     } catch (e) {
       console.warn('[API Client] getCities error:', e);
@@ -110,7 +97,6 @@ export const api = {
   },
 
   async createCity(data: Partial<City>): Promise<City> {
-    try { localStorage.removeItem('citrine_cities_cache_v2'); } catch {}
     const res = await fetch(`${BASE_URL}/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -124,7 +110,6 @@ export const api = {
   },
 
   async updateCity(id: string, data: Partial<City>): Promise<City> {
-    try { localStorage.removeItem('citrine_cities_cache_v2'); } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -135,28 +120,12 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<void> {
-    try { localStorage.removeItem('citrine_cities_cache_v2'); } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
   },
 
-  // Neighborhoods (avec cache navigateur 24h et 0 lecture Firestore)
+  // Neighborhoods (Toujours frais depuis le serveur)
   async getNeighborhoods(cityId?: string, forceRefresh: boolean = false): Promise<Neighborhood[]> {
-    const CACHE_KEY = `citrine_nbs_cache_v2_${cityId || 'all'}`;
-    const TTL_MS = 24 * 60 * 60 * 1000; // 24 heures
-
-    if (!forceRefresh) {
-      try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < TTL_MS && Array.isArray(data) && data.length > 0) {
-            return data;
-          }
-        }
-      } catch {}
-    }
-
     try {
       const params = new URLSearchParams();
       if (cityId) params.append('cityId', cityId);
@@ -164,11 +133,7 @@ export const api = {
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
       if (res.ok) {
-        const data = await res.json();
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
-        } catch {}
-        return data;
+        return await res.json();
       }
     } catch (e) {
       console.warn('[API Client] getNeighborhoods error:', e);

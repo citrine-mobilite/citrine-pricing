@@ -75,7 +75,7 @@ function AppContent() {
         setUsers(usersData);
       }
 
-      // Fetch neighborhoods for all cities (with 24h caching)
+      // Fetch neighborhoods for all cities
       if (citiesData && citiesData.length > 0) {
         const nbsPromises = citiesData.map((c) => api.getNeighborhoods(c.id, forceRefresh));
         const nbsResults = await Promise.all(nbsPromises);
@@ -90,6 +90,10 @@ function AppContent() {
       setIsLoading(false);
     }
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    return fetchData(true);
+  }, [fetchData]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -187,7 +191,7 @@ function AppContent() {
                     neighborhoods={neighborhoods}
                     onNavigate={setActiveTab}
                     onSelectCampaign={handleSelectCampaign}
-                    onRefresh={fetchData}
+                    onRefresh={handleRefresh}
                     onLaunchCity={(cityId) => {
                       setSelectedCityId(cityId);
                       setActiveTab('pricing');
@@ -204,7 +208,7 @@ function AppContent() {
                     selectedCampaignId={selectedCampaignId}
                     onSelectCampaignId={setSelectedCampaignId}
                     campaigns={campaigns}
-                    onRefresh={fetchData}
+                    onRefresh={handleRefresh}
                     onCampaignStarted={(campId) => {
                       setSelectedCampaignId(campId);
                     }}
@@ -216,7 +220,7 @@ function AppContent() {
                     campaigns={campaigns}
                     onSelectCampaign={handleSelectCampaign}
                     onNavigate={setActiveTab}
-                    onRefresh={fetchData}
+                    onRefresh={handleRefresh}
                   />
                 )}
 
@@ -230,7 +234,7 @@ function AppContent() {
                 {activeTab === 'cities' && (
                   <CitiesView
                     cities={enrichedCities}
-                    onRefresh={fetchData}
+                    onRefresh={handleRefresh}
                     onSelectCityNeighborhoods={(cityId) => {
                       setSelectedCityId(cityId);
                       setActiveTab('neighborhoods');
@@ -248,7 +252,7 @@ function AppContent() {
                     neighborhoods={neighborhoods}
                     selectedCityId={selectedCityId}
                     onSelectCityId={setSelectedCityId}
-                    onRefresh={fetchData}
+                    onRefresh={handleRefresh}
                     onLaunchPricingForCity={(cityId) => {
                       setSelectedCityId(cityId);
                       setActiveTab('pricing');

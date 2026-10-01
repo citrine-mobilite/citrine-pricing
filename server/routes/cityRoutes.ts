@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite } from '../db/firestore.js';
-import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory } from '../db/memoryStore.js';
+import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced } from '../db/memoryStore.js';
 import { City, Neighborhood } from '../types.js';
 
 const router = Router();
@@ -11,7 +11,9 @@ const router = Router();
 router.get('/api/cities', async (req: Request, res: Response) => {
   const forceRefresh = req.query.forceRefresh === 'true';
 
-  if (db && (cities.length === 0 || forceRefresh)) {
+  await ensureSynced().catch(() => {});
+
+  if (db && forceRefresh) {
     try {
       const snap = await getDocs(collection(db, 'cities'));
       if (!snap.empty) {
@@ -110,7 +112,9 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
 router.get('/api/neighborhoods', async (req: Request, res: Response) => {
   const { cityId, forceRefresh } = req.query;
 
-  if (db && (neighborhoods.length === 0 || forceRefresh === 'true')) {
+  await ensureSynced().catch(() => {});
+
+  if (db && forceRefresh === 'true') {
     try {
       const snap = await getDocs(collection(db, 'neighborhoods'));
       if (!snap.empty) {

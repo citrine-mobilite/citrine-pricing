@@ -1,7 +1,9 @@
 import app from '../server.js';
+import { ensureSynced } from '../server/db/memoryStore.js';
 
-export default function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   try {
+    await ensureSynced().catch(() => {});
     return app(req, res);
   } catch (err: any) {
     console.error('[Vercel Serverless Function Error]', err);

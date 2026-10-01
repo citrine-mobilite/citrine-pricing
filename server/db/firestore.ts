@@ -3,20 +3,27 @@ import { getFirestore, Firestore, doc, setDoc, getDoc, collection, getDocs, dele
 import fs from 'fs';
 import path from 'path';
 import { CanonicalTrip } from '../types.js';
+import bundledFirebaseConfig from '../../firebase-applet-config.json' with { type: 'json' };
 
 let db: Firestore | null = null;
 
 try {
-  let firebaseConfig: any = null;
-  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  let firebaseConfig: any = bundledFirebaseConfig;
 
-  if (fs.existsSync(configPath)) {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } else if (process.env.FIREBASE_CONFIG) {
-    firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+  if (process.env.FIREBASE_CONFIG) {
+    try {
+      firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+    } catch {}
+  } else {
+    const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      try {
+        firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch {}
+    }
   }
 
-  if (firebaseConfig) {
+  if (firebaseConfig && firebaseConfig.projectId) {
     const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
     console.log('[Firestore] Connecté avec succès à la base Firestore:', firebaseConfig.firestoreDatabaseId || 'default');
