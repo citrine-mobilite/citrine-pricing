@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Neighborhood } from '../../types';
 import { SlidersHorizontal, ArrowRight, RotateCw, Code, Layers, Copy, Check } from 'lucide-react';
 import { HeroLogo } from '../HeroLogo';
+import { SearchableSelect } from '../SearchableSelect';
 
 interface PricingQuickTesterProps {
   cityActiveNeighborhoods: Neighborhood[];
@@ -80,18 +81,17 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <label htmlFor="quick-origin-select" className="block text-[11px] font-semibold text-slate-600 mb-1">
             Départ (Quartier)
           </label>
-          <select
+          <SearchableSelect
             id="quick-origin-select"
+            options={cityActiveNeighborhoods.map((n) => ({
+              value: n.id,
+              label: n.name,
+              sublabel: n.zoneType ? `Zone ${n.zoneType}` : undefined
+            }))}
             value={quickOriginId}
-            onChange={(e) => onQuickOriginChange(e.target.value)}
-            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85]"
-          >
-            {cityActiveNeighborhoods.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name}
-              </option>
-            ))}
-          </select>
+            onChange={onQuickOriginChange}
+            searchPlaceholder="Rechercher quartier départ..."
+          />
         </div>
 
         {/* Arrow separator */}
@@ -104,18 +104,17 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <label htmlFor="quick-dest-select" className="block text-[11px] font-semibold text-slate-600 mb-1">
             Destination (Quartier)
           </label>
-          <select
+          <SearchableSelect
             id="quick-dest-select"
+            options={cityActiveNeighborhoods.map((n) => ({
+              value: n.id,
+              label: n.name,
+              sublabel: n.zoneType ? `Zone ${n.zoneType}` : undefined
+            }))}
             value={quickDestId}
-            onChange={(e) => onQuickDestChange(e.target.value)}
-            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-[#3D8B85]"
-          >
-            {cityActiveNeighborhoods.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name}
-              </option>
-            ))}
-          </select>
+            onChange={onQuickDestChange}
+            searchPlaceholder="Rechercher quartier destination..."
+          />
         </div>
 
         {/* Action Button */}

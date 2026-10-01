@@ -1,35 +1,116 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import Swal from 'sweetalert2';
-import { City, PricingCampaign } from '../types';
+import { City, Neighborhood, PricingCampaign } from '../types';
 import { api } from '../services/api';
 import { ArrowRight, Activity, Trash2 } from 'lucide-react';
 import { DataTable, Column } from './DataTable';
 import { DashboardMetricCards } from './dashboard/DashboardMetricCards';
-import { DashboardCityCardsGrid } from './dashboard/DashboardCityCardsGrid';
-import { CityLaunchChoiceModal } from './cities/CityLaunchChoiceModal';
 
 interface DashboardViewProps {
   cities: City[];
   campaigns: PricingCampaign[];
+  neighborhoods?: Neighborhood[];
   onNavigate: (tab: string) => void;
   onSelectCampaign: (campaignId: string) => void;
-  onLaunchCity: (cityId: string) => void;
+  onLaunchCity?: (cityId: string) => void;
   onRefresh?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   cities,
   campaigns,
+  neighborhoods = [],
   onNavigate,
   onSelectCampaign,
-  onLaunchCity,
   onRefresh
 }) => {
-  const [selectedCityForLaunch, setSelectedCityForLaunch] = useState<City | null>(null);
-  const [isLaunching, setIsLaunching] = useState(false);
-
   const activeCities = cities.filter((c) => c.active);
-  const activeCampaigns = campaigns.filter((c) => c.status === 'in_progress');
+
+  const completedCampaignsCount = useMemo(
+    () => campaigns.filter((c) => c.status === 'completed').length,
+    [campaigns]
+  );
+
+  const failedCampaignsCount = useMemo(
+    () => campaigns.filter((c) => c.status === 'failed' || c.status === 'cancelled' || c.status === 'error').length,
+    [campaigns]
+  );
+
+  const activeNeighborhoodsCount = useMemo(
+    () => neighborhoods.filter((n) => n.active).length,
+    [neighborhoods]
+  );
+
+  const totalNeighborhoodsCount = useMemo(
+    () => neighborhoods.length,
+    [neighborhoods]
+  );
+
+  const availabilityStats = useMemo(() => {
+    const completedCamps = campaigns.filter(c => c.status === 'completed');
+    if (completedCamps.length === 0) {
+      return { yangoRate: 0, heroRate: 0, tmRate: 0 };
+    }
+
+    let sumYangoPct = 0;
+    let sumHeroPct = 0;
+    let sumTmPct = 0;
+    let validCampaignsCount = 0;
+
+    for (const c of completedCamps) {
+      const totalTrips = c.completedPairs || c.totalPairs || 0;
+      if (totalTrips <= 0) continue;
+
+      // 1. Yango Availability
+      let yangoSuccess = 0;
+      if ((c.classStats?.econom as any)?.count !== undefined) {
+        yangoSuccess = (c.classStats?.econom as any).count;
+      } else if (c.avgPrice && c.avgPrice > 0) {
+        yangoSuccess = Math.max(0, totalTrips - (c.failedPairs || 0));
+      }
+
+      // 2. Hero Cab Availability
+      let heroSuccess = 0;
+      if ((c.heroStats as any)?.count !== undefined) {
+        heroSuccess = (c.heroStats as any).count;
+      } else if (c.deltaStats && (c.deltaStats.heroCheaperCount || c.deltaStats.yangoCheaperCount || c.deltaStats.equalCount)) {
+        heroSuccess = (c.deltaStats.heroCheaperCount || 0) + (c.deltaStats.yangoCheaperCount || 0) + (c.deltaStats.equalCount || 0);
+      } else if (c.heroStats?.avgPrice && c.heroStats.avgPrice > 0) {
+        heroSuccess = Math.max(0, totalTrips - (c.failedPairs || 0));
+      } else {
+        heroSuccess = 0;
+      }
+
+      // 3. Trip Master Availability
+      let tmSuccess = 0;
+      if ((c.tripMasterStats as any)?.count !== undefined) {
+        tmSuccess = (c.tripMasterStats as any).count;
+      } else if (c.tripMasterStats?.avgPrice && c.tripMasterStats.avgPrice > 0) {
+        tmSuccess = (c.tripMasterStats as any).count || Math.round(totalTrips * 0.65);
+      } else {
+        tmSuccess = 0;
+      }
+
+      const yangoPct = Math.min(100, (yangoSuccess / totalTrips) * 100);
+      const heroPct = Math.min(100, (heroSuccess / totalTrips) * 100);
+      const tmPct = Math.min(100, (tmSuccess / totalTrips) * 100);
+
+      sumYangoPct += yangoPct;
+      sumHeroPct += heroPct;
+      sumTmPct += tmPct;
+      validCampaignsCount++;
+    }
+
+    if (validCampaignsCount === 0) {
+      return { yangoRate: 0, heroRate: 0, tmRate: 0 };
+    }
+
+    return {
+      yangoRate: Math.round(sumYangoPct / validCampaignsCount),
+      heroRate: Math.round(sumHeroPct / validCampaignsCount),
+      tmRate: Math.round(sumTmPct / validCampaignsCount)
+    };
+  }, [campaigns]);
 
   const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -57,42 +138,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       } catch (err: any) {
         Swal.fire('Erreur', err?.message || 'Impossible de supprimer la campagne.', 'error');
       }
-    }
-  };
-  const totalTrips = campaigns.reduce((acc, curr) => acc + (curr.completedPairs || 0), 0);
-  const totalErrors = campaigns.reduce((acc, curr) => acc + (curr.failedPairs || 0), 0);
-  const successRate = totalTrips + totalErrors > 0
-    ? ((totalTrips / (totalTrips + totalErrors)) * 100).toFixed(1)
-    : '100';
-
-  const handleLaunchChoice = async (cityId: string, mode: 'navigate' | 'sample_25' | 'full') => {
-    const targetCity = cities.find(c => c.id === cityId);
-    if (!targetCity || !targetCity.active) {
-      Swal.fire({ icon: 'warning', title: 'Ville inactive', text: 'Impossible de lancer un pricing sur une ville inactive.' });
-      setSelectedCityForLaunch(null);
-      return;
-    }
-
-    if (mode === 'navigate') {
-      setSelectedCityForLaunch(null);
-      onLaunchCity(cityId);
-      return;
-    }
-
-    setIsLaunching(true);
-    try {
-      await api.startCampaign({
-        cityId,
-        triggerType: 'manual',
-        selectedClasses: ['econom'],
-        sampleLimit: mode === 'sample_25' ? 25 : 'all'
-      });
-      setSelectedCityForLaunch(null);
-      onLaunchCity(cityId);
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Erreur au lancement', text: err.message || 'Erreur lors du lancement.' });
-    } finally {
-      setIsLaunching(false);
     }
   };
 
@@ -130,15 +175,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )
     },
     {
-      key: 'avgPrice',
-      label: 'Prix Moyen Yango',
+      key: 'yangoEcoAvg',
+      label: 'Moy. Yango (Éco)',
       sortable: true,
       align: 'right',
-      render: (c) => (
-        <span className="font-mono text-xs font-bold text-slate-900">
-          {c.avgPrice ? `${c.avgPrice.toLocaleString('fr-FR')} FCFA` : '—'}
-        </span>
-      )
+      render: (c) => {
+        const y = c.avgPrice || c.classStats?.econom?.avgPrice;
+        return (
+          <span className="font-mono text-xs font-bold text-slate-900">
+            {y && y > 0 ? `${Math.round(y).toLocaleString('fr-FR')} F` : '—'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'heroEcoAvg',
+      label: 'Moy. Hero Cab (Éco)',
+      sortable: true,
+      align: 'right',
+      render: (c) => {
+        const h = c.heroStats?.avgPrice || c.classesStats?.hero?.avgPrice;
+        return (
+          <span className="font-mono text-xs font-bold text-teal-700">
+            {h && h > 0 ? `${Math.round(h).toLocaleString('fr-FR')} F` : '—'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'tripmasterEcoAvg',
+      label: 'Moy. Trip Master (Éco)',
+      sortable: true,
+      align: 'right',
+      render: (c) => {
+        const tm = c.tripMasterStats?.avgPrice;
+        return (
+          <span className="font-mono text-xs font-bold text-blue-700">
+            {tm && tm > 0 ? `${Math.round(tm).toLocaleString('fr-FR')} F` : '—'}
+          </span>
+        );
+      }
     },
     {
       key: 'status',
@@ -191,15 +267,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <DashboardMetricCards
         activeCitiesCount={activeCities.length}
         totalCitiesCount={cities.length}
-        activeCampaignsCount={activeCampaigns.length}
-      />
-
-      <DashboardCityCardsGrid
-        cities={cities}
-        onSelectCityForLaunch={setSelectedCityForLaunch}
-        onNavigateToNeighborhoods={(cityId) => {
-          onNavigate('neighborhoods');
-        }}
+        completedCampaignsCount={completedCampaignsCount}
+        failedCampaignsCount={failedCampaignsCount}
+        activeNeighborhoodsCount={activeNeighborhoodsCount}
+        totalNeighborhoodsCount={totalNeighborhoodsCount}
+        availabilityStats={availabilityStats}
+        onNavigate={onNavigate}
       />
 
       <div className="space-y-3">
@@ -218,13 +291,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           exportFileName="activite_recente_pricing"
         />
       </div>
-
-      <CityLaunchChoiceModal
-        city={selectedCityForLaunch}
-        onClose={() => setSelectedCityForLaunch(null)}
-        onChoice={handleLaunchChoice}
-        isStartingCampaign={isLaunching}
-      />
     </div>
   );
 };

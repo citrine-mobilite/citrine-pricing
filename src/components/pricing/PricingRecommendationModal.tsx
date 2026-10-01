@@ -20,13 +20,13 @@ interface PricingRecommendationModalProps {
   cityName: string;
 }
 
-type VehicleClassKey = 'eco' | 'confort' | 'suv' | 'moto';
+type VehicleClassKey = 'eco' | 'confort';
 
 interface VehicleClassConfig {
   key: VehicleClassKey;
   label: string;
-  heroKey: 'eco' | 'confort' | 'suv';
-  yangoKey: 'econom' | 'business' | 'comfortplus' | 'moto';
+  heroKey: 'eco' | 'confort';
+  yangoKey: 'econom' | 'business';
   badge: string;
 }
 
@@ -44,20 +44,6 @@ const VEHICLE_CLASSES: VehicleClassConfig[] = [
     heroKey: 'confort',
     yangoKey: 'business',
     badge: 'Confort'
-  },
-  {
-    key: 'suv',
-    label: 'SUV (vs Confort+)',
-    heroKey: 'suv',
-    yangoKey: 'comfortplus',
-    badge: 'SUV vs Confort+'
-  },
-  {
-    key: 'moto',
-    label: 'Moto',
-    heroKey: 'eco',
-    yangoKey: 'moto',
-    badge: 'Moto'
   }
 ];
 
@@ -98,34 +84,8 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
     const marginGains: ActionableOpportunity[] = [];
 
     for (const t of trips) {
-      const anyT = t as any;
-      let h: number | null = null;
-      let y: number | null = null;
-
-      if (activeClassConfig.key === 'moto') {
-        // Hero Cab n'opère pas directement de flotte moto ; on compare les tarifs moto réels du marché (Yango vs TripMaster)
-        // et on simule une tarification agressive Hero Moto (-10% sous le prix Yango)
-        y = getYangoPrice(t, 'moto');
-        const tmMoto = t.prices?.tripMaster?.moto || anyT.tripmaster_moto || null;
-        const heroSimulated = anyT.hero_moto || (y ? Math.max(250, Math.round((y * 0.9) / 50) * 50) : null);
-        h = heroSimulated;
-      } else if (activeClassConfig.key === 'suv') {
-        // SUV : Hero Cab SUV vs Yango Confort+ ou Yango Confort (haut de gamme marché)
-        h = getHeroPrice(t, 'suv');
-        if (!h) {
-          const heroConfort = getHeroPrice(t, 'confort') || getHeroPrice(t, 'eco');
-          if (heroConfort) h = Math.round((heroConfort * 1.35) / 50) * 50;
-        }
-
-        y = getYangoPrice(t, 'comfortplus');
-        if (!y) {
-          const yangoConfort = getYangoPrice(t, 'business') || getYangoPrice(t, 'econom');
-          if (yangoConfort) y = Math.round((yangoConfort * 1.30) / 50) * 50;
-        }
-      } else {
-        h = getHeroPrice(t, activeClassConfig.heroKey);
-        y = getYangoPrice(t, activeClassConfig.yangoKey);
-      }
+      const h = getHeroPrice(t, activeClassConfig.heroKey);
+      const y = getYangoPrice(t, activeClassConfig.yangoKey);
 
       if (!h || !y) continue;
       totalComparable++;
@@ -138,6 +98,8 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
         heroCheaperCount++;
         // Opportunité de marge : Hero est déjà moins cher de >= 350 FCFA
         if (y - h >= 350) {
+          const targetPrice = Math.round((h + 150) / 50) * 50;
+          const increaseAmount = targetPrice - h;
           marginGains.push({
             tripId: t.id,
             origin: orig,
@@ -147,14 +109,17 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
             currentYango: y,
             delta: y - h,
             type: 'margin_gain',
-            suggestedHeroPrice: Math.round((h + 150) / 50) * 50,
-            strategicGain: `+150 F de marge (reste ${y - (h + 150)} F moins cher que Yango)`
+            suggestedHeroPrice: targetPrice,
+            strategicGain: `+${increaseAmount} F de hausse de marge (${h} F + ${increaseAmount} F = ${targetPrice} F, restant ${y - targetPrice} F sous Yango)`
           });
         }
       } else if (y < h) {
         yangoCheaperCount++;
-        // Quick Win : Yango est moins cher de 200 FCFA ou moins
-        if (delta <= 200 && delta > 0) {
+        // Quick Win : Yango est moins cher (h > y)
+        if (delta <= 300 && delta > 0) {
+          const targetPrice = Math.max(100, Math.round((y - 50) / 50) * 50);
+          const reductionAmount = h - targetPrice;
+
           quickWins.push({
             tripId: t.id,
             origin: orig,
@@ -164,8 +129,8 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
             currentYango: y,
             delta,
             type: 'quick_win',
-            suggestedHeroPrice: Math.max(500, Math.round((y - 50) / 50) * 50),
-            strategicGain: `Passe devant Yango pour -${delta + 50} F`
+            suggestedHeroPrice: targetPrice,
+            strategicGain: `Retirer -${reductionAmount} F (${h} F - ${reductionAmount} F = ${targetPrice} F, soit 50 F sous Yango)`
           });
         }
       } else {
@@ -275,24 +240,6 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
             {analysis.totalComparable} trajets comparés
           </span>
         </div>
-
-        {/* Context banner for specific vehicle classes */}
-        {selectedClass === 'moto' && (
-          <div className="px-6 py-2.5 bg-amber-50/80 border-b border-amber-200/60 flex items-center gap-2.5 text-xs text-amber-800">
-            <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <b>Note stratégique Moto :</b> Hero Cab n'opère pas directement de flotte 2 roues. Ce benchmark compare les tarifs Moto réels du marché (Yango / TripMaster) et simule une grille d'alignement tactique (-10% sous Yango).
-            </span>
-          </div>
-        )}
-        {selectedClass === 'suv' && (
-          <div className="px-6 py-2.5 bg-sky-50/80 border-b border-sky-200/60 flex items-center gap-2.5 text-xs text-sky-800">
-            <Info className="w-4 h-4 text-sky-600 shrink-0" />
-            <span>
-              <b>Note stratégique SUV :</b> Comparatif ciblé sur le segment haut de gamme (Hero SUV vs Yango Confort / Confort+).
-            </span>
-          </div>
-        )}
 
         {/* KPI Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 border-b border-slate-100 bg-white">

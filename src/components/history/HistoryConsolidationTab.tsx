@@ -2,7 +2,7 @@ import React from 'react';
 import { PricingCampaign, City } from '../../types';
 import { Layers, Download, FileSpreadsheet, FileText, CheckCircle2, Clock, RotateCw } from 'lucide-react';
 import { api } from '../../services/api';
-import { exportConsolidatedExcel, exportConsolidatedPdf, ConsolidatedCampaignData } from '../../utils/exportUtils';
+import { exportConsolidatedExcel, exportConsolidatedPdf, ConsolidatedCampaignData, formatCampaignFileName } from '../../utils/exportUtils';
 import Swal from 'sweetalert2';
 
 interface HistoryConsolidationTabProps {
@@ -139,16 +139,21 @@ export const HistoryConsolidationTab: React.FC<HistoryConsolidationTabProps> = (
         return;
       }
 
+      const firstCamp = campaignsDataList[0];
+      const exportName = campaignsDataList.length === 1
+        ? formatCampaignFileName(firstCamp?.cityName, firstCamp?.dateStr)
+        : `consolidation_${selectedCampaignIds.length}_${formatCampaignFileName(firstCamp?.cityName, firstCamp?.dateStr)}`;
+
       if (format === 'excel') {
         exportConsolidatedExcel(
           campaignsDataList,
-          `export_consolide_${selectedCampaignIds.length}_pricings_${totalTripsCount}_trajets`
+          exportName
         );
       } else {
         exportConsolidatedPdf(
           campaignsDataList,
           `Rapport Consolidé Multi-Pricings (${selectedCampaignIds.length} relevés)`,
-          `export_consolide_${selectedCampaignIds.length}_pricings`
+          exportName
         );
       }
 

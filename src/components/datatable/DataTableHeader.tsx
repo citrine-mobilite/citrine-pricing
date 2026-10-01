@@ -64,18 +64,6 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
           </span>
         </button>
 
-        <button
-          onClick={onExportCsv}
-          disabled={totalCount === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-sm transition hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          title={`Exporter l'intégralité des ${totalCount.toLocaleString('fr-FR')} enregistrements au format CSV`}
-        >
-          <Download className="w-3.5 h-3.5 text-blue-600" />
-          <span className="hidden md:inline">
-            CSV {totalCount > 0 && `(${totalCount.toLocaleString('fr-FR')})`}
-          </span>
-        </button>
-
         {onExportJson && (
           <button
             onClick={onExportJson}

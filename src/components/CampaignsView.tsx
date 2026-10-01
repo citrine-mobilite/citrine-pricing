@@ -3,9 +3,10 @@ import Swal from 'sweetalert2';
 import { PricingCampaign } from '../types';
 import { api } from '../services/api';
 import { DataTable, Column } from './DataTable';
-import { ArrowRight, Trash2, RotateCw } from 'lucide-react';
+import { ArrowRight, Trash2, RotateCw, Clock } from 'lucide-react';
 import { CampaignsHeader } from './campaigns/CampaignsHeader';
 import { CampaignsActiveBanner } from './campaigns/CampaignsActiveBanner';
+import { computeCampaignDuration } from '../utils/durationUtils';
 
 interface CampaignsViewProps {
   campaigns: PricingCampaign[];
@@ -89,6 +90,17 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
             hour: '2-digit',
             minute: '2-digit'
           })}
+        </span>
+      )
+    },
+    {
+      key: 'duration',
+      label: 'Durée',
+      sortable: false,
+      render: (c) => (
+        <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+          <Clock className="w-3 h-3 text-[#1F4F4A]" />
+          <span>{computeCampaignDuration(c)}</span>
         </span>
       )
     },

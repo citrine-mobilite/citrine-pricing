@@ -22,7 +22,7 @@ import {
   cleanNeighborhoodName,
   campaignSessions
 } from '../services/campaignEngine.js';
-import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount } from '../../src/utils/routeMatrix.js';
+import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
 
 const router = Router();
 
@@ -128,7 +128,18 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
 // 3. Lancement d'une campagne (Test rapide ou complète)
 router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   await ensureSynced();
-  const { cityId, sampleLimit, triggerType, isTestSample, triggeredByUserId, triggeredByUserName } = req.body;
+  const {
+    cityId,
+    sampleLimit,
+    triggerType,
+    isTestSample,
+    triggeredByUserId,
+    triggeredByUserName,
+    scopeMode,
+    arrondissement,
+    originArrondissement,
+    destArrondissement
+  } = req.body;
   if (!cityId) {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
   }
@@ -143,8 +154,37 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Au moins 2 quartiers actifs sont requis pour calculer des trajets.' });
   }
 
-  let pairs = generateBenchmarkPairs(activeNbs);
-  const totalPossible = calculatePossibleBenchmarkPairsCount(activeNbs);
+  let pairs: Array<{ origin: any; dest: any }> = [];
+
+  if (scopeMode === 'intra' && arrondissement) {
+    const targetNbs = activeNbs.filter(n => detectArrondissement(n) === arrondissement);
+    const pool = targetNbs.length >= 2 ? targetNbs : activeNbs;
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = 0; j < pool.length; j++) {
+        if (i !== j) pairs.push({ origin: pool[i], dest: pool[j] });
+      }
+    }
+  } else if (scopeMode === 'inter' && originArrondissement && destArrondissement) {
+    const originNbs = activeNbs.filter(n => detectArrondissement(n) === originArrondissement);
+    const destNbs = activeNbs.filter(n => detectArrondissement(n) === destArrondissement);
+    const poolOrigin = originNbs.length > 0 ? originNbs : activeNbs.slice(0, Math.ceil(activeNbs.length / 2));
+    const poolDest = destNbs.length > 0 ? destNbs : activeNbs.slice(Math.ceil(activeNbs.length / 2));
+
+    for (const o of poolOrigin) {
+      for (const d of poolDest) {
+        if (o.id !== d.id) {
+          pairs.push({ origin: o, dest: d });
+        }
+      }
+    }
+    if (pairs.length > 300) {
+      pairs = pairs.slice(0, 300);
+    }
+  } else {
+    pairs = generateBenchmarkPairs(activeNbs);
+  }
+
+  const totalPossible = pairs.length;
 
   const limit = (sampleLimit && sampleLimit !== 'all') ? parseInt(String(sampleLimit), 10) : (isTestSample ? 25 : undefined);
   if (limit && limit > 0 && limit < pairs.length) {

@@ -14,7 +14,8 @@ import { PricingMetricsCards } from './pricing/PricingMetricsCards';
 import { PricingResultsFilterBar } from './pricing/PricingResultsFilterBar';
 import { PricingResultsTable } from './pricing/PricingResultsTable';
 import { PricingRecommendationModal } from './pricing/PricingRecommendationModal';
-import { ExecutiveReportModal } from './ExecutiveReportModal';
+import { PricingArrondissementTester } from './pricing/PricingArrondissementTester';
+import { computeCampaignDuration } from '../utils/durationUtils';
 
 interface PricingUnifiedViewProps {
   cities: City[];
@@ -79,7 +80,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   );
 
   const [inspectedTrip, setInspectedTrip] = useState<TripResult | null>(null);
-  const [showSingleTester, setShowSingleTester] = useState<boolean>(false);
+  const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter'>('none');
   const [quickOriginId, setQuickOriginId] = useState<string>(cityActiveNeighborhoods[0]?.id || '');
   const [quickDestId, setQuickDestId] = useState<string>(cityActiveNeighborhoods[1]?.id || '');
   const [isQuickTesting, setIsQuickTesting] = useState<boolean>(false);
@@ -115,7 +116,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
           if (camp.status === 'completed') {
             const completedPairs = camp.completedPairs || camp.totalPairs || 0;
-            const durationSec = camp.durationSeconds || 0;
+            const durationFormatted = computeCampaignDuration(camp);
             const heroAvg = camp.heroStats?.avgPrice || 0;
             const yangoAvg = camp.avgPrice || 0;
             const heroCheaper = camp.deltaStats?.heroCheaperCount || 0;
@@ -129,7 +130,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                   <div style="background: #F0FDF4; border: 1px solid #BBF7D0; padding: 12px; border-radius: 12px; margin-bottom: 12px;">
                     <div style="font-weight: 600; color: #166534; margin-bottom: 4px;">✅ Synthèse de la campagne (${camp.cityName})</div>
                     <div>• <b>${completedPairs}</b> trajets tarifés avec succès</div>
-                    <div>• Durée totale d'exécution : <b>${durationSec}s</b></div>
+                    <div>• Durée totale d'exécution : <b>${durationFormatted}</b></div>
                   </div>
 
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
@@ -213,10 +214,15 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     return () => { isMounted = false; };
   }, [activeCampaignId, campaigns, liveCampaignOverride]);
 
-  const handleLaunch = async (overrideLimit: number | 'all') => {
-    if (totalCombinations === 0) return;
+  const handleLaunchWithOptions = async (options: {
+    scopeMode: 'global' | 'intra' | 'inter';
+    arrondissement?: string;
+    originArrondissement?: string;
+    destArrondissement?: string;
+    sampleLimit?: number | 'all';
+  }) => {
     cancelRequestedRef.current = false;
-    const targetKey = overrideLimit === 'all' ? 'all' : String(overrideLimit);
+    const targetKey = options.sampleLimit === 25 ? '25' : 'all';
     setLaunchingTarget(targetKey);
     try {
       const result = await api.startCampaign({
@@ -225,7 +231,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         triggeredByUserId: user?.id || 'manual_user',
         triggeredByUserName: (user?.name && !user.name.toLowerCase().includes('landry')) ? user.name : 'Admin Citrine',
         selectedClasses: ['econom'],
-        sampleLimit: overrideLimit
+        sampleLimit: options.sampleLimit,
+        scopeMode: options.scopeMode,
+        arrondissement: options.arrondissement,
+        originArrondissement: options.originArrondissement,
+        destArrondissement: options.destArrondissement
       });
 
       if (result?.campaign) {
@@ -237,7 +247,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         const campaignId = result.campaign.id;
         const totalChunks = result.totalChunks || 1;
 
-        // Exécution séquentielle fluide et stable des lots avec retry automatique (jusqu'à 3 essais par lot)
         const processChunkWithRetry = async (chunkIdx: number) => {
           let lastErr: any = null;
           for (let attempt = 1; attempt <= 3; attempt++) {
@@ -246,25 +255,18 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               return await api.processCampaignChunk(campaignId, chunkIdx);
             } catch (err: any) {
               lastErr = err;
-              console.warn(`[Campaign] Tentative ${attempt}/3 échouée sur lot ${chunkIdx}:`, err?.message);
-              if (attempt < 3) {
-                await new Promise(r => setTimeout(r, 1200));
-              }
+              if (attempt < 3) await new Promise(r => setTimeout(r, 1200));
             }
           }
           throw lastErr || new Error(`Échec du lot ${chunkIdx}`);
         };
 
         for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          if (cancelRequestedRef.current) {
-            console.log('[Campaign] Annulation demandée, arrêt immédiat de la boucle de lots.');
-            break;
-          }
+          if (cancelRequestedRef.current) break;
           try {
             const chunkRes = await processChunkWithRetry(chunkIdx);
             if (chunkRes?.campaign) {
               setLiveCampaignOverride(prev => {
-                // Toujours conserver la valeur maximale de completedPairs pour éviter tout scintillement vers le bas
                 if (prev && (prev.completedPairs || 0) > (chunkRes.campaign.completedPairs || 0)) {
                   return { ...chunkRes.campaign, completedPairs: prev.completedPairs };
                 }
@@ -279,16 +281,13 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               });
             }
           } catch (chunkErr) {
-            console.error(`Erreur définitive sur le lot ${chunkIdx}:`, chunkErr);
+            console.error(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
           }
         }
 
-        // Finalisation globale de la campagne (uniquement si non annulée)
         if (!cancelRequestedRef.current) {
           const finalRes = await api.finalizeCampaign(campaignId);
-          if (finalRes?.campaign) {
-            setLiveCampaignOverride(finalRes.campaign);
-          }
+          if (finalRes?.campaign) setLiveCampaignOverride(finalRes.campaign);
           const finalTrips = await api.getCampaignResults(campaignId);
           setTrips(finalTrips || []);
           if (onRefresh) await onRefresh();
@@ -299,6 +298,13 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     } finally {
       setLaunchingTarget(null);
     }
+  };
+
+  const handleLaunch = (overrideLimit: number | 'all') => {
+    handleLaunchWithOptions({
+      scopeMode: 'global',
+      sampleLimit: overrideLimit
+    });
   };
 
   const handleCancelCampaign = async () => {
@@ -373,15 +379,16 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         activeCampaignId={activeCampaignId}
         onCampaignChange={handleCampaignChange}
         onRefresh={onRefresh}
-        showSingleTester={showSingleTester}
-        onToggleSingleTester={() => setShowSingleTester(!showSingleTester)}
+        activeTesterPanel={activeTesterPanel}
+        onToggleTesterPanel={(panel) => setActiveTesterPanel(prev => prev === panel ? 'none' : panel)}
         totalCombinations={totalCombinations}
         launchingTarget={launchingTarget}
         onLaunch={handleLaunch}
         activeCampaign={displayedCampaign}
       />
 
-      {showSingleTester && (
+      {/* 1. Panel Test Trajet Unique */}
+      {activeTesterPanel === 'single' && (
         <PricingQuickTester
           cityActiveNeighborhoods={cityActiveNeighborhoods}
           quickOriginId={quickOriginId}
@@ -392,6 +399,35 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           onRunQuickTest={handleRunQuickTest}
           quickTestResult={quickTestResult}
           onInspectResult={() => quickTestResult && setInspectedTrip(quickTestResult)}
+        />
+      )}
+
+      {/* 2 & 3. Panel 1 Arrondissement / 2 Arrondissements */}
+      {(activeTesterPanel === 'intra' || activeTesterPanel === 'inter') && (
+        <PricingArrondissementTester
+          mode={activeTesterPanel}
+          cityName={currentCity.name}
+          arrondissements={
+            currentCity.id === 'city_yaounde'
+              ? ['Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e']
+              : ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e']
+          }
+          isRunning={displayedCampaign?.status === 'in_progress'}
+          onLaunchIntra={(arr, limit) => {
+            handleLaunchWithOptions({
+              scopeMode: 'intra',
+              arrondissement: arr,
+              sampleLimit: limit
+            });
+          }}
+          onLaunchInter={(originArr, destArr, limit) => {
+            handleLaunchWithOptions({
+              scopeMode: 'inter',
+              originArrondissement: originArr,
+              destArrondissement: destArr,
+              sampleLimit: limit
+            });
+          }}
         />
       )}
 
@@ -415,7 +451,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         activeCampaignId={activeCampaignId}
         totalTripsCount={trips.length}
         onOpenRecommendations={() => setIsRecommendationsOpen(true)}
-        onOpenExecutiveReport={() => setIsExecutiveReportOpen(true)}
       />
 
       <PricingResultsTable
@@ -437,16 +472,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         trips={trips}
         cityName={currentCity.name}
       />
-
-      {/* Modal Fiche Synthèse Exécutive PDF 1 page */}
-      {displayedCampaign && (
-        <ExecutiveReportModal
-          isOpen={isExecutiveReportOpen}
-          onClose={() => setIsExecutiveReportOpen(false)}
-          campaign={displayedCampaign}
-          trips={trips}
-        />
-      )}
     </div>
   );
 };

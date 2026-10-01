@@ -1,6 +1,7 @@
 import React from 'react';
-import { Database, Flame, CheckCircle2, RotateCw, RefreshCw, Users, Building2, Compass } from 'lucide-react';
+import { Database, Flame, CheckCircle2, RefreshCw, Users, Building2, Compass, Download, FileCode } from 'lucide-react';
 import firebaseConfig from '../../../firebase-applet-config.json';
+import { api } from '../../services/api';
 
 interface FirebaseSettingsCardProps {
   dbStats: { userCount: number; cityCount: number; neighborhoodCount: number };
@@ -30,7 +31,7 @@ export const FirebaseSettingsCard: React.FC<FirebaseSettingsCardProps> = ({
         </span>
       </div>
 
-      <div className="p-5 space-y-4 text-xs">
+      <div className="p-5 space-y-5 text-xs">
         <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-slate-700">
             <span className="font-semibold text-slate-900">ID Projet Firebase :</span>
@@ -84,6 +85,58 @@ export const FirebaseSettingsCard: React.FC<FirebaseSettingsCardProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
             <span>{isSeeding ? 'Synchronisation en cours...' : 'Forcer la synchronisation Firestore'}</span>
           </button>
+        </div>
+
+        {/* Exportation de la base de données (2 Boutons) */}
+        <div className="pt-4 border-t border-slate-200/80 space-y-3">
+          <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+            <Download className="w-4 h-4 text-[#1F4F4A]" />
+            <span>Exportation & Sauvegarde JSON de la Base de Données</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Bouton 1: Exporter la structure de la BD */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2 flex flex-col justify-between">
+              <div>
+                <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                  <FileCode className="w-4 h-4 text-blue-600" />
+                  <span>Structure de la BD (Schéma)</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                  Exporte la configuration des Villes, Quartiers, Utilisateurs et Paramètres d'API (sans les relevés de tarifs).
+                </p>
+              </div>
+              <a
+                href={api.getDbStructureExportUrl()}
+                download
+                className="mt-2 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Exporter la structure de la BD</span>
+              </a>
+            </div>
+
+            {/* Bouton 2: Exporter la BD et toutes ses données */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2 flex flex-col justify-between">
+              <div>
+                <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span>BD et Toutes ses Données</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                  Exporte l'intégralité de la base de données : Villes, Quartiers, Utilisateurs, Historique, Campagnes et tous les relevés.
+                </p>
+              </div>
+              <a
+                href={api.getDbFullDataExportUrl()}
+                download
+                className="mt-2 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#183F3B] rounded-lg transition shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 text-white" />
+                <span>Exporter toute la BD avec données</span>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>

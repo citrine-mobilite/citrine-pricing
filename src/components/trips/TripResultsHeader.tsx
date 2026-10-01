@@ -8,7 +8,7 @@ interface TripResultsHeaderProps {
   onSelectCampaignId: (id: string) => void;
   viewMode: 'table' | 'matrix';
   onViewModeChange: (mode: 'table' | 'matrix') => void;
-  onExportCsv: () => void;
+  onExportCsv?: () => void;
 }
 
 export const TripResultsHeader: React.FC<TripResultsHeaderProps> = ({
@@ -68,15 +68,6 @@ export const TripResultsHeader: React.FC<TripResultsHeaderProps> = ({
             <span className="hidden sm:inline">Matrice</span>
           </button>
         </div>
-
-        {/* CSV Export */}
-        <button
-          onClick={onExportCsv}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1F4F4A] bg-[#1F4F4A]/10 hover:bg-[#1F4F4A]/20 border border-[#1F4F4A]/30 rounded-lg transition cursor-pointer"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>Exporter CSV</span>
-        </button>
       </div>
     </div>
   );

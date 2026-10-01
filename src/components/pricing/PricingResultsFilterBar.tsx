@@ -1,5 +1,6 @@
 import React from 'react';
 import { Lightbulb, FileText } from 'lucide-react';
+import { SearchableSelect } from '../SearchableSelect';
 
 interface PricingResultsFilterBarProps {
   neighborhoodNames: string[];
@@ -10,7 +11,6 @@ interface PricingResultsFilterBarProps {
   activeCampaignId?: string;
   totalTripsCount: number;
   onOpenRecommendations?: () => void;
-  onOpenExecutiveReport?: () => void;
 }
 
 export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = ({
@@ -19,38 +19,35 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
   onStartFilterChange,
   endFilter,
   onEndFilterChange,
-  onOpenRecommendations,
-  onOpenExecutiveReport
+  onOpenRecommendations
 }) => {
+  const departureOptions = [
+    { value: '', label: 'Tous les départs' },
+    ...neighborhoodNames.map((name) => ({ value: name, label: name }))
+  ];
+
+  const arrivalOptions = [
+    { value: '', label: 'Toutes les arrivées' },
+    ...neighborhoodNames.map((name) => ({ value: name, label: name }))
+  ];
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2.5 pb-1">
       {/* Filters : Departure & Destination dropdowns */}
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <SearchableSelect
+          options={departureOptions}
           value={startFilter}
-          onChange={(e) => onStartFilterChange(e.target.value)}
-          className="bg-white border border-slate-200 text-xs font-medium text-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#3D8B85]"
-        >
-          <option value="">Tous les départs</option>
-          {neighborhoodNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+          onChange={onStartFilterChange}
+          searchPlaceholder="Filtrer par quartier départ..."
+        />
 
-        <select
+        <SearchableSelect
+          options={arrivalOptions}
           value={endFilter}
-          onChange={(e) => onEndFilterChange(e.target.value)}
-          className="bg-white border border-slate-200 text-xs font-medium text-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#3D8B85]"
-        >
-          <option value="">Toutes les arrivées</option>
-          {neighborhoodNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+          onChange={onEndFilterChange}
+          searchPlaceholder="Filtrer par quartier arrivée..."
+        />
 
         {(startFilter || endFilter) && (
           <button
@@ -65,7 +62,7 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
         )}
       </div>
 
-      {/* Strategic Actions: Recommandations Hero & Fiche Synthèse PDF */}
+      {/* Strategic Actions: Recommandations Hero */}
       <div className="flex items-center gap-2">
         {onOpenRecommendations && (
           <button
@@ -75,17 +72,6 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
           >
             <Lightbulb className="w-3.5 h-3.5 text-amber-600" />
             <span>Recommandations Hero</span>
-          </button>
-        )}
-
-        {onOpenExecutiveReport && (
-          <button
-            onClick={onOpenExecutiveReport}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-800 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition cursor-pointer active:scale-95 shadow-2xs"
-            title="Générer la Fiche Synthèse Exécutive (Format A4 / 1 page)"
-          >
-            <FileText className="w-3.5 h-3.5 text-slate-500" />
-            <span>Fiche Synthèse PDF</span>
           </button>
         )}
       </div>

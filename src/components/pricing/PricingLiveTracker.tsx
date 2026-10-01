@@ -1,6 +1,7 @@
 import React from 'react';
 import { PricingCampaign } from '../../types';
-import { StopCircle, RotateCw } from 'lucide-react';
+import { StopCircle, RotateCw, Clock } from 'lucide-react';
+import { computeCampaignDuration } from '../../utils/durationUtils';
 
 interface PricingLiveTrackerProps {
   campaign: PricingCampaign;
@@ -92,6 +93,11 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
                 (Lot {campaign.completedBatches || 0} / {campaign.totalBatches})
               </span>
             )}
+            <span className="text-slate-300">|</span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 font-medium">
+              <Clock className="w-3 h-3 text-[#1F4F4A]" />
+              <span>Durée : <strong className="text-slate-900">{computeCampaignDuration(campaign)}</strong></span>
+            </span>
           </div>
           <span className="font-bold text-[#1F4F4A]">{progressPercent}%</span>
         </div>

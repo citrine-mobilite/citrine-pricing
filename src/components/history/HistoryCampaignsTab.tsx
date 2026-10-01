@@ -3,6 +3,8 @@ import Swal from 'sweetalert2';
 import { PricingCampaign, City } from '../../types';
 import { api } from '../../services/api';
 import { DataTable, Column } from '../DataTable';
+import { computeCampaignDuration } from '../../utils/durationUtils';
+import { SearchableSelect } from '../SearchableSelect';
 import { ArrowRight, Calendar, LayoutGrid, Table, RotateCw, Clock, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 
 interface HistoryCampaignsTabProps {
@@ -198,8 +200,8 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
       sortable: true,
       align: 'right',
       render: (c) => (
-        <span className="font-mono text-xs text-slate-500">
-          {c.durationSeconds ? `${c.durationSeconds}s` : '—'}
+        <span className="font-mono text-xs font-semibold text-slate-700">
+          {computeCampaignDuration(c)}
         </span>
       )
     },
@@ -256,19 +258,16 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <label htmlFor="city-filter-select" className="text-xs text-slate-500 font-medium">Ville :</label>
-            <select
+            <SearchableSelect
               id="city-filter-select"
+              options={[
+                { value: '', label: 'Toutes les villes' },
+                ...cities.map((c) => ({ value: c.id, label: c.name, sublabel: c.country }))
+              ]}
               value={cityFilter}
-              onChange={(e) => onCityFilterChange(e.target.value)}
-              className="bg-white border border-slate-200 text-xs font-semibold text-slate-800 rounded-lg px-2.5 py-1 focus:outline-none focus:border-[#3D8B85]"
-            >
-              <option value="">Toutes les villes</option>
-              {cities.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={onCityFilterChange}
+              searchPlaceholder="Rechercher une ville..."
+            />
           </div>
 
           <span className="text-slate-300">|</span>
@@ -389,6 +388,12 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                               <span className="text-slate-500 text-[11px]">Trajets traités :</span>
                               <span className="font-mono font-semibold text-slate-800 text-[11px]">
                                 {c.completedPairs || 0} / {c.totalPairs || 0}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500 text-[11px]">Durée calculée :</span>
+                              <span className="font-mono font-semibold text-[#1F4F4A] text-[11px]">
+                                {computeCampaignDuration(c)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">

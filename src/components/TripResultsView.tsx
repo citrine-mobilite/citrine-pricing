@@ -5,6 +5,7 @@ import { DataTable, Column } from './DataTable';
 import { TripResultsHeader } from './trips/TripResultsHeader';
 import { TripMetricsGrid } from './trips/TripMetricsGrid';
 import { TripMatrixView } from './trips/TripMatrixView';
+import { formatCampaignFileName } from '../utils/exportUtils';
 import {
   cleanNeighborhoodName,
   renderCellPrice,
@@ -216,7 +217,6 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
         onSelectCampaignId={onSelectCampaignId}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        onExportCsv={handleExportCsv}
       />
 
       <TripMetricsGrid stats={stats} currencySymbol="FCFA" />
@@ -230,7 +230,7 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
           defaultPageSize={25}
           searchPlaceholder="Rechercher par départ ou arrivée..."
           searchKeys={['startNeighborhoodName', 'endNeighborhoodName']}
-          exportFileName={`trajets_${currentCampaign?.cityName?.toLowerCase() || 'vtc'}`}
+          exportFileName={formatCampaignFileName(currentCampaign?.cityName, currentCampaign?.startedAt)}
         />
       ) : (
         <TripMatrixView

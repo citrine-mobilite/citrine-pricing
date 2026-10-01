@@ -418,14 +418,16 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
     minPrice: 0,
     maxPrice: 0,
     avgDriversCount: 0,
-    avgClosestDriverDistanceKm: 0
-  };
+    avgClosestDriverDistanceKm: 0,
+    count: countHero
+  } as any;
 
   campaign.tripMasterStats = {
     avgPrice: countTm > 0 ? Math.round(sumTmEco / countTm) : 0,
     minPrice: 0,
-    maxPrice: 0
-  };
+    maxPrice: 0,
+    count: countTm
+  } as any;
 
   campaign.deltaStats = {
     yangoCheaperCount: yangoCheaper,

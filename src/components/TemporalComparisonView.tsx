@@ -1,27 +1,16 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PricingCampaign } from '../types';
+import { SearchableSelect, SearchableOption } from './SearchableSelect';
 import {
   TrendingUp,
   TrendingDown,
   Minus,
   Calendar,
-  LineChart as LineChartIcon
+  LineChart as LineChartIcon,
+  BarChart3,
+  PieChart as PieChartIcon
 } from 'lucide-react';
 import Highcharts from 'highcharts';
-import exportingInit from 'highcharts/modules/exporting';
-import exportDataInit from 'highcharts/modules/export-data';
-import accessibilityInit from 'highcharts/modules/accessibility';
-
-// Initialize Highcharts modules once
-if (typeof window !== 'undefined' && typeof Highcharts === 'object') {
-  try {
-    (exportingInit as any)(Highcharts);
-    (exportDataInit as any)(Highcharts);
-    (accessibilityInit as any)(Highcharts);
-  } catch {
-    // Prevent duplicate module initialization in HMR
-  }
-}
 
 interface TemporalComparisonViewProps {
   campaigns: PricingCampaign[];
@@ -39,7 +28,8 @@ type ComparisonMode =
   | 'current_year'
   | 'custom_date';
 
-type VehicleClassKey = 'eco' | 'confort' | 'suv' | 'moto';
+type VehicleClassKey = 'eco' | 'confort';
+type ChartType = 'spline' | 'column' | 'pie';
 
 interface VehicleClassConfig {
   key: VehicleClassKey;
@@ -48,9 +38,7 @@ interface VehicleClassConfig {
 
 const VEHICLE_CLASSES: VehicleClassConfig[] = [
   { key: 'eco', label: 'Standard / Éco' },
-  { key: 'confort', label: 'Confort' },
-  { key: 'suv', label: 'SUV (vs Confort+)' },
-  { key: 'moto', label: 'Moto' }
+  { key: 'confort', label: 'Confort' }
 ];
 
 export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
@@ -58,6 +46,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
 }) => {
   const [selectedClass, setSelectedClass] = useState<VehicleClassKey>('eco');
   const [mode, setMode] = useState<ComparisonMode>('campaign_pair');
+  const [chartType, setChartType] = useState<ChartType>('spline');
 
   // Format default custom date to today YYYY-MM-DD
   const todayStr = useMemo(() => {
@@ -298,9 +287,26 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
 
     const categories = ordered.map((c) => {
       const dateObj = new Date(c.startedAt);
-      return mode === 'today'
-        ? dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-        : dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      if (isNaN(dateObj.getTime())) return '—';
+
+      const now = new Date();
+      const todayStr = now.toLocaleDateString('fr-FR');
+
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yesterdayStr = yesterday.toLocaleDateString('fr-FR');
+
+      const dStr = dateObj.toLocaleDateString('fr-FR');
+      const timeStr = dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+      if (dStr === todayStr) {
+        return `Aujourd'hui ${timeStr}`;
+      } else if (dStr === yesterdayStr) {
+        return `Hier ${timeStr}`;
+      } else {
+        const dayMonth = dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+        return `${dayMonth} à ${timeStr}`;
+      }
     });
 
     const heroData = ordered.map((c) => {
@@ -319,18 +325,25 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
     });
 
     const currentClassLabel = VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label || '';
+    const isPie = chartType === 'pie';
+
+    // Calculate overall averages for pie chart
+    const heroValid = heroData.filter(v => v !== null && v > 0) as number[];
+    const yangoValid = yangoData.filter(v => v !== null && v > 0) as number[];
+    const tripmasterValid = tripmasterData.filter(v => v !== null && v > 0) as number[];
+
+    const avgHero = heroValid.length ? Math.round(heroValid.reduce((a, b) => a + b, 0) / heroValid.length) : 0;
+    const avgYango = yangoValid.length ? Math.round(yangoValid.reduce((a, b) => a + b, 0) / yangoValid.length) : 0;
+    const avgTripMaster = tripmasterValid.length ? Math.round(tripmasterValid.reduce((a, b) => a + b, 0) / tripmasterValid.length) : 0;
 
     return {
       chart: {
-        type: 'spline',
+        type: chartType,
         backgroundColor: '#FFFFFF',
         style: {
           fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
         },
-        zoomType: 'x',
-        panning: { enabled: true },
-        panKey: 'shift',
-        height: 320
+        height: 330
       },
       title: {
         text: undefined
@@ -339,29 +352,9 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         enabled: false
       },
       exporting: {
-        enabled: true,
-        fallbackToExportServer: false,
-        buttons: {
-          contextButton: {
-            menuItems: [
-              'viewFullscreen',
-              'printChart',
-              'separator',
-              'downloadPNG',
-              'downloadJPEG',
-              'downloadPDF',
-              'downloadSVG'
-            ]
-          }
-        },
-        chartOptions: {
-          title: {
-            text: `Évolution des Tarifs VTC — Classe ${currentClassLabel}`,
-            style: { fontSize: '14px', fontWeight: 'bold' }
-          }
-        }
+        enabled: false
       },
-      xAxis: {
+      xAxis: isPie ? undefined : {
         categories,
         crosshair: {
           width: 1,
@@ -377,7 +370,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         lineColor: '#E2E8F0',
         tickColor: '#E2E8F0'
       },
-      yAxis: {
+      yAxis: isPie ? undefined : {
         title: {
           text: 'Prix Moyen (FCFA)',
           style: {
@@ -397,47 +390,71 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         gridLineColor: '#F1F5F9',
         gridLineDashStyle: 'Dash'
       },
-      tooltip: {
-        shared: true,
-        useHTML: true,
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        borderColor: '#334155',
-        borderRadius: 8,
-        shadow: true,
-        style: {
-          color: '#FFFFFF'
-        },
-        formatter: function () {
-          let s = `<div style="font-size: 11px; padding: 4px; min-width: 190px;">`;
-          s += `<div style="font-weight: 600; color: #E2E8F0; margin-bottom: 6px; border-bottom: 1px solid #334155; padding-bottom: 4px;">${this.x}</div>`;
-          let heroVal: number | null = null;
-          let yangoVal: number | null = null;
-          (this.points || []).forEach(point => {
-            const val = point.y != null ? `${Number(point.y).toLocaleString('fr-FR')} FCFA` : '—';
-            if (point.series.name === 'Hero Cab') heroVal = point.y as number;
-            if (point.series.name === 'Yango') yangoVal = point.y as number;
-            s += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 3px;">
-              <span style="color: ${point.color}; font-weight: 600;">● ${point.series.name}:</span>
-              <span style="font-family: monospace; font-weight: 700; color: #FFFFFF;">${val}</span>
-            </div>`;
-          });
-          if (heroVal !== null && yangoVal !== null && heroVal > 0 && yangoVal > 0) {
-            const diff = heroVal - yangoVal;
-            const pct = ((diff / yangoVal) * 100).toFixed(1);
-            const isHeroCheaper = diff < 0;
-            const diffColor = isHeroCheaper ? '#34D399' : (diff > 0 ? '#F87171' : '#94A3B8');
-            const diffLabel = isHeroCheaper
-              ? `Hero -${Math.abs(diff).toLocaleString('fr-FR')} F (${pct}%)`
-              : (diff > 0 ? `Hero +${diff.toLocaleString('fr-FR')} F (+${pct}%)` : 'Tarifs identiques');
-            s += `<div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed #334155; display: flex; align-items: center; justify-content: space-between; font-size: 10.5px;">
-              <span style="color: #94A3B8;">Écart Hero/Yango:</span>
-              <span style="color: ${diffColor}; font-weight: 700;">${diffLabel}</span>
-            </div>`;
+      tooltip: isPie
+        ? {
+            useHTML: true,
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            borderColor: '#334155',
+            borderRadius: 8,
+            shadow: true,
+            style: { color: '#FFFFFF' },
+            formatter: function (this: any) {
+              const name = this.key || this.point?.name || '';
+              const color = this.color || this.point?.color || '#1F4F4A';
+              const val = this.y != null ? Number(this.y).toLocaleString('fr-FR') : '0';
+              const pct = this.percentage ? this.percentage.toFixed(1) : '0';
+              return `<div style="font-size: 11px; padding: 4px;">
+                <div style="font-weight: 700; color: ${color}; font-size: 12px; margin-bottom: 3px;">● ${name}</div>
+                <div style="font-family: monospace; font-size: 12px; font-weight: 700; color: #FFF;">
+                  Prix Moyen : ${val} FCFA
+                </div>
+                <div style="color: #94A3B8; font-size: 10.5px; margin-top: 3px;">
+                  Part du tarif comparé : ${pct}%
+                </div>
+              </div>`;
+            }
           }
-          s += `</div>`;
-          return s;
-        }
-      },
+        : {
+            shared: true,
+            useHTML: true,
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            borderColor: '#334155',
+            borderRadius: 8,
+            shadow: true,
+            style: {
+              color: '#FFFFFF'
+            },
+            formatter: function () {
+              let s = `<div style="font-size: 11px; padding: 4px; min-width: 190px;">`;
+              s += `<div style="font-weight: 600; color: #E2E8F0; margin-bottom: 6px; border-bottom: 1px solid #334155; padding-bottom: 4px;">${this.x}</div>`;
+              let heroVal: number | null = null;
+              let yangoVal: number | null = null;
+              (this.points || []).forEach(point => {
+                const val = point.y != null ? `${Number(point.y).toLocaleString('fr-FR')} FCFA` : '—';
+                if (point.series.name === 'Hero Cab') heroVal = point.y as number;
+                if (point.series.name === 'Yango') yangoVal = point.y as number;
+                s += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 3px;">
+                  <span style="color: ${point.color}; font-weight: 600;">● ${point.series.name}:</span>
+                  <span style="font-family: monospace; font-weight: 700; color: #FFFFFF;">${val}</span>
+                </div>`;
+              });
+              if (heroVal !== null && yangoVal !== null && heroVal > 0 && yangoVal > 0) {
+                const diff = heroVal - yangoVal;
+                const pct = ((diff / yangoVal) * 100).toFixed(1);
+                const isHeroCheaper = diff < 0;
+                const diffColor = isHeroCheaper ? '#34D399' : (diff > 0 ? '#F87171' : '#94A3B8');
+                const diffLabel = isHeroCheaper
+                  ? `Hero -${Math.abs(diff).toLocaleString('fr-FR')} F (${pct}%)`
+                  : (diff > 0 ? `Hero +${diff.toLocaleString('fr-FR')} F (+${pct}%)` : 'Tarifs identiques');
+                s += `<div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed #334155; display: flex; align-items: center; justify-content: space-between; font-size: 10.5px;">
+                  <span style="color: #94A3B8;">Écart Hero/Yango:</span>
+                  <span style="color: ${diffColor}; font-weight: 700;">${diffLabel}</span>
+                </div>`;
+              }
+              s += `</div>`;
+              return s;
+            }
+          },
       legend: {
         align: 'right',
         verticalAlign: 'top',
@@ -451,52 +468,80 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         }
       },
       plotOptions: {
+        series: {
+          borderWidth: 0,
+          borderRadius: 4
+        },
+        pie: {
+          allowPointSelect: true,
+          cursor: 'pointer',
+          dataLabels: {
+            enabled: true,
+            format: '<b>{point.name}</b><br/>{point.y:,.0f} FCFA ({point.percentage:.1f}%)',
+            style: { fontSize: '11px', color: '#1E293B', fontWeight: '600' }
+          },
+          showInLegend: true
+        },
         spline: {
           lineWidth: 2.5,
-          marker: {
-            radius: 3.5,
-            symbol: 'circle'
-          }
+          marker: { radius: 3.5, symbol: 'circle' }
+        },
+        column: {
+          groupPadding: 0.15,
+          pointPadding: 0.05
         }
       },
-      series: [
-        {
-          type: 'spline',
-          name: 'Hero Cab',
-          data: heroData,
-          color: '#1F4F4A',
-          lineWidth: 3,
-          marker: {
-            fillColor: '#1F4F4A',
-            lineWidth: 2,
-            lineColor: '#FFFFFF'
-          }
-        },
-        {
-          type: 'spline',
-          name: 'Yango',
-          data: yangoData,
-          color: '#F43F5E',
-          marker: {
-            fillColor: '#F43F5E',
-            lineWidth: 2,
-            lineColor: '#FFFFFF'
-          }
-        },
-        {
-          type: 'spline',
-          name: 'Trip Master',
-          data: tripmasterData,
-          color: '#2563EB',
-          marker: {
-            fillColor: '#2563EB',
-            lineWidth: 2,
-            lineColor: '#FFFFFF'
-          }
-        }
-      ]
+      series: isPie
+        ? [
+            {
+              type: 'pie',
+              name: 'Prix Moyen',
+              innerSize: '40%',
+              data: [
+                { name: 'Hero Cab', y: avgHero, color: '#1F4F4A' },
+                { name: 'Yango', y: avgYango, color: '#F43F5E' },
+                { name: 'Trip Master', y: avgTripMaster, color: '#2563EB' }
+              ].filter(p => p.y > 0)
+            }
+          ]
+        : [
+            {
+              type: chartType as any,
+              name: 'Hero Cab',
+              data: heroData,
+              color: '#1F4F4A',
+              lineWidth: 3,
+              marker: {
+                fillColor: '#1F4F4A',
+                lineWidth: 2,
+                lineColor: '#FFFFFF'
+              }
+            },
+            {
+              type: chartType as any,
+              name: 'Yango',
+              data: yangoData,
+              color: '#F43F5E',
+              marker: {
+                fillColor: '#F43F5E',
+                lineWidth: 2,
+                lineColor: '#FFFFFF'
+              }
+            },
+            {
+              type: chartType as any,
+              name: 'Trip Master',
+              data: tripmasterData,
+              color: '#2563EB',
+              marker: {
+                fillColor: '#2563EB',
+                lineWidth: 2,
+                lineColor: '#FFFFFF'
+              }
+            }
+          ]
     };
-  }, [comparison, mode, selectedClass]);
+  }, [comparison, mode, selectedClass, chartType]);
 
   // Ref and Lifecycle for direct Highcharts DOM attachment (100% stable, no wrapper errors)
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -571,24 +616,19 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             Évolution des Prix
           </h1>
 
-          {/* Vehicle Class Segmented Control */}
-          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg overflow-x-auto text-xs">
-            {VEHICLE_CLASSES.map((vc) => {
-              const isSelected = selectedClass === vc.key;
-              return (
-                <button
-                  key={vc.key}
-                  onClick={() => setSelectedClass(vc.key)}
-                  className={`px-2.5 py-1 rounded-md text-xs transition cursor-pointer shrink-0 ${
-                    isSelected
-                      ? 'bg-white text-slate-900 font-semibold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {vc.label}
-                </button>
-              );
-            })}
+          {/* Vehicle Class Selector (Dropdown Searchable & Buttons) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 hidden sm:inline">Classe de Véhicule :</span>
+            <SearchableSelect
+              options={VEHICLE_CLASSES.map((vc) => ({
+                value: vc.key,
+                label: vc.label,
+                sublabel: vc.key === 'eco' ? 'Tarif Standard Yango & Hero Cab' : 'Gamme Confort'
+              }))}
+              value={selectedClass}
+              onChange={(v) => setSelectedClass(v as VehicleClassKey)}
+              searchPlaceholder="Choisir Éco ou Confort..."
+            />
           </div>
         </div>
 
@@ -704,33 +744,33 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         {mode === 'campaign_pair' && sorted.length >= 2 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase">Période A (Référence)</label>
-              <select
+              <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Période A (Référence)</label>
+              <SearchableSelect
+                options={sorted.map((c) => ({
+                  value: c.id,
+                  label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+                  sublabel: `${c.completedPairs || 0} trajets - Moyenne: ${c.avgPrice ? c.avgPrice + ' F' : '—'}`
+                }))}
                 value={campaignAId}
-                onChange={(e) => setCampaignAId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none mt-0.5 truncate"
-              >
-                {sorted.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.cityName} — {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </option>
-                ))}
-              </select>
+                onChange={setCampaignAId}
+                searchPlaceholder="Rechercher une campagne A..."
+                className="w-full"
+              />
             </div>
 
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase">Période B (Comparée)</label>
-              <select
+              <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Période B (Comparée)</label>
+              <SearchableSelect
+                options={sorted.map((c) => ({
+                  value: c.id,
+                  label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+                  sublabel: `${c.completedPairs || 0} trajets - Moyenne: ${c.avgPrice ? c.avgPrice + ' F' : '—'}`
+                }))}
                 value={campaignBId}
-                onChange={(e) => setCampaignBId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none mt-0.5 truncate"
-              >
-                {sorted.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.cityName} — {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </option>
-                ))}
-              </select>
+                onChange={setCampaignBId}
+                searchPlaceholder="Rechercher une campagne B..."
+                className="w-full"
+              />
             </div>
           </div>
         )}
@@ -812,17 +852,55 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
       {/* HIGHCHARTS CARD WITH 3 LINES AND BUILT-IN EXPORTING */}
       <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
         
-        {/* Card Header & Controls */}
-        <div className="px-4 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70">
+        {/* Card Header & Chart Type Selector */}
+        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80">
           <div className="flex items-center gap-2">
-            <LineChartIcon className="w-4 h-4 text-slate-600" />
-            <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-              Courbe d'Évolution Temporelle — Highcharts ({VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label})
+            <LineChartIcon className="w-4 h-4 text-[#1F4F4A]" />
+            <h2 className="text-xs font-bold text-slate-900 tracking-tight">
+              Graphique d'Évolution des Tarifs ({VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label})
             </h2>
           </div>
 
-          <div className="text-[11px] text-slate-400 font-mono">
-            Export (PDF, PNG, SVG) & Zoom intégrés
+          {/* Chart Type Selector Dropdown / Pills */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">Type de graphique :</span>
+            <div className="flex items-center bg-white border border-slate-200 p-0.5 rounded-lg shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setChartType('spline')}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+                  chartType === 'spline' ? 'bg-[#1F4F4A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Courbes d'évolution"
+              >
+                <LineChartIcon className="w-3.5 h-3.5" />
+                <span>Courbes</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChartType('column')}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+                  chartType === 'column' ? 'bg-[#1F4F4A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Histogramme / Barres"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Barres</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChartType('pie')}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+                  chartType === 'pie' ? 'bg-[#1F4F4A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Répartition Camembert"
+              >
+                <PieChartIcon className="w-3.5 h-3.5" />
+                <span>Camembert</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -830,7 +908,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         <div className="p-3 sm:p-5">
           {comparison && comparison.relevantCampaigns.length === 0 ? (
             <div className="py-16 text-center text-xs text-slate-400">
-              Aucun relevé disponible pour afficher la courbe sur cette période.
+              Aucun relevé disponible pour afficher le graphique sur cette période.
             </div>
           ) : (
             <div ref={chartContainerRef} className="w-full min-h-[320px]" />
@@ -838,12 +916,12 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         </div>
 
         {/* Footer info bar */}
-        <div className="px-4 py-2.5 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+        <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
           <span>
-            {comparison?.relevantCampaigns.length || 0} relevés analysés pour la classe {VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label}
+            {comparison?.relevantCampaigns.length || 0} relevés analysés pour la classe <b>{VEHICLE_CLASSES.find(v => v.key === selectedClass)?.label}</b>
           </span>
-          <span className="text-slate-400">
-            Cliquez sur le menu en haut à droite du graphique pour exporter (PNG, PDF, SVG) ou imprimer
+          <span className="font-medium text-slate-600">
+            Comparatif en direct Yango vs Hero Cab vs Trip Master
           </span>
         </div>
 

@@ -327,6 +327,10 @@ export const api = {
     triggerType?: 'manual' | 'scheduled';
     selectedClasses?: string[];
     sampleLimit?: number | 'all';
+    scopeMode?: 'global' | 'intra' | 'inter';
+    arrondissement?: string;
+    originArrondissement?: string;
+    destArrondissement?: string;
   }): Promise<{ message: string; campaign: PricingCampaign; totalChunks: number; totalPairs: number }> {
     const res = await fetch(`${BASE_URL}/campaigns/start`, {
       method: 'POST',
@@ -337,7 +341,28 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors du lancement de la campagne.');
     }
-    return res.json();
+    const result = await res.json();
+
+    // Ajout incrémental de la nouvelle campagne au cache local sans rien effacer
+    if (result.campaign) {
+      const cacheKeys = [`citrine_campaigns_v7_all`, `citrine_campaigns_v7_${data.cityId}`];
+      for (const key of cacheKeys) {
+        try {
+          const raw = localStorage.getItem(key);
+          let list: PricingCampaign[] = [];
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.data)) list = parsed.data;
+          }
+          if (!list.some(c => c.id === result.campaign.id)) {
+            list.unshift(result.campaign);
+            localStorage.setItem(key, JSON.stringify({ data: list, timestamp: Date.now() }));
+          }
+        } catch {}
+      }
+    }
+
+    return result;
   },
 
   async processCampaignChunk(campaignId: string, chunkIndex: number): Promise<{
@@ -536,19 +561,65 @@ export const api = {
     return res.json();
   },
 
-  // History & Audit logs
+  // History & Audit logs (avec cache navigateur 7 jours)
   async getHistory(): Promise<any[]> {
-    const res = await fetch(`${BASE_URL}/history`);
-    if (!res.ok) return [];
-    return res.json();
+    const CACHE_KEY = 'citrine_history_v7';
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    let cachedList: any[] = [];
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const { data, timestamp } = JSON.parse(raw);
+        if (Date.now() - timestamp < SEVEN_DAYS_MS && Array.isArray(data)) {
+          cachedList = data;
+        }
+      }
+    } catch {}
+
+    try {
+      const res = await fetch(`${BASE_URL}/history`);
+      if (res.ok) {
+        const freshList: any[] = await res.json();
+        const map = new Map<string, any>();
+        for (const item of cachedList) {
+          if (item && item.id) map.set(item.id, item);
+        }
+        for (const item of freshList) {
+          if (item && item.id) map.set(item.id, item);
+        }
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: merged, timestamp: Date.now() }));
+        } catch {}
+        return merged;
+      }
+    } catch (e) {
+      console.warn('[API Client] getHistory error:', e);
+    }
+
+    return cachedList;
   },
 
   async deleteHistoryItem(id: string): Promise<void> {
+    try { localStorage.removeItem('citrine_history_v7'); } catch {}
     await fetch(`${BASE_URL}/history/${id}`, { method: 'DELETE' });
   },
 
   async clearAllHistory(): Promise<void> {
+    try { localStorage.removeItem('citrine_history_v7'); } catch {}
     const res = await fetch(`${BASE_URL}/history`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de tout l’historique.');
+  },
+
+  // Export Database
+  getDbStructureExportUrl(): string {
+    return `${BASE_URL}/export/db-structure`;
+  },
+
+  getDbFullDataExportUrl(): string {
+    return `${BASE_URL}/export/db-full`;
   }
 };

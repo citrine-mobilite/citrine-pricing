@@ -184,6 +184,7 @@ function AppContent() {
                   <DashboardView
                     cities={cities}
                     campaigns={campaigns}
+                    neighborhoods={neighborhoods}
                     onNavigate={setActiveTab}
                     onSelectCampaign={handleSelectCampaign}
                     onRefresh={fetchData}

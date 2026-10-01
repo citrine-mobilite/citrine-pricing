@@ -5,6 +5,7 @@ import { db, cleanFirestoreDoc, safeFirestoreWrite } from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
+  users,
   historyRecords,
   setHistoryRecords,
   activePricingSessions,
@@ -168,9 +169,10 @@ router.post('/api/cron/trigger-scheduled', async (_req: Request, res: Response) 
   return res.json({ success: true, message: 'Vérification planifiée effectuée.' });
 });
 
-// History
-router.get('/api/history', async (_req: Request, res: Response) => {
-  if (db) {
+// History (Servi depuis la RAM en priorité - 0 lecture Firestore)
+router.get('/api/history', async (req: Request, res: Response) => {
+  const forceRefresh = req.query.forceRefresh === 'true';
+  if (db && (historyRecords.length === 0 || forceRefresh)) {
     try {
       const snap = await getDocs(collection(db, 'history'));
       if (!snap.empty) {
@@ -226,6 +228,75 @@ router.get('/api/system/status', async (_req: Request, res: Response) => {
     totalCities: cities.length,
     maxFirestorePayload: '< 1 MB (Chunked < 400 KB)'
   });
+});
+
+// 1. Export Structure/Schema DB
+router.get('/api/export/db-structure', async (_req: Request, res: Response) => {
+  try {
+    const structureData = {
+      exportType: 'db_structure_schema',
+      exportedAt: new Date().toISOString(),
+      cities,
+      neighborhoods,
+      users: users.map(({ passwordHash: _, ...u }: any) => u),
+      settings: {
+        yango: yangoSettings,
+        hero: heroSettings,
+        tripmaster: tripMasterSettings
+      }
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="citrine_db_structure_${new Date().toISOString().split('T')[0]}.json"`);
+    return res.send(JSON.stringify(structureData, null, 2));
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Erreur lors de l’export de la structure DB: ' + e.message });
+  }
+});
+
+// 2. Export Full Database with Data
+router.get('/api/export/db-full', async (_req: Request, res: Response) => {
+  try {
+    let campaignsList: any[] = [];
+    let tripsList: any[] = [];
+
+    if (db) {
+      try {
+        const campSnap = await getDocs(collection(db, 'campaigns'));
+        if (!campSnap.empty) {
+          campaignsList = campSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+        const tripsSnap = await getDocs(collection(db, 'trips'));
+        if (!tripsSnap.empty) {
+          tripsList = tripsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+      } catch (err: any) {
+        console.warn('[Export] Firestore read warning:', err.message);
+      }
+    }
+
+    const fullData = {
+      exportType: 'full_database_with_data',
+      exportedAt: new Date().toISOString(),
+      cities,
+      neighborhoods,
+      users: users.map(({ passwordHash: _, ...u }: any) => u),
+      history: historyRecords,
+      settings: {
+        yango: yangoSettings,
+        hero: heroSettings,
+        tripmaster: tripMasterSettings
+      },
+      campaigns: campaignsList,
+      trips: tripsList
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="citrine_db_full_data_${new Date().toISOString().split('T')[0]}.json"`);
+    return res.send(JSON.stringify(fullData, null, 2));
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Erreur lors de l’export complet de la DB: ' + e.message });
+  }
 });
 
 export default router;

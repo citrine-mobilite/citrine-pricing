@@ -1,6 +1,8 @@
 import React from 'react';
 import { City, PricingCampaign } from '../../types';
-import { Play, RotateCw, Building2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Play, RotateCw, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock } from 'lucide-react';
+import { computeCampaignDuration } from '../../utils/durationUtils';
+import { SearchableSelect } from '../SearchableSelect';
 
 interface PricingHeaderProps {
   cities: City[];
@@ -10,8 +12,8 @@ interface PricingHeaderProps {
   activeCampaignId: string;
   onCampaignChange: (campaignId: string) => void;
   onRefresh?: () => void;
-  showSingleTester: boolean;
-  onToggleSingleTester: () => void;
+  activeTesterPanel: 'none' | 'single' | 'intra' | 'inter';
+  onToggleTesterPanel: (panel: 'single' | 'intra' | 'inter') => void;
   totalCombinations: number;
   launchingTarget: string | null;
   onLaunch: (overrideLimit: number | 'all') => void;
@@ -26,8 +28,8 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
   activeCampaignId,
   onCampaignChange,
   onRefresh,
-  showSingleTester,
-  onToggleSingleTester,
+  activeTesterPanel,
+  onToggleTesterPanel,
   totalCombinations,
   launchingTarget,
   onLaunch,
@@ -50,18 +52,17 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
           </div>
           <div className="flex items-center gap-2 mt-1">
             <label htmlFor="city-select" className="text-xs text-slate-500 font-medium">Ville cible :</label>
-            <select
+            <SearchableSelect
               id="city-select"
+              options={cities.map((c) => ({
+                value: c.id,
+                label: c.name,
+                sublabel: c.country
+              }))}
               value={currentCity.id}
-              onChange={(e) => onSelectCityId(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 rounded-lg px-2.5 py-1 focus:outline-none focus:border-[#3D8B85]"
-            >
-              {cities.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.country})
-                </option>
-              ))}
-            </select>
+              onChange={onSelectCityId}
+              searchPlaceholder="Rechercher une ville..."
+            />
           </div>
         </div>
       </div>
@@ -71,20 +72,26 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
         {/* Campaign Picker Dropdown */}
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           {campaigns.length > 0 && (
-            <div className="flex-1 sm:flex-none flex items-center justify-between gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 sm:py-1">
+            <div className="flex-1 sm:flex-none flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
               <span className="text-[11px] text-slate-400 font-medium shrink-0">Relevé :</span>
-              <select
+              <SearchableSelect
+                options={campaigns.map((c) => ({
+                  value: c.id,
+                  label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+                  sublabel: `${c.completedPairs || 0} tr. - ⏱️ ${computeCampaignDuration(c)}`
+                }))}
                 value={activeCampaignId}
-                onChange={(e) => onCampaignChange(e.target.value)}
-                className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none w-full sm:max-w-[190px] truncate"
-              >
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.cityName} - {new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ({c.completedPairs || 0} tr.)
-                  </option>
-                ))}
-              </select>
+                onChange={onCampaignChange}
+                searchPlaceholder="Rechercher un relevé..."
+              />
             </div>
+          )}
+
+          {activeCampaign && (
+            <span className="hidden sm:inline-flex items-center gap-1 bg-[#1F4F4A]/10 text-[#1F4F4A] px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0" title="Durée totale calculée">
+              <Clock className="w-3.5 h-3.5" />
+              <span>{computeCampaignDuration(activeCampaign)}</span>
+            </span>
           )}
 
           {/* Refresh button */}
@@ -100,12 +107,12 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
         </div>
 
         {/* Buttons Row / Grid on Mobile */}
-        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
-          {/* Single Test Toggle */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* 1. Test Trajet Unique */}
           <button
-            onClick={onToggleSingleTester}
-            className={`col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer min-h-[40px] sm:min-h-0 ${
-              showSingleTester
+            onClick={() => onToggleTesterPanel('single')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer min-h-[38px] sm:min-h-0 ${
+              activeTesterPanel === 'single'
                 ? 'bg-slate-800 text-white border-slate-800'
                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
@@ -114,22 +121,48 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <span>Test Trajet Unique</span>
           </button>
 
-          {/* Test Sample (25 pairs) */}
+          {/* 2. 1 Arrondissement (Intra) */}
+          <button
+            onClick={() => onToggleTesterPanel('intra')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer min-h-[38px] sm:min-h-0 ${
+              activeTesterPanel === 'intra'
+                ? 'bg-[#1F4F4A] text-white border-[#1F4F4A]'
+                : 'bg-teal-50/70 text-teal-800 border-teal-200 hover:bg-teal-100'
+            }`}
+          >
+            <Navigation className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+            <span>1 Arrondissement</span>
+          </button>
+
+          {/* 3. 2 Arrondissements (Inter) */}
+          <button
+            onClick={() => onToggleTesterPanel('inter')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer min-h-[38px] sm:min-h-0 ${
+              activeTesterPanel === 'inter'
+                ? 'bg-blue-800 text-white border-blue-800'
+                : 'bg-blue-50/70 text-blue-800 border-blue-200 hover:bg-blue-100'
+            }`}
+          >
+            <ArrowRight className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>2 Arrondissements</span>
+          </button>
+
+          {/* 4. Test Sample (25 pairs) */}
           <button
             onClick={() => onLaunch(25)}
             disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition disabled:opacity-50 cursor-pointer shadow-sm min-h-[40px] sm:min-h-0 active:scale-95"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition disabled:opacity-50 cursor-pointer shadow-2xs min-h-[38px] sm:min-h-0 active:scale-95"
             title="Lancer un échantillon rapide de 25 trajets"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span className="truncate">{launchingTarget === '25' ? 'Démarrage...' : 'Test 25'}</span>
           </button>
 
-          {/* Full Benchmark Launch */}
+          {/* 5. Full Benchmark Launch */}
           <button
             onClick={() => onLaunch('all')}
             disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer min-h-[40px] sm:min-h-0 active:scale-95"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg shadow-2xs transition disabled:opacity-50 cursor-pointer min-h-[38px] sm:min-h-0 active:scale-95"
             title={`Lancer la tarification de TOUS les ${totalCombinations.toLocaleString('fr-FR')} trajets`}
           >
             <Play className="w-3.5 h-3.5 fill-white shrink-0" />

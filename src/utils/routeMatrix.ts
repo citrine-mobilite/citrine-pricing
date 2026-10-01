@@ -33,23 +33,23 @@ export function detectArrondissement(n: { name: string; district?: string }): Do
   }
 
   const upper = n.name.toUpperCase();
-  if (upper.includes('DOUALA 1ER') || upper.includes('DOUALA 1') || upper.includes('1ER ARRONDISSEMENT')) {
+  if (upper.includes('DOUALA 1ER') || upper.includes('DOUALA 1') || upper.includes('AKWA') || upper.includes('BONANJO') || upper.includes('BONAPRISO') || upper.includes('DEIDO') || upper.includes('BALI')) {
     return 'Douala 1er';
   }
-  if (upper.includes('DOUALA 2E') || upper.includes('DOUALA 2EME') || upper.includes('DOUALA 2IEME') || upper.includes('DOUALA 2')) {
+  if (upper.includes('DOUALA 2E') || upper.includes('DOUALA 2') || upper.includes('NEW BELL') || upper.includes('NSSAM')) {
     return 'Douala 2e';
   }
-  if (upper.includes('DOUALA 3E') || upper.includes('DOUALA 3EME') || upper.includes('DOUALA 3IEME') || upper.includes('DOUALA 3')) {
+  if (upper.includes('DOUALA 3E') || upper.includes('DOUALA 3') || upper.includes('BEPANDA') || upper.includes('NDOGBONG') || upper.includes('LOGBESSOU')) {
     return 'Douala 3e';
   }
-  if (upper.includes('DOUALA 4E') || upper.includes('DOUALA 4EME') || upper.includes('DOUALA 4IEME') || upper.includes('BONABÉRI') || upper.includes('BONABERI') || upper.includes('DOUALA 4')) {
+  if (upper.includes('DOUALA 4E') || upper.includes('BONABÉRI') || upper.includes('BONABERI') || upper.includes('DOUALA 4')) {
     return 'Douala 4e';
   }
-  if (upper.includes('DOUALA 5E') || upper.includes('DOUALA 5EME') || upper.includes('DOUALA 5IEME') || upper.includes('DOUALA 5')) {
+  if (upper.includes('DOUALA 5E') || upper.includes('DOUALA 5') || upper.includes('MAKEPE') || upper.includes('BONAMOUS SADI') || upper.includes('KOTTO')) {
     return 'Douala 5e';
   }
 
-  return 'Autre';
+  return 'Douala 1er';
 }
 
 /**
