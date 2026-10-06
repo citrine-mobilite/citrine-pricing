@@ -64,7 +64,7 @@ export function cancelChunkCampaignSession(campaignId: string): boolean {
   const session = campaignSessions.get(campaignId);
   if (session) {
     session.campaign.status = 'cancelled';
-    campaignSessions.delete(campaignId);
+    // Ne PAS supprimer de campaignSessions afin que les requêtes de lots suivantes soient rejetées immédiatement
   }
   const memCamp = memoryCampaigns.find(c => c.id === campaignId);
   if (memCamp) {
@@ -201,13 +201,16 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
     campaignSessions.set(campaignId, session);
   }
 
+  const memCamp = memoryCampaigns.find(c => c.id === campaignId);
   const targetChunk = session.chunks.find(c => c.chunkIndex === chunkIndex);
-  if (!targetChunk || session.campaign.status === 'cancelled') {
+  if (!targetChunk || session.campaign.status === 'cancelled' || memCamp?.status === 'cancelled') {
+    if (session) session.campaign.status = 'cancelled';
+    if (memCamp) memCamp.status = 'cancelled';
     return {
       success: false,
       chunkIndex,
-      completedPairs: session.completedPairs,
-      campaign: session.campaign,
+      completedPairs: session ? session.completedPairs : (memCamp?.completedPairs || 0),
+      campaign: session ? session.campaign : memCamp!,
       chunkTrips: []
     };
   }
@@ -218,6 +221,9 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
   const emptyStats = { price: null, priceEconom: null, priceConfort: null, priceStandard: null, priceEco: null };
 
   await Promise.all(targetChunk.pairs.map(async (pair) => {
+    if (session.campaign.status === 'cancelled' || memCamp?.status === 'cancelled') {
+      return;
+    }
     const { origin, dest } = pair;
     const distKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
     const durationMin = Math.max(2, Math.round((distKm / 25) * 60));
@@ -265,12 +271,19 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
       const cleanOrigin = cleanNeighborhoodName(origin.name);
       const cleanDest = cleanNeighborhoodName(dest.name);
 
+      const tripDistanceKm = (yangoStats.distanceKm && yangoStats.distanceKm > 0) ? yangoStats.distanceKm : distKm;
+      const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) ? yangoStats.durationMinutes : durationMin;
+
       const canonicalTrip: CanonicalTrip = {
         id: tripId,
         origin: cleanOrigin,
         destination: cleanDest,
-        distanceKm: distKm,
-        durationMin: durationMin,
+        distanceKm: tripDistanceKm,
+        durationMin: tripDurationMin,
+        jams: Boolean(yangoStats.jams),
+        yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
+        yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
+        yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
         prices: {
           yango: { eco: yEco, confort: yConf, confortPlus: yConfPlus, moto: yMoto },
           heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
@@ -290,8 +303,12 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
         campaignId,
         origin: cleanOrigin,
         destination: cleanDest,
-        distanceKm: distKm,
-        durationMinutes: durationMin,
+        distanceKm: tripDistanceKm,
+        durationMinutes: tripDurationMin,
+        jams: Boolean(yangoStats.jams),
+        yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
+        yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
+        yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
         prices: {
           yango: { eco: yEco, confort: yConf, confortPlus: yConfPlus, moto: yMoto },
           heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
@@ -305,6 +322,13 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
         status: (yEco || hEco || tmEco) ? 'success' : 'failed',
         createdAt: new Date().toISOString()
       };
+
+      if (yangoStats.jams) {
+        session.campaign.hasJamsCount = (session.campaign.hasJamsCount || 0) + 1;
+      }
+      if (yangoStats.yangoUnavailable) {
+        session.campaign.yangoShortageCount = (session.campaign.yangoShortageCount || 0) + 1;
+      }
 
       chunkCanonicalTrips.push(canonicalTrip);
       chunkTrips.push(tripRow);
@@ -404,7 +428,9 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
 
   const completed = canonicalTrips.length;
   campaign.completedPairs = completed;
-  campaign.status = 'completed';
+  if (campaign.status !== 'cancelled') {
+    campaign.status = 'completed';
+  }
   campaign.finishedAt = new Date().toISOString();
   campaign.completedAt = campaign.finishedAt;
   campaign.durationSeconds = Math.max(1, Math.round((new Date(campaign.finishedAt).getTime() - new Date(campaign.startedAt).getTime()) / 1000));

@@ -6,6 +6,7 @@ export let heroSettings: SystemSettings = {
   apiEndpoint: 'https://demos.bbcsproducts.net/herocabpro/booking/cx-ajax_booking_details.php',
   mode: 'real',
   requestDelayMs: 250,
+  enabled: true,
   updatedAt: new Date().toISOString()
 };
 
@@ -69,6 +70,20 @@ export async function callHeroStats(
   const distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
   const distMeters = Math.max(500, Math.round(distKm * 1000));
   const durationSeconds = Math.max(120, Math.round((distKm / 25) * 3600));
+
+  if (heroSettings.enabled === false) {
+    return {
+      success: false,
+      source: 'hero_disabled',
+      price: 0,
+      priceFormatted: '0 ' + cityCurrency,
+      pricePerKm: 0,
+      availableDriversCount: 0,
+      waitingTimeMinutes: 0,
+      latencyMs: 0,
+      errorMessage: 'Agrégateur Hero Cab désactivé'
+    };
+  }
 
   try {
     const controller = new AbortController();

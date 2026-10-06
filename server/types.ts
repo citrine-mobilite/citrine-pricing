@@ -57,6 +57,10 @@ export interface CanonicalTrip {
   destination: string;
   distanceKm: number;
   durationMin: number;
+  jams?: boolean; // Heure de pointe / Trafic dense détecté par Yango (jams: true)
+  yangoUnavailable?: boolean; // Pénurie / Pas de voiture Yango disponible (no_free_cars_nearby)
+  yangoWaitingMinutes?: number; // Temps d'attente estimé Yango (ex: 4 min)
+  yangoUnavailableClasses?: string[]; // Classes indisponibles (ex: ['comfortplus', 'moto'])
   prices: CanonicalTripPrices;
   cheapest: {
     eco: string | null;
@@ -147,6 +151,10 @@ export interface TripResult {
   distanceKm: number;
   durationSeconds?: number;
   durationMinutes: number;
+  jams?: boolean; // Heure de pointe / Trafic dense détecté par Yango (jams: true)
+  yangoUnavailable?: boolean; // Pénurie / Pas de voiture Yango disponible (no_free_cars_nearby)
+  yangoWaitingMinutes?: number; // Temps d'attente estimé Yango (ex: 4 min)
+  yangoUnavailableClasses?: string[]; // Classes indisponibles (ex: ['comfortplus', 'moto'])
   tariffClass?: string;
   price?: number;
   priceFormatted?: string;
@@ -219,6 +227,7 @@ export interface PricingCampaign {
   triggerType: 'manual' | 'scheduled';
   triggeredByUserId?: string;
   triggeredByUserName?: string;
+  triggeredByUserRole?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'error' | 'failed' | 'cancelled';
   providerMode?: 'benchmark' | 'yango' | 'hero';
   selectedClasses?: string[];
@@ -242,6 +251,14 @@ export interface PricingCampaign {
   isTestSample?: boolean;
   sampleLimit?: number;
   totalPossiblePairs?: number;
+  comment?: string; // Commentaire libre sur la campagne (ex: météo, pluie, contexte de circulation, etc.)
+  comments?: string; // Alias
+  scopeMode?: 'city' | 'intra' | 'inter';
+  arrondissement?: string;
+  originArrondissement?: string;
+  destArrondissement?: string;
+  hasJamsCount?: number; // Nombre de trajets avec jams: true
+  yangoShortageCount?: number; // Nombre de trajets avec pénurie de chauffeurs Yango
   batchSize?: number;
   totalBatches?: number;
   completedBatches?: number;
@@ -284,5 +301,6 @@ export interface SystemSettings {
   distanceEndpoint?: string;
   mode?: string;
   requestDelayMs?: number;
+  enabled?: boolean;
   updatedAt?: string;
 }

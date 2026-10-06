@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { Navigation, ArrowRight, Play } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Navigation, ArrowRight, Play, Info } from 'lucide-react';
+import { ArrondissementSelect2, ArrondissementInfo } from './ArrondissementSelect2';
 
 interface PricingArrondissementTesterProps {
   mode: 'intra' | 'inter';
   cityName: string;
-  arrondissements: string[];
+  arrondissements?: string[];
+  arrondissementOptions: ArrondissementInfo[];
   isRunning: boolean;
   onLaunchIntra: (arrondissement: string, limit: number | 'all') => void;
   onLaunchInter: (originArr: string, destArr: string, limit: number | 'all') => void;
@@ -13,14 +15,52 @@ interface PricingArrondissementTesterProps {
 export const PricingArrondissementTester: React.FC<PricingArrondissementTesterProps> = ({
   mode,
   cityName,
-  arrondissements,
+  arrondissements = [],
+  arrondissementOptions,
   isRunning,
   onLaunchIntra,
   onLaunchInter
 }) => {
-  const [selectedArr, setSelectedArr] = useState<string>(arrondissements[0] || 'Douala 1er');
-  const [originArr, setOriginArr] = useState<string>(arrondissements[0] || 'Douala 1er');
-  const [destArr, setDestArr] = useState<string>(arrondissements[2] || arrondissements[1] || 'Douala 3e');
+  // Use options if provided, otherwise fallback to simple list
+  const effectiveOptions: ArrondissementInfo[] = useMemo(() => {
+    if (arrondissementOptions && arrondissementOptions.length > 0) {
+      return arrondissementOptions;
+    }
+    return arrondissements.map((arr) => ({
+      name: arr,
+      cityName,
+      tripCount: 0,
+      neighborhoodsCount: 0,
+      formattedLabel: `${arr} (0 trajet - ${cityName})`
+    }));
+  }, [arrondissementOptions, arrondissements, cityName]);
+
+  const defaultFirst = effectiveOptions[0]?.name || 'Douala 1er';
+  const defaultSecond = effectiveOptions[2]?.name || effectiveOptions[1]?.name || 'Douala 3e';
+
+  const [selectedArr, setSelectedArr] = useState<string>(defaultFirst);
+  const [originArr, setOriginArr] = useState<string>(defaultFirst);
+  const [destArr, setDestArr] = useState<string>(defaultSecond);
+
+  // Stats for selected arrondissements
+  const selectedInfo = useMemo(() => {
+    return effectiveOptions.find((opt) => opt.name === selectedArr);
+  }, [effectiveOptions, selectedArr]);
+
+  const originInfo = useMemo(() => {
+    return effectiveOptions.find((opt) => opt.name === originArr);
+  }, [effectiveOptions, originArr]);
+
+  const destInfo = useMemo(() => {
+    return effectiveOptions.find((opt) => opt.name === destArr);
+  }, [effectiveOptions, destArr]);
+
+  // Inter-corridor potential trips (chaque quartier est appelé au maximum 5 fois)
+  const interTripsCount = useMemo(() => {
+    if (!originInfo || !destInfo) return 0;
+    const count = originInfo.neighborhoodsCount * Math.min(5, destInfo.neighborhoodsCount);
+    return Math.min(count, 300);
+  }, [originInfo, destInfo]);
 
   return (
     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 transition-all space-y-3">
@@ -30,50 +70,46 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
           {mode === 'intra' ? (
             <>
               <Navigation className="w-3.5 h-3.5 text-teal-700" />
-              <span>Pricing Intra-Arrondissement : Tester tous les trajets d'un seul arrondissement (~70 trajets)</span>
+              <span>
+                Pricing Intra-Arrondissement : Tester tous les trajets internes d'un seul arrondissement
+              </span>
             </>
           ) : (
             <>
               <ArrowRight className="w-3.5 h-3.5 text-blue-700" />
-              <span>Pricing Inter-Arrondissements : Corridor d'un arrondissement A vers B (max 300 destinations)</span>
+              <span>
+                Pricing Inter-Arrondissements : Corridor direct d'un arrondissement A vers B
+              </span>
             </>
           )}
         </h3>
-        <span className="text-[11px] text-slate-500">Ville : {cityName}</span>
+        <span className="text-[11px] text-slate-500 font-medium">Ville : {cityName}</span>
       </div>
 
-      {/* Panel Form Controls */}
+      {/* Panel Form Controls with Select2 */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
         {mode === 'intra' ? (
           <div className="sm:col-span-8">
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              Sélecteur d'Arrondissement
-            </label>
-            <select
+            <ArrondissementSelect2
+              id="intra-arr-select2"
+              label="Sélecteur d'Arrondissement (Recherche intégrée)"
               value={selectedArr}
-              onChange={(e) => setSelectedArr(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1F4F4A]"
-            >
-              {arrondissements.map((arr) => (
-                <option key={arr} value={arr}>{arr}</option>
-              ))}
-            </select>
+              onChange={setSelectedArr}
+              options={effectiveOptions}
+              disabled={isRunning}
+            />
           </div>
         ) : (
           <>
             <div className="sm:col-span-4">
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                Arrondissement de Départ (A)
-              </label>
-              <select
+              <ArrondissementSelect2
+                id="inter-origin-select2"
+                label="Arrondissement Départ A (Recherche intégrée)"
                 value={originArr}
-                onChange={(e) => setOriginArr(e.target.value)}
-                className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1F4F4A]"
-              >
-                {arrondissements.map((arr) => (
-                  <option key={arr} value={arr}>{arr}</option>
-                ))}
-              </select>
+                onChange={setOriginArr}
+                options={effectiveOptions}
+                disabled={isRunning}
+              />
             </div>
 
             <div className="hidden sm:flex sm:col-span-1 justify-center pb-2.5 text-slate-400">
@@ -81,18 +117,14 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
             </div>
 
             <div className="sm:col-span-4">
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                Arrondissement de Destination (B)
-              </label>
-              <select
+              <ArrondissementSelect2
+                id="inter-dest-select2"
+                label="Arrondissement Destination B (Recherche intégrée)"
                 value={destArr}
-                onChange={(e) => setDestArr(e.target.value)}
-                className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-800 rounded-lg px-3 py-2 focus:outline-none focus:border-[#1F4F4A]"
-              >
-                {arrondissements.map((arr) => (
-                  <option key={arr} value={arr}>{arr}</option>
-                ))}
-              </select>
+                onChange={setDestArr}
+                options={effectiveOptions}
+                disabled={isRunning}
+              />
             </div>
           </>
         )}
@@ -111,6 +143,25 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
             <span>{isRunning ? 'Démarrage...' : 'Lancer la tarification'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Informative Summary Pill */}
+      <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
+        <Info className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+        {mode === 'intra' && selectedInfo && (
+          <span>
+            Arrondissement sélectionné : <strong className="text-slate-800">{selectedInfo.name}</strong> avec{' '}
+            <strong className="text-teal-800">{selectedInfo.neighborhoodsCount} quartiers</strong> (soit{' '}
+            <strong className="text-teal-800">{selectedInfo.tripCount} trajets</strong>, max 5 appels par quartier dans {selectedInfo.cityName}).
+          </span>
+        )}
+        {mode === 'inter' && originInfo && destInfo && (
+          <span>
+            Corridor inter-arrondissements : de <strong className="text-slate-800">{originInfo.name}</strong> ({originInfo.neighborhoodsCount} quartiers) vers{' '}
+            <strong className="text-slate-800">{destInfo.name}</strong> ({destInfo.neighborhoodsCount} quartiers) &rarr;{' '}
+            <strong className="text-teal-800">{interTripsCount} trajets configurés</strong> (max 5 appels par quartier).
+          </span>
+        )}
       </div>
     </div>
   );

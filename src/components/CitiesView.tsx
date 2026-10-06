@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { City } from '../types';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { DataTable, Column } from './DataTable';
 import { Edit3, Play, Compass } from 'lucide-react';
 import { CitiesHeader } from './cities/CitiesHeader';
@@ -25,6 +26,7 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
   onSelectCityNeighborhoods,
   onLaunchPricingForCity
 }) => {
+  const { user } = useAuth();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCity, setEditingCity] = useState<City | null>(null);
   const [editName, setEditName] = useState('');
@@ -124,7 +126,10 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
         cityId,
         triggerType: 'manual',
         selectedClasses: ['econom'],
-        sampleLimit: mode === 'sample_25' ? 25 : 'all'
+        sampleLimit: mode === 'sample_25' ? 25 : 'all',
+        triggeredByUserId: user?.id,
+        triggeredByUserName: user?.name || 'Citrine Opérateur',
+        triggeredByUserRole: user?.role || 'employe'
       });
       setSelectedCityForLaunch(null);
       onLaunchPricingForCity(cityId);

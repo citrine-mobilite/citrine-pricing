@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, UserPlus, Pencil, AlertCircle, Shield } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, UserPlus, Pencil, AlertCircle, Shield, KeyRound, Eye, EyeOff } from 'lucide-react';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -11,6 +11,8 @@ interface UserModalProps {
   onEmailChange: (val: string) => void;
   role: 'admin' | 'responsable' | 'employe';
   onRoleChange: (val: 'admin' | 'responsable' | 'employe') => void;
+  password?: string;
+  onPasswordChange?: (val: string) => void;
   active?: boolean;
   onActiveChange?: (val: boolean) => void;
   isSubmitting: boolean;
@@ -28,12 +30,16 @@ export const UserModal: React.FC<UserModalProps> = ({
   onEmailChange,
   role,
   onRoleChange,
+  password = '',
+  onPasswordChange,
   active = true,
   onActiveChange,
   isSubmitting,
   onSubmit,
   error
 }) => {
+  const [showPassword, setShowPassword] = useState(false);
+
   if (!isOpen) return null;
 
   const isEdit = mode === 'edit';
@@ -99,6 +105,41 @@ export const UserModal: React.FC<UserModalProps> = ({
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#3D8B85]"
             />
           </div>
+
+          {/* Password field */}
+          {onPasswordChange && (
+            <div>
+              <label htmlFor="user-password-input" className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <KeyRound className="w-3.5 h-3.5 text-slate-500" />
+                  {isEdit ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe (optionnel)'}
+                </span>
+                {isEdit && (
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    Laisser vide pour conserver l'actuel
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <input
+                  id="user-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => onPasswordChange(e.target.value)}
+                  placeholder={isEdit ? 'Laisser vide pour ne pas modifier...' : 'Par défaut : c!tr!n$@2026'}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-9 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-[#3D8B85]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  title={showPassword ? 'Masquer' : 'Afficher'}
+                >
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div>
             <label htmlFor="user-role-select" className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">

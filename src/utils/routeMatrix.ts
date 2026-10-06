@@ -20,32 +20,55 @@ export function cleanNeighborhoodBaseName(name: string | null | undefined): stri
 }
 
 /**
- * Détecte l'arrondissement officiel d'un quartier (notamment pour Douala)
+ * Détecte l'arrondissement officiel d'un quartier (pour Douala, Yaoundé et autres villes)
  */
-export function detectArrondissement(n: { name: string; district?: string }): DoualaArrondissement {
-  if (n.district) {
-    const d = n.district.toLowerCase();
-    if (d.includes('1')) return 'Douala 1er';
-    if (d.includes('2')) return 'Douala 2e';
-    if (d.includes('3')) return 'Douala 3e';
-    if (d.includes('4')) return 'Douala 4e';
-    if (d.includes('5')) return 'Douala 5e';
+export function detectArrondissement(n: { name: string; district?: string; cityId?: string }): string {
+  if (n.district && n.district.trim()) {
+    return n.district.trim();
   }
 
-  const upper = n.name.toUpperCase();
+  const upper = (n.name || '').toUpperCase();
+  const isYaounde = n.cityId === 'city_yaounde' || upper.includes('YAOUNDÉ') || upper.includes('YAOUNDE');
+
+  if (isYaounde) {
+    if (upper.includes('YAOUNDÉ 1') || upper.includes('YAOUNDE 1') || upper.includes('BASTOS') || upper.includes('CENTRE') || upper.includes('NSIMALEN')) {
+      return 'Yaoundé 1er';
+    }
+    if (upper.includes('YAOUNDÉ 2') || upper.includes('YAOUNDE 2') || upper.includes('TSINGA') || upper.includes('MOKOLO')) {
+      return 'Yaoundé 2e';
+    }
+    if (upper.includes('YAOUNDÉ 3') || upper.includes('YAOUNDE 3') || upper.includes('BIYEM')) {
+      return 'Yaoundé 3e';
+    }
+    if (upper.includes('YAOUNDÉ 4') || upper.includes('YAOUNDE 4') || upper.includes('MVAN') || upper.includes('ODZA')) {
+      return 'Yaoundé 4e';
+    }
+    if (upper.includes('YAOUNDÉ 5') || upper.includes('YAOUNDE 5') || upper.includes('OMNISPORTS') || upper.includes('ESSOS') || upper.includes('MFANDENA')) {
+      return 'Yaoundé 5e';
+    }
+    if (upper.includes('YAOUNDÉ 6') || upper.includes('YAOUNDE 6') || upper.includes('MENDONG')) {
+      return 'Yaoundé 6e';
+    }
+    if (upper.includes('YAOUNDÉ 7') || upper.includes('YAOUNDE 7') || upper.includes('NKOLBISSON')) {
+      return 'Yaoundé 7e';
+    }
+    return 'Yaoundé 1er';
+  }
+
+  // Douala & général
   if (upper.includes('DOUALA 1ER') || upper.includes('DOUALA 1') || upper.includes('AKWA') || upper.includes('BONANJO') || upper.includes('BONAPRISO') || upper.includes('DEIDO') || upper.includes('BALI')) {
     return 'Douala 1er';
   }
   if (upper.includes('DOUALA 2E') || upper.includes('DOUALA 2') || upper.includes('NEW BELL') || upper.includes('NSSAM')) {
     return 'Douala 2e';
   }
-  if (upper.includes('DOUALA 3E') || upper.includes('DOUALA 3') || upper.includes('BEPANDA') || upper.includes('NDOGBONG') || upper.includes('LOGBESSOU')) {
+  if (upper.includes('DOUALA 3E') || upper.includes('DOUALA 3') || upper.includes('BEPANDA') || upper.includes('BÉPANDA') || upper.includes('NDOGBONG') || upper.includes('LOGBESSOU') || upper.includes('NYALLA')) {
     return 'Douala 3e';
   }
   if (upper.includes('DOUALA 4E') || upper.includes('BONABÉRI') || upper.includes('BONABERI') || upper.includes('DOUALA 4')) {
     return 'Douala 4e';
   }
-  if (upper.includes('DOUALA 5E') || upper.includes('DOUALA 5') || upper.includes('MAKEPE') || upper.includes('BONAMOUS SADI') || upper.includes('KOTTO')) {
+  if (upper.includes('DOUALA 5E') || upper.includes('DOUALA 5') || upper.includes('MAKEPE') || upper.includes('MAKÉPÉ') || upper.includes('BONAMOUS SADI') || upper.includes('BONAMOUSSADI') || upper.includes('KOTTO') || upper.includes('LOGPOM')) {
     return 'Douala 5e';
   }
 
@@ -136,7 +159,7 @@ export function generateBenchmarkPairs(
     const originBaseName = cleanNeighborhoodBaseName(origin.name);
 
     if (isDouala && originArr !== 'Autre') {
-      const targetArrs = ALLOWED_ARRONDISSEMENT_TARGETS[originArr] || ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e'];
+      const targetArrs = (ALLOWED_ARRONDISSEMENT_TARGETS as Record<string, string[]>)[originArr] || ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e'];
 
       for (const targetArr of targetArrs) {
         if (pairs.length >= maxGlobal) break;

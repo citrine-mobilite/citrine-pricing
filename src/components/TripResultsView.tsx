@@ -4,7 +4,6 @@ import { api } from '../services/api';
 import { DataTable, Column } from './DataTable';
 import { TripResultsHeader } from './trips/TripResultsHeader';
 import { TripMetricsGrid } from './trips/TripMetricsGrid';
-import { TripMatrixView } from './trips/TripMatrixView';
 import { formatCampaignFileName } from '../utils/exportUtils';
 import {
   cleanNeighborhoodName,
@@ -13,6 +12,13 @@ import {
   getHeroPrice,
   getTripMasterPrice
 } from './pricing/pricingUtils';
+import {
+  PricingResultsFilterBar,
+  TripJamsFilter,
+  TripAdvantageFilter,
+  TripDistanceFilter,
+  TripShortageFilter
+} from './pricing/PricingResultsFilterBar';
 
 interface TripResultsViewProps {
   campaigns: PricingCampaign[];
@@ -25,9 +31,23 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
   selectedCampaignId,
   onSelectCampaignId
 }) => {
-  const [viewMode, setViewMode] = useState<'table' | 'matrix'>('table');
   const [trips, setTrips] = useState<TripResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [startFilter, setStartFilter] = useState('');
+  const [endFilter, setEndFilter] = useState('');
+  const [jamsFilter, setJamsFilter] = useState<TripJamsFilter>('all');
+  const [advantageFilter, setAdvantageFilter] = useState<TripAdvantageFilter>('all');
+  const [distanceFilter, setDistanceFilter] = useState<TripDistanceFilter>('all');
+  const [shortageFilter, setShortageFilter] = useState<TripShortageFilter>('all');
+
+  const handleResetFilters = () => {
+    setStartFilter('');
+    setEndFilter('');
+    setJamsFilter('all');
+    setAdvantageFilter('all');
+    setDistanceFilter('all');
+    setShortageFilter('all');
+  };
 
   const currentCampaign =
     campaigns.find(c => c.id === selectedCampaignId) || campaigns[0];
@@ -42,8 +62,52 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       .finally(() => setIsLoading(false));
   }, [currentCampaign?.id]);
 
+  const neighborhoodNames = useMemo(() => {
+    const set = new Set<string>();
+    trips.forEach((t) => {
+      const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
+      if (orig) set.add(orig);
+      if (dest) set.add(dest);
+    });
+    return Array.from(set).sort();
+  }, [trips]);
+
+  const filteredTrips = useMemo(() => {
+    return trips.filter((t) => {
+      const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
+      if (startFilter && orig !== startFilter && !orig?.includes(startFilter)) return false;
+      if (endFilter && dest !== endFilter && !dest?.includes(endFilter)) return false;
+
+      if (jamsFilter === 'with_jams' && !t.jams) return false;
+      if (jamsFilter === 'without_jams' && t.jams) return false;
+
+      const yEco = getYangoPrice(t, 'econom');
+      const hEco = getHeroPrice(t, 'eco');
+      if (advantageFilter === 'hero') {
+        if (!hEco || !yEco || hEco >= yEco) return false;
+      } else if (advantageFilter === 'yango') {
+        if (!hEco || !yEco || yEco >= hEco) return false;
+      } else if (advantageFilter === 'equal') {
+        if (!hEco || !yEco || hEco !== yEco) return false;
+      }
+
+      const dist = t.distanceKm || 0;
+      if (distanceFilter === 'short' && dist > 3) return false;
+      if (distanceFilter === 'medium' && (dist <= 3 || dist > 7)) return false;
+      if (distanceFilter === 'long' && dist <= 7) return false;
+
+      // Tension & Pénurie Yango
+      if (shortageFilter === 'shortage' && !t.yangoUnavailable) return false;
+      if (shortageFilter === 'available' && t.yangoUnavailable) return false;
+
+      return true;
+    });
+  }, [trips, startFilter, endFilter, jamsFilter, advantageFilter, distanceFilter, shortageFilter]);
+
   const normalizedTrips = useMemo(() => {
-    return trips.map((t) => {
+    return filteredTrips.map((t) => {
       const yEco = getYangoPrice(t, 'econom');
       const yConf = getYangoPrice(t, 'business');
       const hEco = getHeroPrice(t, 'eco');
@@ -63,16 +127,7 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
         tripmaster_moto: tmMoto ?? undefined
       };
     });
-  }, [trips]);
-
-  const neighborhoodsList = useMemo(() => {
-    const set = new Set<string>();
-    trips.forEach((t) => {
-      set.add(cleanNeighborhoodName(t.origin || t.startNeighborhoodName));
-      set.add(cleanNeighborhoodName(t.destination || t.endNeighborhoodName));
-    });
-    return Array.from(set).sort();
-  }, [trips]);
+  }, [filteredTrips]);
 
   const stats = useMemo(() => {
     if (trips.length === 0) return { min: 0, max: 0, avg: 0, avgKm: 0, maxTrip: null, minTrip: null };
@@ -88,26 +143,6 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
 
     return { min, max, avg, avgKm, maxTrip, minTrip };
   }, [trips]);
-
-  const matrixData = useMemo(() => {
-    const map: Record<string, Record<string, TripResult>> = {};
-    neighborhoodsList.forEach((o) => {
-      map[o] = {};
-    });
-    trips.forEach((t) => {
-      const start = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
-      const end = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
-      if (map[start]) {
-        map[start][end] = t;
-      }
-    });
-    return map;
-  }, [neighborhoodsList, trips]);
-
-  const handleExportCsv = () => {
-    if (!currentCampaign) return;
-    window.location.href = api.getExportCsvUrl(currentCampaign.id);
-  };
 
   const columns: Column<TripResult>[] = useMemo(() => [
     {
@@ -129,15 +164,46 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       label: 'Dist.',
       sortable: true,
       align: 'right',
-      render: (t) => <span className="font-mono text-xs">{t.distanceKm} km</span>,
-      exportValue: (t) => `${t.distanceKm} km`
+      render: (t) => (
+        <div className="flex flex-col items-end">
+          <span className="font-mono text-xs font-medium text-slate-700">{t.distanceKm} km</span>
+          {t.jams && (
+            <span
+              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-200 text-amber-900 border border-amber-300 whitespace-nowrap"
+              title="Heure de pointe / Trafic dense Yango (jams: true)"
+            >
+              🚗 Jams
+            </span>
+          )}
+        </div>
+      ),
+      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Jams)' : ''}`
     },
     {
       key: 'yango_eco',
       label: 'Yango Éco',
       sortable: true,
       align: 'right',
-      render: (t) => renderCellPrice(getYangoPrice(t, 'econom'), 'yango'),
+      render: (t) => (
+        <div className="flex flex-col items-end">
+          {renderCellPrice(getYangoPrice(t, 'econom'), 'yango')}
+          {t.yangoUnavailable ? (
+            <span
+              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap"
+              title="Pénurie Yango : aucun chauffeur disponible sur cette zone"
+            >
+              ⚠️ Pénurie
+            </span>
+          ) : t.waitingTimeMinutes && t.waitingTimeMinutes > 5 ? (
+            <span
+              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 whitespace-nowrap"
+              title={`Attente estimée : ~${t.waitingTimeMinutes} min`}
+            >
+              ⏱️ {t.waitingTimeMinutes}m
+            </span>
+          ) : null}
+        </div>
+      ),
       exportValue: (t) => getYangoPrice(t, 'econom') || ''
     },
     {
@@ -215,32 +281,46 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
         campaigns={campaigns}
         currentCampaign={currentCampaign}
         onSelectCampaignId={onSelectCampaignId}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
       />
 
       <TripMetricsGrid stats={stats} currencySymbol="FCFA" />
 
-      {viewMode === 'table' ? (
-        <DataTable
-          columns={columns}
-          data={normalizedTrips}
-          isLoading={isLoading}
-          pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
-          defaultPageSize={25}
-          searchPlaceholder="Rechercher par départ ou arrivée..."
-          searchKeys={['startNeighborhoodName', 'endNeighborhoodName']}
-          exportFileName={formatCampaignFileName(currentCampaign?.cityName, currentCampaign?.startedAt)}
-        />
-      ) : (
-        <TripMatrixView
-          neighborhoodsList={neighborhoodsList}
-          matrixData={matrixData}
-          minPrice={stats.min}
-          maxPrice={stats.max}
-          currencySymbol="FCFA"
-        />
-      )}
+      <PricingResultsFilterBar
+        neighborhoodNames={neighborhoodNames}
+        startFilter={startFilter}
+        onStartFilterChange={setStartFilter}
+        endFilter={endFilter}
+        onEndFilterChange={setEndFilter}
+        jamsFilter={jamsFilter}
+        onJamsFilterChange={setJamsFilter}
+        advantageFilter={advantageFilter}
+        onAdvantageFilterChange={setAdvantageFilter}
+        distanceFilter={distanceFilter}
+        onDistanceFilterChange={setDistanceFilter}
+        shortageFilter={shortageFilter}
+        onShortageFilterChange={setShortageFilter}
+        totalTripsCount={trips.length}
+        filteredTripsCount={filteredTrips.length}
+        hasJamsInCampaign={Boolean(currentCampaign?.hasJamsCount && currentCampaign.hasJamsCount > 0)}
+        hasShortageInCampaign={Boolean(currentCampaign?.yangoShortageCount && currentCampaign.yangoShortageCount > 0)}
+        onResetFilters={handleResetFilters}
+      />
+
+      <DataTable
+        columns={columns}
+        data={normalizedTrips}
+        isLoading={isLoading}
+        rowClassName={(t) =>
+          t.jams
+            ? 'bg-amber-50/90 hover:bg-amber-100/90 border-l-4 border-l-amber-500 text-amber-950 font-medium'
+            : 'hover:bg-slate-50/60'
+        }
+        pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
+        defaultPageSize={25}
+        searchPlaceholder="Rechercher par départ ou arrivée..."
+        searchKeys={['startNeighborhoodName', 'endNeighborhoodName']}
+        exportFileName={formatCampaignFileName(currentCampaign?.cityName, currentCampaign?.startedAt)}
+      />
     </div>
   );
 };

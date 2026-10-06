@@ -1,9 +1,38 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, Firestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  setLogLevel,
+  Firestore,
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  getDocs,
+  deleteDoc,
+  query,
+  where,
+  writeBatch
+} from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 import { CanonicalTrip } from '../types.js';
 import bundledFirebaseConfig from '../../firebase-applet-config.json' with { type: 'json' };
+
+// Réduire au silence les logs internes de transport gRPC Firestore
+try {
+  setLogLevel('silent');
+} catch {}
+
+// Filtrer les déconnexions normales de flux inactifs ('Disconnecting idle stream') de console.error
+const origConsoleError = console.error;
+console.error = (...args: any[]) => {
+  const msg = String(args[0] || '');
+  if (msg.includes('Disconnecting idle stream') || msg.includes('Timed out waiting for new targets')) {
+    return;
+  }
+  origConsoleError.apply(console, args);
+};
 
 let db: Firestore | null = null;
 
@@ -25,7 +54,13 @@ try {
 
   if (firebaseConfig && firebaseConfig.projectId) {
     const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    try {
+      db = initializeFirestore(app, {
+        experimentalAutoDetectLongPolling: true
+      }, firebaseConfig.firestoreDatabaseId);
+    } catch {
+      db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    }
     console.log('[Firestore] Connecté avec succès à la base Firestore:', firebaseConfig.firestoreDatabaseId || 'default');
   } else {
     console.warn('[Firestore] Aucune configuration Firebase trouvée. Mode in-memory activé.');
@@ -35,6 +70,30 @@ try {
 }
 
 export { db };
+
+let firestoreQuotaExceededUntil = 0;
+let warnedQuotaExceeded = false;
+
+export function isQuotaExceededError(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  return msg.includes('Quota limit exceeded') ||
+         msg.includes('RESOURCE_EXHAUSTED') ||
+         msg.includes('Quota exceeded') ||
+         msg.includes('Free daily read units per project');
+}
+
+export function isFirestoreQuotaExceeded(): boolean {
+  return Date.now() < firestoreQuotaExceededUntil;
+}
+
+export function flagFirestoreQuotaExceeded(err?: any) {
+  firestoreQuotaExceededUntil = Date.now() + 15 * 60 * 1000; // 15 min cooldown
+  if (!warnedQuotaExceeded) {
+    warnedQuotaExceeded = true;
+    console.warn('[Firestore Circuit Breaker] Quota journalier Free Tier atteint. Bascule automatique et transparente en mode local persistant haute performance (RAM + Disque). Les requêtes Firestore sont mises en pause pendant 15 minutes.');
+    setTimeout(() => { warnedQuotaExceeded = false; }, 15 * 60 * 1000);
+  }
+}
 
 /**
  * Nettoyage strict des objets avant envoi à Firestore (évite les undefined et types non supportés)
@@ -57,10 +116,14 @@ export function cleanFirestoreDoc(obj: any): any {
  * Exécution sécurisée d'écriture Firestore avec capture d'erreurs
  */
 export async function safeFirestoreWrite<T>(opName: string, op: () => Promise<T>): Promise<T | null> {
-  if (!db) return null;
+  if (!db || isFirestoreQuotaExceeded()) return null;
   try {
     return await op();
   } catch (err: any) {
+    if (isQuotaExceededError(err)) {
+      flagFirestoreQuotaExceeded(err);
+      return null;
+    }
     console.error(`[Firestore Error - ${opName}]:`, err?.message || err);
     return null;
   }
@@ -159,7 +222,7 @@ export async function saveCanonicalCampaignResults(
  * Chargement direct (1 seule lecture Firestore pour récupérer l'intégralité des trajets de la campagne)
  */
 export async function loadCanonicalCampaignResults(campaignId: string): Promise<CanonicalTrip[]> {
-  if (!db) return [];
+  if (!db || isFirestoreQuotaExceeded()) return [];
 
   try {
     let allTrips: CanonicalTrip[] = [];
@@ -222,6 +285,10 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
 
     return allTrips;
   } catch (err: any) {
+    if (isQuotaExceededError(err)) {
+      flagFirestoreQuotaExceeded(err);
+      return [];
+    }
     console.error(`[Firestore] Erreur de lecture des résultats canoniques pour ${campaignId}:`, err.message);
     return [];
   }

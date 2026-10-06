@@ -21,8 +21,10 @@ export interface DataTableProps<T extends Record<string, any>> {
   exportSubtitle?: string;
   pageSizeOptions?: number[];
   defaultPageSize?: number;
+  defaultDisplayMode?: 'pagination' | 'infinite';
   emptyMessage?: string;
   actions?: React.ReactNode;
   isLoading?: boolean;
   hasGroupedHeaders?: boolean;
+  rowClassName?: (item: T, index: number) => string;
 }

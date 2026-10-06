@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { City, Neighborhood, PricingCampaign } from '../types';
 import { api } from '../services/api';
-import { ArrowRight, Activity, Trash2 } from 'lucide-react';
+import { ArrowRight, Activity, Trash2, MessageSquare, Zap, MapPin } from 'lucide-react';
 import { DataTable, Column } from './DataTable';
 import { DashboardMetricCards } from './dashboard/DashboardMetricCards';
 
@@ -61,7 +61,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const totalTrips = c.completedPairs || c.totalPairs || 0;
       if (totalTrips <= 0) continue;
 
-      // 1. Yango Availability
       let yangoSuccess = 0;
       if ((c.classStats?.econom as any)?.count !== undefined) {
         yangoSuccess = (c.classStats?.econom as any).count;
@@ -69,7 +68,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         yangoSuccess = Math.max(0, totalTrips - (c.failedPairs || 0));
       }
 
-      // 2. Hero Cab Availability
       let heroSuccess = 0;
       if ((c.heroStats as any)?.count !== undefined) {
         heroSuccess = (c.heroStats as any).count;
@@ -81,7 +79,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         heroSuccess = 0;
       }
 
-      // 3. Trip Master Availability
       let tmSuccess = 0;
       if ((c.tripMasterStats as any)?.count !== undefined) {
         tmSuccess = (c.tripMasterStats as any).count;
@@ -111,6 +108,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       tmRate: Math.round(sumTmPct / validCampaignsCount)
     };
   }, [campaigns]);
+
+  const handleEditComment = async (c: PricingCampaign, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const { value: text } = await Swal.fire({
+      title: `Commentaire sur la campagne`,
+      text: `${c.cityName} — ${new Date(c.startedAt).toLocaleString('fr-FR')}`,
+      input: 'textarea',
+      inputValue: c.comment || c.comments || '',
+      inputPlaceholder: 'Ex: Heure de pointe du matin, forte pluie, jour férié...',
+      showCancelButton: true,
+      confirmButtonColor: '#1F4F4A',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Enregistrer la note',
+      cancelButtonText: 'Annuler',
+      inputAttributes: {
+        'aria-label': 'Commentaire de campagne',
+        'rows': '4'
+      }
+    });
+
+    if (text !== undefined) {
+      try {
+        await api.updateCampaignComment(c.id, text);
+        c.comment = text;
+        c.comments = text;
+        onRefresh?.();
+        Swal.fire({
+          icon: 'success',
+          title: 'Note enregistrée',
+          timer: 1400,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Impossible d’enregistrer le commentaire.', 'error');
+      }
+    }
+  };
 
   const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -144,23 +178,92 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const columns: Column<PricingCampaign>[] = useMemo(() => [
     {
       key: 'cityName',
-      label: 'Ville',
+      label: 'Ville & Périmètre',
       sortable: true,
-      render: (c) => <strong className="font-semibold text-slate-900">{c.cityName}</strong>
+      render: (c) => (
+        <div className="space-y-0.5">
+          <strong className="font-semibold text-slate-900 block">{c.cityName}</strong>
+          {c.arrondissement ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+              <MapPin className="w-2.5 h-2.5" />
+              <span>{c.arrondissement}</span>
+            </span>
+          ) : c.isTestSample ? (
+            <span className="inline-flex items-center text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+              Test (&le; 50 tr.)
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-medium">Toute la ville</span>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'triggeredByUserName',
+      label: 'Lancé par',
+      sortable: true,
+      render: (c) => (
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-full bg-[#1F4F4A]/10 text-[#1F4F4A] flex items-center justify-center font-bold text-[9px] uppercase shrink-0">
+            {(c.triggeredByUserName || 'Ad').substring(0, 2)}
+          </div>
+          <span className="text-xs font-medium text-slate-800 truncate max-w-[120px]" title={c.triggeredByUserName || 'Admin Citrine'}>
+            {c.triggeredByUserName || 'Admin Citrine'}
+          </span>
+        </div>
+      )
     },
     {
       key: 'startedAt',
       label: 'Horodatage',
       sortable: true,
       render: (c) => (
-        <span className="text-slate-600 font-mono text-[11px]">
-          {new Date(c.startedAt).toLocaleString('fr-FR', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </span>
+        <div className="space-y-1">
+          <span className="text-slate-600 font-mono text-[11px] block">
+            {new Date(c.startedAt).toLocaleString('fr-FR', {
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </span>
+          {c.hasJamsCount && c.hasJamsCount > 0 ? (
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300">
+              <Zap className="w-2.5 h-2.5 text-amber-600" />
+              <span>{c.hasJamsCount} trajets en pointe</span>
+            </span>
+          ) : null}
+        </div>
+      )
+    },
+    {
+      key: 'comment',
+      label: 'Note / Contexte',
+      sortable: false,
+      render: (c) => (
+        <div className="max-w-[200px]">
+          {c.comment || c.comments ? (
+            <button
+              onClick={(e) => handleEditComment(c, e)}
+              className="text-left group flex items-start gap-1 p-1 hover:bg-slate-100 rounded text-slate-700 transition cursor-pointer"
+              title="Cliquer pour modifier le commentaire"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-[#1F4F4A] shrink-0 mt-0.5" />
+              <span className="text-[11px] font-medium text-slate-800 line-clamp-2 italic">
+                "{c.comment || c.comments}"
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={(e) => handleEditComment(c, e)}
+              className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#1F4F4A] hover:bg-slate-100 px-2 py-1 rounded transition cursor-pointer"
+              title="Ajouter un commentaire sur cette campagne"
+            >
+              <MessageSquare className="w-3 h-3" />
+              <span>+ Note</span>
+            </button>
+          )}
+        </div>
       )
     },
     {
@@ -198,20 +301,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         return (
           <span className="font-mono text-xs font-bold text-teal-700">
             {h && h > 0 ? `${Math.round(h).toLocaleString('fr-FR')} F` : '—'}
-          </span>
-        );
-      }
-    },
-    {
-      key: 'tripmasterEcoAvg',
-      label: 'Moy. Trip Master (Éco)',
-      sortable: true,
-      align: 'right',
-      render: (c) => {
-        const tm = c.tripMasterStats?.avgPrice;
-        return (
-          <span className="font-mono text-xs font-bold text-blue-700">
-            {tm && tm > 0 ? `${Math.round(tm).toLocaleString('fr-FR')} F` : '—'}
           </span>
         );
       }
@@ -286,7 +375,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <DataTable
           columns={columns}
           data={campaigns.slice(0, 10)}
-          searchPlaceholder="Rechercher une campagne..."
+          searchPlaceholder="Rechercher par ville ou statut..."
           searchKeys={['cityName']}
           exportFileName="activite_recente_pricing"
         />

@@ -217,8 +217,12 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
   }
   if (role !== undefined) user.role = role;
   if (active !== undefined) user.active = Boolean(active);
-  if (password && String(password).trim()) {
-    user.passwordHash = await bcrypt.hash(String(password).trim(), DEFAULT_SALT_ROUNDS);
+  if (password !== undefined && String(password).trim()) {
+    const rawPass = String(password).trim();
+    if (rawPass.length < 4) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 4 caractères.' });
+    }
+    user.passwordHash = await bcrypt.hash(rawPass, DEFAULT_SALT_ROUNDS);
   }
 
   await safeFirestoreWrite('updateUser', () => setDoc(doc(db!, 'users', id), cleanFirestoreDoc(user), { merge: true }));
@@ -227,12 +231,45 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
     action: 'update_user',
     eventType: 'users',
     title: 'Utilisateur mis à jour',
-    description: `Modification du compte ${user.name} (${user.email}) - Rôle: ${user.role}`,
+    description: `Modification du compte ${user.name} (${user.email}) - Rôle: ${user.role}${password ? ' (Mot de passe mis à jour)' : ''}`,
     status: 'success'
   });
 
   const { passwordHash: _, ...safeUser } = user;
   return res.json(safeUser);
+});
+
+router.post('/api/users/:id/change-password', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { password } = req.body;
+
+  if (!password || String(password).trim().length < 4) {
+    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 4 caractères.' });
+  }
+
+  const user = users.find(u => u.id === id);
+  if (!user) {
+    return res.status(404).json({ error: 'Utilisateur introuvable.' });
+  }
+
+  const rawPass = String(password).trim();
+  user.passwordHash = await bcrypt.hash(rawPass, DEFAULT_SALT_ROUNDS);
+
+  if (db) {
+    await safeFirestoreWrite('changePassword', () =>
+      setDoc(doc(db!, 'users', id), { passwordHash: user.passwordHash }, { merge: true })
+    );
+  }
+
+  await recordHistory({
+    action: 'change_password',
+    eventType: 'users',
+    title: 'Mot de passe modifié',
+    description: `Nouveau mot de passe défini pour ${user.name} (${user.email})`,
+    status: 'success'
+  });
+
+  return res.json({ success: true, message: 'Mot de passe mis à jour avec succès.' });
 });
 
 router.delete('/api/users/:id', async (req: Request, res: Response) => {

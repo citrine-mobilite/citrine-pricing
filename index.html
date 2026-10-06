@@ -3,6 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Ignore HMR and Vite WebSocket connection errors as per AI Studio environment constraints
+      (function() {
+        const origError = console.error;
+        console.error = function(...args) {
+          const first = typeof args[0] === 'string' ? args[0] : '';
+          if (first.includes('[vite]') || first.includes('websocket') || first.includes('WebSocket')) {
+            return;
+          }
+          origError.apply(console, args);
+        };
+      })();
+    </script>
     <title>Citrine Pricing - Plateforme VTC Cameroun</title>
     <meta name="description" content="Plateforme interne de gestion du pricing VTC et benchmark concurrentiel multi-classes (Yango vs Hero Cab) au Cameroun (Douala et Yaoundé) : gestion des quartiers, calcul automatisé des trajets par lots parallèles, suivi des campagnes et exports." />
     <meta property="og:title" content="Citrine Pricing - Plateforme VTC Cameroun" />

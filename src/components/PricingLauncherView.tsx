@@ -63,7 +63,8 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
       const res = await api.startCampaign({
         cityId: currentCity.id,
         triggeredByUserId: user?.id,
-        triggeredByUserName: (user?.name && !user.name.toLowerCase().includes('landry')) ? user.name : 'Admin Citrine',
+        triggeredByUserName: user?.name || 'Citrine Opérateur',
+        triggeredByUserRole: user?.role || 'employe',
         triggerType: 'manual',
         selectedClasses
       });

@@ -1,13 +1,11 @@
 import React from 'react';
 import { PricingCampaign } from '../../types';
-import { TableProperties, Download, Grid, List } from 'lucide-react';
+import { TableProperties } from 'lucide-react';
 
 interface TripResultsHeaderProps {
   campaigns: PricingCampaign[];
   currentCampaign?: PricingCampaign;
   onSelectCampaignId: (id: string) => void;
-  viewMode: 'table' | 'matrix';
-  onViewModeChange: (mode: 'table' | 'matrix') => void;
   onExportCsv?: () => void;
 }
 
@@ -15,8 +13,6 @@ export const TripResultsHeader: React.FC<TripResultsHeaderProps> = ({
   campaigns,
   currentCampaign,
   onSelectCampaignId,
-  viewMode,
-  onViewModeChange,
   onExportCsv
 }) => {
   return (
@@ -24,7 +20,7 @@ export const TripResultsHeader: React.FC<TripResultsHeaderProps> = ({
       <div>
         <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
           <TableProperties className="w-5 h-5 text-[#1F4F4A]" />
-          <span>Résultats Détaillés des Trajets & Matrice</span>
+          <span>Résultats Détaillés des Trajets</span>
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
           Analyse comparative des prix réels collectés pour chaque paire Origine ➔ Destination.
@@ -44,30 +40,6 @@ export const TripResultsHeader: React.FC<TripResultsHeaderProps> = ({
             </option>
           ))}
         </select>
-
-        {/* View Mode Toggle */}
-        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-          <button
-            onClick={() => onViewModeChange('table')}
-            className={`p-1.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
-              viewMode === 'table' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-            }`}
-            title="Vue Tableau"
-          >
-            <List className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Tableau</span>
-          </button>
-          <button
-            onClick={() => onViewModeChange('matrix')}
-            className={`p-1.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
-              viewMode === 'matrix' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-            }`}
-            title="Vue Matrice Origine x Destination"
-          >
-            <Grid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Matrice</span>
-          </button>
-        </div>
       </div>
     </div>
   );

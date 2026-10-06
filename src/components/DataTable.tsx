@@ -4,6 +4,7 @@ import { Column, DataTableProps } from './datatable/types';
 import { DataTableHeader } from './datatable/DataTableHeader';
 import { DataTableBody } from './datatable/DataTableBody';
 import { DataTablePagination } from './datatable/DataTablePagination';
+import { DataTableInfiniteFooter } from './datatable/DataTableInfiniteFooter';
 
 export type { Column, DataTableProps };
 
@@ -15,16 +16,20 @@ export function DataTable<T extends Record<string, any>>({
   exportFileName = 'export',
   exportTitle = 'Rapport Citrine Pricing',
   exportSubtitle = '',
-  pageSizeOptions = [10, 25, 50, 100],
-  defaultPageSize = 10,
+  pageSizeOptions = [10, 25, 50, 100, 250, 500, 999999],
+  defaultPageSize = 25,
+  defaultDisplayMode = 'pagination',
   emptyMessage = 'Aucune donnée disponible.',
   actions,
   isLoading = false,
-  hasGroupedHeaders = false
+  hasGroupedHeaders = false,
+  rowClassName
 }: DataTableProps<T>) {
+  const [displayMode, setDisplayMode] = useState<'pagination' | 'infinite'>(defaultDisplayMode);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
+  const [infiniteVisibleCount, setInfiniteVisibleCount] = useState(50);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -68,14 +73,17 @@ export function DataTable<T extends Record<string, any>>({
     });
   }, [filteredData, sortKey, sortOrder]);
 
-  // Pagination
+  // Pagination vs Infinite Slicing
   const totalPages = Math.ceil(sortedData.length / pageSize) || 1;
   const clampedPage = Math.min(Math.max(currentPage, 1), totalPages);
 
-  const paginatedData = useMemo(() => {
+  const displayedData = useMemo(() => {
+    if (displayMode === 'infinite') {
+      return sortedData.slice(0, infiniteVisibleCount);
+    }
     const startIndex = (clampedPage - 1) * pageSize;
     return sortedData.slice(startIndex, startIndex + pageSize);
-  }, [sortedData, clampedPage, pageSize]);
+  }, [displayMode, sortedData, clampedPage, pageSize, infiniteVisibleCount]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -169,9 +177,16 @@ export function DataTable<T extends Record<string, any>>({
         onSearchChange={(val) => {
           setSearch(val);
           setCurrentPage(1);
+          setInfiniteVisibleCount(50);
         }}
         searchPlaceholder={searchPlaceholder}
         totalCount={sortedData.length}
+        displayMode={displayMode}
+        onDisplayModeChange={(mode) => {
+          setDisplayMode(mode);
+          setCurrentPage(1);
+          setInfiniteVisibleCount(50);
+        }}
         onExportExcel={handleExportExcel}
         onExportCsv={handleExportCsv}
         onExportPdf={handleExportPdf}
@@ -181,27 +196,38 @@ export function DataTable<T extends Record<string, any>>({
 
       <DataTableBody
         columns={columns}
-        paginatedData={paginatedData}
+        paginatedData={displayedData}
         isLoading={isLoading}
         emptyMessage={emptyMessage}
         hasGroupedHeaders={hasGroupedHeaders}
         sortKey={sortKey}
         sortOrder={sortOrder}
         onSort={handleSort}
+        rowClassName={rowClassName}
       />
 
-      <DataTablePagination
-        totalCount={sortedData.length}
-        clampedPage={clampedPage}
-        pageSize={pageSize}
-        totalPages={totalPages}
-        pageSizeOptions={pageSizeOptions}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setCurrentPage(1);
-        }}
-        onPageChange={setCurrentPage}
-      />
+      {displayMode === 'pagination' ? (
+        <DataTablePagination
+          totalCount={sortedData.length}
+          clampedPage={clampedPage}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          pageSizeOptions={pageSizeOptions}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
+          }}
+          onPageChange={setCurrentPage}
+        />
+      ) : (
+        <DataTableInfiniteFooter
+          totalCount={sortedData.length}
+          visibleCount={infiniteVisibleCount}
+          onLoadMore={() => setInfiniteVisibleCount((prev) => Math.min(prev + 50, sortedData.length))}
+          onLoadAll={() => setInfiniteVisibleCount(sortedData.length)}
+          onScrollToTop={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        />
+      )}
     </div>
   );
 }

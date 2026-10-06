@@ -69,6 +69,24 @@ export const YangoSettingsCard: React.FC<YangoSettingsCardProps> = ({
       </div>
 
       <form onSubmit={onSubmit} className="p-5 space-y-4 text-xs">
+        <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-lg">
+          <div>
+            <span className="font-semibold text-slate-800">Activer l'agrégateur Yango</span>
+            <p className="text-[11px] text-slate-500">
+              {settings.enabled !== false ? 'Actif : Interrogé lors des campagnes et tests' : 'Désactivé : Requêtes ignorées pour éviter les gaspillages'}
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.enabled !== false}
+              onChange={(e) => onChange({ ...settings, enabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#3D8B85]"></div>
+          </label>
+        </div>
+
         <div>
           <label htmlFor="yango-endpoint-input" className="block font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
             <Server className="w-3.5 h-3.5 text-slate-400" />

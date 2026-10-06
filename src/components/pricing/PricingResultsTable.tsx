@@ -96,15 +96,46 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       label: 'Dist.',
       sortable: true,
       align: 'right',
-      render: (t) => <span className="font-mono text-slate-500 text-xs">{t.distanceKm} km</span>,
-      exportValue: (t) => `${t.distanceKm} km`
+      render: (t) => (
+        <div className="flex flex-col items-end">
+          <span className="font-mono text-slate-700 text-xs font-medium">{t.distanceKm} km</span>
+          {t.jams && (
+            <span
+              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-200 text-amber-900 border border-amber-300 whitespace-nowrap"
+              title="Trafic dense / Heure de pointe détecté par Yango (jams: true)"
+            >
+              🚗 Jams
+            </span>
+          )}
+        </div>
+      ),
+      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Jams)' : ''}`
     },
     {
       key: 'yango_eco',
       label: 'Yango Éco',
       sortable: true,
       align: 'right',
-      render: (t) => renderCellPrice(getYangoPrice(t, 'econom'), 'yango'),
+      render: (t) => (
+        <div className="flex flex-col items-end">
+          {renderCellPrice(getYangoPrice(t, 'econom'), 'yango')}
+          {t.yangoUnavailable ? (
+            <span
+              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap"
+              title="Pénurie Yango : aucun chauffeur disponible sur cette zone"
+            >
+              ⚠️ Pénurie
+            </span>
+          ) : t.waitingTimeMinutes && t.waitingTimeMinutes > 5 ? (
+            <span
+              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 whitespace-nowrap"
+              title={`Attente estimée : ~${t.waitingTimeMinutes} min`}
+            >
+              ⏱️ {t.waitingTimeMinutes}m
+            </span>
+          ) : null}
+        </div>
+      ),
       exportValue: (t) => getYangoPrice(t, 'econom') || ''
     },
     {
@@ -281,7 +312,11 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                 return (
                   <div
                     key={t.id}
-                    className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs space-y-2.5"
+                    className={`rounded-xl border p-3.5 shadow-2xs space-y-2.5 transition ${
+                      t.jams
+                        ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/40'
+                        : 'bg-white border-slate-200/90'
+                    }`}
                   >
                     {/* Route Header */}
                     <div className="flex items-start justify-between gap-2">
@@ -298,6 +333,11 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                               <span>·</span>
                               <span>~{t.durationMinutes} min</span>
                             </>
+                          )}
+                          {t.jams && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-200 text-amber-900">
+                              🚗 Pointe (jams)
+                            </span>
                           )}
                         </div>
                       </div>
@@ -395,6 +435,11 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
           data={normalizedTrips}
           isLoading={isLoading}
           hasGroupedHeaders
+          rowClassName={(t) =>
+            t.jams
+              ? 'bg-amber-50/90 hover:bg-amber-100/90 border-l-4 border-l-amber-500 text-amber-950 font-medium'
+              : 'hover:bg-slate-50/60'
+          }
           pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
           defaultPageSize={25}
           exportFileName={`pricing_${cityName.toLowerCase()}_${trips.length}_trajets`}

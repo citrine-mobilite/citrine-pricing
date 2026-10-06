@@ -3,6 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import {
   initializeFirestore,
   getFirestore,
+  setLogLevel,
   disableNetwork,
   memoryLocalCache,
   doc,
@@ -23,6 +24,10 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { User, City, Neighborhood, PricingCampaign, TripResult } from '../types';
 
 import { triggerQuotaExceededNotice } from '../utils/quotaHandler';
+
+try {
+  setLogLevel('silent');
+} catch {}
 
 // Initialize Firebase App
 export const app = initializeApp(firebaseConfig);

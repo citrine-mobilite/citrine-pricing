@@ -11,6 +11,7 @@ interface DataTableBodyProps<T extends Record<string, any>> {
   sortKey: string | null;
   sortOrder: 'asc' | 'desc';
   onSort: (key: string) => void;
+  rowClassName?: (item: T, index: number) => string;
 }
 
 export function DataTableBody<T extends Record<string, any>>({
@@ -21,7 +22,8 @@ export function DataTableBody<T extends Record<string, any>>({
   hasGroupedHeaders,
   sortKey,
   sortOrder,
-  onSort
+  onSort,
+  rowClassName
 }: DataTableBodyProps<T>) {
   return (
     <div className="overflow-x-auto">
@@ -122,7 +124,7 @@ export function DataTableBody<T extends Record<string, any>>({
             paginatedData.map((item, index) => (
               <tr
                 key={item.id || index}
-                className="hover:bg-slate-50/60 transition-colors"
+                className={`${rowClassName ? rowClassName(item, index) : 'hover:bg-slate-50/60'} transition-colors`}
               >
                 {columns.map((col) => (
                   <td

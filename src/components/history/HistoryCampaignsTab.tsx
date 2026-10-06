@@ -27,6 +27,18 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   onRefresh
 }) => {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'city_wide' | 'arrondissement' | 'test_sample'>('all');
+  const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
+  const [jamsFilter, setJamsFilter] = useState<'all' | 'with_jams' | 'without_jams'>('all');
+
+  const availableArrondissements = useMemo(() => {
+    const set = new Set<string>();
+    campaigns.forEach(c => {
+      if (c.arrondissement) set.add(c.arrondissement);
+    });
+    ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e', 'Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e'].forEach(a => set.add(a));
+    return Array.from(set).sort();
+  }, [campaigns]);
 
   const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -94,9 +106,26 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter((c) => {
       if (cityFilter && c.cityId !== cityFilter) return false;
+
+      const isSample = Boolean(c.isTestSample || (c.sampleLimit && c.sampleLimit <= 50) || (c.totalPairs && c.totalPairs <= 50));
+      const isIntra = Boolean(c.scopeMode === 'intra' || c.arrondissement);
+
+      if (scopeFilter === 'test_sample' && !isSample) return false;
+      if (scopeFilter === 'city_wide' && (isSample || isIntra)) return false;
+      if (scopeFilter === 'arrondissement') {
+        if (!isIntra) return false;
+        if (arrondissementFilter !== 'all' && c.arrondissement !== arrondissementFilter) return false;
+      }
+
+      if (jamsFilter === 'with_jams') {
+        if (!c.hasJamsCount || c.hasJamsCount <= 0) return false;
+      } else if (jamsFilter === 'without_jams') {
+        if (c.hasJamsCount && c.hasJamsCount > 0) return false;
+      }
+
       return true;
     });
-  }, [campaigns, cityFilter]);
+  }, [campaigns, cityFilter, scopeFilter, arrondissementFilter, jamsFilter]);
 
   // Group campaigns strictly by calendar day (e.g., Today = 1 card, Yesterday = 7 cards on 1 row)
   const campaignsByDay = useMemo(() => {
@@ -268,6 +297,56 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
               onChange={onCityFilterChange}
               searchPlaceholder="Rechercher une ville..."
             />
+          </div>
+
+          {/* Périmètre */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-500 font-medium">Périmètre :</label>
+            <select
+              value={scopeFilter}
+              onChange={(e) => {
+                setScopeFilter(e.target.value as any);
+                if (e.target.value !== 'arrondissement') setArrondissementFilter('all');
+              }}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none"
+            >
+              <option value="all">Tous périmètres</option>
+              <option value="city_wide">Ville entière</option>
+              <option value="arrondissement">Arrondissement</option>
+              <option value="test_sample">Tests (&le; 50)</option>
+            </select>
+          </div>
+
+          {scopeFilter === 'arrondissement' && (
+            <div className="flex items-center gap-1.5">
+              <select
+                value={arrondissementFilter}
+                onChange={(e) => setArrondissementFilter(e.target.value)}
+                className="bg-teal-50 border border-teal-200 rounded-lg px-2 py-1 text-xs font-medium text-teal-900 focus:outline-none"
+              >
+                <option value="all">Tous arrondissements</option>
+                {availableArrondissements.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Jams / Heures de pointe */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={jamsFilter}
+              onChange={(e) => setJamsFilter(e.target.value as any)}
+              className={`rounded-lg px-2 py-1 text-xs font-medium border focus:outline-none ${
+                jamsFilter === 'with_jams'
+                  ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              <option value="all">Tous trafics</option>
+              <option value="with_jams">🚗 Pointe / Jams</option>
+              <option value="without_jams">🟢 Fluide</option>
+            </select>
           </div>
 
           <span className="text-slate-300">|</span>

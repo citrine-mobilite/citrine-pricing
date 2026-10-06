@@ -1,17 +1,29 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, loadCanonicalCampaignResults, initCanonicalCampaignResults, deleteCanonicalCampaign } from '../db/firestore.js';
+import {
+  db,
+  cleanFirestoreDoc,
+  safeFirestoreWrite,
+  loadCanonicalCampaignResults,
+  initCanonicalCampaignResults,
+  deleteCanonicalCampaign,
+  isFirestoreQuotaExceeded,
+  isQuotaExceededError,
+  flagFirestoreQuotaExceeded
+} from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
+  users,
   memoryCampaigns,
   memoryCampaignTrips,
   memoryCampaignCanonicalTrips,
   activePricingSessions,
   recordHistory,
   deleteHistoryForCampaign,
-  ensureSynced
+  ensureSynced,
+  saveLocalCampaignsDiskBackup
 } from '../db/memoryStore.js';
 import { PricingCampaign, CanonicalTrip } from '../types.js';
 import {
@@ -35,7 +47,7 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
   const now = Date.now();
   let list: PricingCampaign[] = [];
 
-  if (db && (cachedFirestoreCampaigns.length === 0 || forceRefresh || now - lastCampaignsFirestoreFetch > 60000)) {
+  if (db && !isFirestoreQuotaExceeded() && (cachedFirestoreCampaigns.length === 0 || forceRefresh || now - lastCampaignsFirestoreFetch > 60000)) {
     try {
       const snap = await getDocs(collection(db, 'campaigns'));
       if (!snap.empty) {
@@ -43,7 +55,12 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
         lastCampaignsFirestoreFetch = now;
       }
     } catch (e: any) {
-      console.warn('[Firestore] get campaigns error:', e.message);
+      lastCampaignsFirestoreFetch = now + 5 * 60 * 1000;
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] get campaigns error:', e.message);
+      }
     }
   }
 
@@ -96,6 +113,25 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
   return res.json(list);
 });
 
+// Route de synchronisation du cache local client vers la mémoire et le disque du serveur
+router.post('/api/campaigns/sync-cache', (req: Request, res: Response) => {
+  const { campaigns: clientCampaigns } = req.body;
+  if (Array.isArray(clientCampaigns) && clientCampaigns.length > 0) {
+    let added = 0;
+    for (const c of clientCampaigns) {
+      if (c && c.id && !memoryCampaigns.some(m => m.id === c.id)) {
+        memoryCampaigns.push(c);
+        added++;
+      }
+    }
+    if (added > 0) {
+      memoryCampaigns.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      saveLocalCampaignsDiskBackup();
+    }
+  }
+  return res.json({ success: true, count: memoryCampaigns.length });
+});
+
 // 2. Détail d'une campagne
 router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -108,14 +144,18 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
     return res.json(session.campaign);
   }
 
-  if (db) {
+  if (db && !isFirestoreQuotaExceeded()) {
     try {
       const snap = await getDoc(doc(db, 'campaigns', id));
       if (snap.exists()) {
         return res.json({ id: snap.id, ...snap.data() });
       }
     } catch (e: any) {
-      console.warn('[Firestore] get campaign error:', e.message);
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] get campaign error:', e.message);
+      }
     }
   }
 
@@ -135,10 +175,12 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     isTestSample,
     triggeredByUserId,
     triggeredByUserName,
+    triggeredByUserRole,
     scopeMode,
     arrondissement,
     originArrondissement,
-    destArrondissement
+    destArrondissement,
+    comment
   } = req.body;
   if (!cityId) {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
@@ -159,9 +201,16 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   if (scopeMode === 'intra' && arrondissement) {
     const targetNbs = activeNbs.filter(n => detectArrondissement(n) === arrondissement);
     const pool = targetNbs.length >= 2 ? targetNbs : activeNbs;
+    const MAX_CALLS_PER_NB = 5;
+
     for (let i = 0; i < pool.length; i++) {
+      const origin = pool[i];
+      let callsCount = 0;
       for (let j = 0; j < pool.length; j++) {
-        if (i !== j) pairs.push({ origin: pool[i], dest: pool[j] });
+        if (i !== j && callsCount < MAX_CALLS_PER_NB) {
+          pairs.push({ origin, dest: pool[j] });
+          callsCount++;
+        }
       }
     }
   } else if (scopeMode === 'inter' && originArrondissement && destArrondissement) {
@@ -169,11 +218,14 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     const destNbs = activeNbs.filter(n => detectArrondissement(n) === destArrondissement);
     const poolOrigin = originNbs.length > 0 ? originNbs : activeNbs.slice(0, Math.ceil(activeNbs.length / 2));
     const poolDest = destNbs.length > 0 ? destNbs : activeNbs.slice(Math.ceil(activeNbs.length / 2));
+    const MAX_CALLS_PER_NB = 5;
 
     for (const o of poolOrigin) {
+      let callsCount = 0;
       for (const d of poolDest) {
-        if (o.id !== d.id) {
+        if (o.id !== d.id && callsCount < MAX_CALLS_PER_NB) {
           pairs.push({ origin: o, dest: d });
+          callsCount++;
         }
       }
     }
@@ -191,9 +243,10 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     pairs = pairs.slice(0, limit);
   }
 
-  const cleanTriggeredByName = (triggeredByUserName && !String(triggeredByUserName).toLowerCase().includes('landry'))
-    ? String(triggeredByUserName)
-    : 'Admin Citrine';
+  const authorRole = triggeredByUserRole || (triggeredByUserId ? users.find(u => u.id === triggeredByUserId)?.role : undefined) || 'admin';
+  const cleanTriggeredByName = triggeredByUserName && String(triggeredByUserName).trim()
+    ? String(triggeredByUserName).trim()
+    : (triggerType === 'scheduled' ? 'Planificateur Automatique' : 'Citrine Opérateur');
 
   const campaignId = randomUUID();
   const campaign: PricingCampaign = {
@@ -204,6 +257,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     triggerType: triggerType || 'manual',
     triggeredByUserId: triggeredByUserId || 'admin_user',
     triggeredByUserName: cleanTriggeredByName,
+    triggeredByUserRole: authorRole,
     status: 'in_progress',
     totalPairs: pairs.length,
     completedPairs: 0,
@@ -212,17 +266,25 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     isTestSample: Boolean(isTestSample || (limit && limit <= 50)),
     sampleLimit: limit,
     totalPossiblePairs: totalPossible,
+    comment: comment?.trim() || undefined,
+    comments: comment?.trim() || undefined,
+    scopeMode: scopeMode || (arrondissement ? 'intra' : 'city'),
+    arrondissement: arrondissement || undefined,
+    originArrondissement: originArrondissement || undefined,
+    destArrondissement: destArrondissement || undefined,
+    hasJamsCount: 0,
     logs: [
       {
         timestamp: new Date().toISOString(),
         level: 'info',
-        message: `Démarrage de la campagne ${isTestSample ? 'Test ' : ''}(${pairs.length} trajets) pour ${city.name}.`
+        message: `Démarrage de la campagne ${isTestSample ? 'Test ' : ''}(${pairs.length} trajets) par ${cleanTriggeredByName} (${authorRole}) pour ${city.name}.`
       }
     ]
   };
 
   // Initialisation de la session de campagne
   const { totalChunks, totalPairs } = await initializeCampaignSession(campaign, city, pairs);
+  saveLocalCampaignsDiskBackup();
 
   await recordHistory({
     action: 'start_campaign',
@@ -260,6 +322,7 @@ router.post('/api/campaigns/:id/finalize', async (req: Request, res: Response) =
 
   try {
     const campaign = await finalizeCampaignExecution(id);
+    saveLocalCampaignsDiskBackup();
     return res.json({ success: true, campaign });
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Erreur lors de la finalisation.' });
@@ -307,13 +370,61 @@ router.post('/api/campaigns/:id/cancel', (req: Request, res: Response) => {
   }
 
   cancelChunkCampaignSession(id);
+  saveLocalCampaignsDiskBackup();
 
   // Réponse immédiate en 0ms au client sans attendre Firestore !
   return res.json({ success: true, message: 'Arrêt immédiat de la campagne effectué en mémoire.' });
 });
 
+// 4b. Mise à jour du commentaire d'une campagne
+router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { comment } = req.body;
+  const trimmedComment = typeof comment === 'string' ? comment.trim() : '';
+
+  // 1. Mettre à jour en mémoire
+  const memCamp = memoryCampaigns.find(c => c.id === id);
+  if (memCamp) {
+    memCamp.comment = trimmedComment;
+    memCamp.comments = trimmedComment;
+  }
+
+  // 2. Mettre à jour dans le cache Firestore
+  const cached = cachedFirestoreCampaigns.find(c => c.id === id);
+  if (cached) {
+    cached.comment = trimmedComment;
+    cached.comments = trimmedComment;
+  }
+
+  // 3. Sauvegarde disque local
+  saveLocalCampaignsDiskBackup();
+
+  // 4. Sauvegarde Firestore
+  if (db && !isFirestoreQuotaExceeded()) {
+    try {
+      await safeFirestoreWrite('updateCampaignComment', () =>
+        setDoc(doc(db!, 'campaigns', id), cleanFirestoreDoc({ comment: trimmedComment, comments: trimmedComment }), { merge: true })
+      );
+    } catch (e: any) {
+      console.warn('[Firestore] Warning saving campaign comment:', e.message);
+    }
+  }
+
+  await recordHistory({
+    action: 'update_campaign_comment',
+    eventType: 'campaign',
+    title: `Commentaire campagne mis à jour`,
+    description: trimmedComment ? `Note: "${trimmedComment.slice(0, 80)}..."` : 'Commentaire supprimé',
+    performedByName: 'Admin',
+    metadata: { campaignId: id }
+  }).catch(() => {});
+
+  return res.json({ success: true, id, comment: trimmedComment, campaign: memCamp || cached });
+});
+
 // 5. Suppression globale
 router.delete('/api/campaigns', async (_req: Request, res: Response) => {
+  cachedFirestoreCampaigns = [];
   memoryCampaigns.length = 0;
   for (const id of Object.keys(memoryCampaignTrips)) {
     delete memoryCampaignTrips[id];
@@ -321,6 +432,9 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
   for (const id of Object.keys(memoryCampaignCanonicalTrips)) {
     delete memoryCampaignCanonicalTrips[id];
   }
+  campaignSessions.clear();
+  activePricingSessions.clear();
+  saveLocalCampaignsDiskBackup();
 
   if (db) {
     try {
@@ -354,17 +468,23 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
 // 6. Suppression unique
 router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  cachedFirestoreCampaigns = cachedFirestoreCampaigns.filter(c => c.id !== id);
   const idx = memoryCampaigns.findIndex(c => c.id === id);
   if (idx >= 0) memoryCampaigns.splice(idx, 1);
   delete memoryCampaignTrips[id];
   delete memoryCampaignCanonicalTrips[id];
+  campaignSessions.delete(id);
+  saveLocalCampaignsDiskBackup();
 
+  // Nettoyage Firestore asynchrone non-bloquant
   if (db) {
-    await deleteCanonicalCampaign(id);
+    Promise.allSettled([
+      deleteCanonicalCampaign(id),
+      deleteHistoryForCampaign(id)
+    ]).catch(e => console.warn('[Firestore] Background delete error:', e));
+  } else {
+    deleteHistoryForCampaign(id).catch(() => {});
   }
-
-  // Supprimer tous les historiques liés à cette campagne
-  await deleteHistoryForCampaign(id);
 
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
 });

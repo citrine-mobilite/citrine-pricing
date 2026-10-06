@@ -10,8 +10,10 @@ import {
   History,
   Settings,
   Users,
-  Clock
+  Clock,
+  UserCircle
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -28,6 +30,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile
 }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const navigation = [
     { id: 'dashboard', label: 'Accueil', icon: LayoutDashboard },
     { id: 'pricing', label: 'Pricing', icon: Zap },
@@ -36,8 +41,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'cities', label: 'Villes', icon: Building2 },
     { id: 'neighborhoods', label: 'Quartiers', icon: Compass },
     { id: 'history', label: 'Historique', icon: History },
-    { id: 'users', label: 'Utilisateurs', icon: Users },
-    { id: 'settings', label: 'Paramètres', icon: Settings }
+    { id: 'profile', label: 'Mon Profil', icon: UserCircle },
+    ...(isAdmin
+      ? [
+          { id: 'users', label: 'Utilisateurs', icon: Users },
+          { id: 'settings', label: 'Paramètres', icon: Settings }
+        ]
+      : [])
   ];
 
   const content = (
@@ -52,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {onCloseMobile && (
           <button
             onClick={onCloseMobile}
-            className="md:hidden p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+            className="md:hidden p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
           >
             ✕
           </button>
@@ -91,8 +101,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </div>
 
-      {/* Sidebar Footer with PWA Install Prompt */}
-      <div className="p-3 border-t border-[#3D8B85]/10 bg-slate-50/50">
+      {/* Sidebar Footer with Logged User shortcut & PWA */}
+      <div className="p-3 border-t border-[#3D8B85]/10 bg-slate-50/50 space-y-2">
+        {user && (
+          <button
+            onClick={() => {
+              setActiveTab('profile');
+              if (onCloseMobile) onCloseMobile();
+            }}
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white border border-slate-200/80 hover:border-[#3D8B85]/50 hover:bg-[#F0FAFA] text-left transition cursor-pointer group"
+          >
+            <div className="w-7 h-7 rounded-full bg-[#1F4F4A]/10 text-[#1F4F4A] flex items-center justify-center text-xs font-bold uppercase shrink-0">
+              {user.name.substring(0, 2)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-slate-900 truncate group-hover:text-[#1F4F4A]">{user.name}</div>
+              <div className="text-[10px] text-slate-400 capitalize">
+                {user.role === 'admin' ? 'Super Admin' : user.role === 'responsable' ? 'Responsable' : 'Opérateur'}
+              </div>
+            </div>
+          </button>
+        )}
         <PWAInstallButton variant="full" className="w-full justify-center" />
       </div>
     </div>

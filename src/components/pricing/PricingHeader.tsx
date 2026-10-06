@@ -1,8 +1,10 @@
 import React from 'react';
+import Swal from 'sweetalert2';
 import { City, PricingCampaign } from '../../types';
-import { Play, RotateCw, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock } from 'lucide-react';
+import { Play, RotateCw, Trash2, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock, MessageSquare, Zap, UserCircle } from 'lucide-react';
 import { computeCampaignDuration } from '../../utils/durationUtils';
 import { SearchableSelect } from '../SearchableSelect';
+import { api } from '../../services/api';
 
 interface PricingHeaderProps {
   cities: City[];
@@ -12,6 +14,7 @@ interface PricingHeaderProps {
   activeCampaignId: string;
   onCampaignChange: (campaignId: string) => void;
   onRefresh?: () => void;
+  onDeleteCampaign?: () => void;
   activeTesterPanel: 'none' | 'single' | 'intra' | 'inter';
   onToggleTesterPanel: (panel: 'single' | 'intra' | 'inter') => void;
   totalCombinations: number;
@@ -28,6 +31,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
   activeCampaignId,
   onCampaignChange,
   onRefresh,
+  onDeleteCampaign,
   activeTesterPanel,
   onToggleTesterPanel,
   totalCombinations,
@@ -36,6 +40,43 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
   activeCampaign
 }) => {
   const isRunning = activeCampaign?.status === 'in_progress';
+
+  const handleEditComment = async () => {
+    if (!activeCampaign) return;
+    const { value: text } = await Swal.fire({
+      title: `Commentaire sur la campagne`,
+      text: `${activeCampaign.cityName} — ${new Date(activeCampaign.startedAt).toLocaleString('fr-FR')}`,
+      input: 'textarea',
+      inputValue: activeCampaign.comment || activeCampaign.comments || '',
+      inputPlaceholder: 'Ex: Heure de pointe du matin, forte pluie, jour férié...',
+      showCancelButton: true,
+      confirmButtonColor: '#1F4F4A',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Enregistrer la note',
+      cancelButtonText: 'Annuler',
+      inputAttributes: {
+        'aria-label': 'Commentaire de campagne',
+        'rows': '4'
+      }
+    });
+
+    if (text !== undefined) {
+      try {
+        await api.updateCampaignComment(activeCampaign.id, text);
+        activeCampaign.comment = text;
+        activeCampaign.comments = text;
+        onRefresh?.();
+        Swal.fire({
+          icon: 'success',
+          title: 'Note enregistrée',
+          timer: 1300,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Impossible d’enregistrer le commentaire.', 'error');
+      }
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -94,6 +135,43 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             </span>
           )}
 
+          {activeCampaign?.triggeredByUserName && (
+            <span
+              className="hidden md:inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-2 py-1 rounded-lg text-xs font-semibold shrink-0"
+              title={`Campagne lancée par ${activeCampaign.triggeredByUserName}`}
+            >
+              <UserCircle className="w-3.5 h-3.5 text-[#1F4F4A]" />
+              <span className="max-w-[110px] truncate">{activeCampaign.triggeredByUserName}</span>
+            </span>
+          )}
+
+          {activeCampaign && (
+            <button
+              onClick={handleEditComment}
+              className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer shrink-0 ${
+                activeCampaign.comment || activeCampaign.comments
+                  ? 'bg-teal-50 border-teal-200 text-[#1F4F4A] hover:bg-teal-100/70'
+                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800'
+              }`}
+              title={activeCampaign.comment || 'Ajouter une note / contexte sur cette campagne'}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="max-w-[130px] truncate">
+                {activeCampaign.comment || activeCampaign.comments || '+ Note'}
+              </span>
+            </button>
+          )}
+
+          {activeCampaign && Boolean(activeCampaign.hasJamsCount && activeCampaign.hasJamsCount > 0) && (
+            <span
+              className="hidden md:inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
+              title="Trajets détectés avec du trafic dense / heure de pointe par Yango (jams: true)"
+            >
+              <Zap className="w-3 h-3 text-amber-600" />
+              <span>{activeCampaign.hasJamsCount} pointe</span>
+            </span>
+          )}
+
           {/* Refresh button */}
           {onRefresh && (
             <button
@@ -102,6 +180,17 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
               className="p-2 sm:p-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition cursor-pointer shrink-0"
             >
               <RotateCw className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Delete active campaign button */}
+          {activeCampaignId && onDeleteCampaign && !isRunning && (
+            <button
+              onClick={onDeleteCampaign}
+              title="Supprimer définitivement ce relevé"
+              className="p-2 sm:p-2 border border-slate-200 hover:border-rose-300 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>

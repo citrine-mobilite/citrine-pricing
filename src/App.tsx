@@ -11,6 +11,7 @@ import { NeighborhoodsView } from './components/NeighborhoodsView';
 import { HistoryView } from './components/HistoryView';
 import { UsersView } from './components/UsersView';
 import { SettingsView } from './components/SettingsView';
+import { ProfileView } from './components/ProfileView';
 import { QuotaNoticeBanner } from './components/QuotaNoticeBanner';
 import { LoginPage } from './components/LoginPage';
 import { HeroLogo } from './components/HeroLogo';
@@ -62,11 +63,26 @@ function AppContent() {
         setSelectedCityId((prev) => (citiesData.some((c) => c.id === prev) ? prev : citiesData[0].id));
       }
 
-      if (campaignsData) {
+      if (campaignsData && campaignsData.length > 0) {
         setCampaigns(campaignsData);
-        if (campaignsData.length > 0) {
-          setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
-        } else {
+        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
+      } else {
+        // Fallback résilient : restaurer depuis le cache local navigateur
+        try {
+          const raw = localStorage.getItem('citrine_campaigns_v7_all');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.data) && parsed.data.length > 0) {
+              setCampaigns(parsed.data);
+              setSelectedCampaignId(parsed.data[0].id);
+              api.syncCampaignsCache(parsed.data).catch(() => {});
+            } else {
+              setSelectedCampaignId(null);
+            }
+          } else {
+            setSelectedCampaignId(null);
+          }
+        } catch {
           setSelectedCampaignId(null);
         }
       }
@@ -227,6 +243,7 @@ function AppContent() {
                 {activeTab === 'temporal' && (
                   <TemporalComparisonView
                     campaigns={campaigns}
+                    cities={enrichedCities}
                     onSelectCampaign={handleSelectCampaign}
                   />
                 )}
@@ -270,14 +287,23 @@ function AppContent() {
                   />
                 )}
 
-                {activeTab === 'users' && (
+                {activeTab === 'profile' && (
+                  <ProfileView
+                    campaigns={campaigns}
+                    onSelectCampaign={handleSelectCampaign}
+                    onNavigate={setActiveTab}
+                    onRefresh={fetchData}
+                  />
+                )}
+
+                {activeTab === 'users' && user?.role === 'admin' && (
                   <UsersView
                     users={users}
                     onRefresh={fetchData}
                   />
                 )}
 
-                {activeTab === 'settings' && (
+                {activeTab === 'settings' && user?.role === 'admin' && (
                   <SettingsView />
                 )}
               </>

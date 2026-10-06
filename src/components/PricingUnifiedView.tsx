@@ -4,17 +4,30 @@ import { City, Neighborhood, PricingCampaign, TripResult } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { YangoResponseInspectorModal } from './YangoResponseInspectorModal';
-import { calculatePossibleBenchmarkPairsCount } from '../utils/routeMatrix';
-import { PricingStatsSummary, computePricingStats } from './pricing/pricingUtils';
+import { calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../utils/routeMatrix';
+import {
+  PricingStatsSummary,
+  computePricingStats,
+  getYangoPrice,
+  getHeroPrice,
+  cleanNeighborhoodName
+} from './pricing/pricingUtils';
 import { usePricingCampaign } from './pricing/usePricingState';
 import { PricingHeader } from './pricing/PricingHeader';
 import { PricingQuickTester } from './pricing/PricingQuickTester';
 import { PricingLiveTracker } from './pricing/PricingLiveTracker';
 import { PricingMetricsCards } from './pricing/PricingMetricsCards';
-import { PricingResultsFilterBar } from './pricing/PricingResultsFilterBar';
+import {
+  PricingResultsFilterBar,
+  TripJamsFilter,
+  TripAdvantageFilter,
+  TripDistanceFilter,
+  TripShortageFilter
+} from './pricing/PricingResultsFilterBar';
 import { PricingResultsTable } from './pricing/PricingResultsTable';
 import { PricingRecommendationModal } from './pricing/PricingRecommendationModal';
 import { PricingArrondissementTester } from './pricing/PricingArrondissementTester';
+import { ArrondissementInfo } from './pricing/ArrondissementSelect2';
 import { computeCampaignDuration } from '../utils/durationUtils';
 
 interface PricingUnifiedViewProps {
@@ -79,6 +92,78 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     [cityActiveNeighborhoods]
   );
 
+  const arrondissementOptions = useMemo<ArrondissementInfo[]>(() => {
+    const map = new Map<string, { name: string; cityName: string; count: number }>();
+
+    // Arrondissements de référence pour la ville active
+    const standardArrs = currentCity.id === 'city_yaounde'
+      ? ['Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e']
+      : ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e'];
+
+    standardArrs.forEach((arr) => {
+      map.set(arr, { name: arr, cityName: currentCity.name, count: 0 });
+    });
+
+    // Quartiers actifs de la ville courante
+    cityActiveNeighborhoods.forEach((nb) => {
+      const arrName = detectArrondissement(nb);
+      if (!map.has(arrName)) {
+        map.set(arrName, { name: arrName, cityName: currentCity.name, count: 1 });
+      } else {
+        map.get(arrName)!.count += 1;
+      }
+    });
+
+    // Ajout des arrondissements des autres villes actives pour que le Select2 permette la recherche multi-villes
+    const otherCities = cities.filter((c) => c.id !== currentCity.id && c.active);
+    otherCities.forEach((city) => {
+      const cityNbs = neighborhoods.filter((n) => n.cityId === city.id && n.active);
+      const otherStandardArrs = city.id === 'city_yaounde'
+        ? ['Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e']
+        : city.id === 'city_douala'
+        ? ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e']
+        : [`${city.name} 1er`, `${city.name} 2e`];
+
+      otherStandardArrs.forEach((arr) => {
+        if (!map.has(arr)) {
+          map.set(arr, { name: arr, cityName: city.name, count: 0 });
+        }
+      });
+
+      cityNbs.forEach((nb) => {
+        const arrName = detectArrondissement(nb);
+        if (!map.has(arrName)) {
+          map.set(arrName, { name: arrName, cityName: city.name, count: 1 });
+        } else {
+          map.get(arrName)!.count += 1;
+        }
+      });
+    });
+
+    const MAX_CALLS_PER_NB = 5;
+    const result: ArrondissementInfo[] = [];
+    map.forEach((item) => {
+      // Un quartier ne peut être appelé que 5 fois maximum
+      const callsPerNb = Math.min(MAX_CALLS_PER_NB, Math.max(0, item.count - 1));
+      const tripCount = item.count >= 2 ? item.count * callsPerNb : 0;
+      result.push({
+        name: item.name,
+        cityName: item.cityName,
+        neighborhoodsCount: item.count,
+        tripCount,
+        formattedLabel: `${item.name} (${tripCount} ${tripCount > 1 ? 'trajets' : 'trajet'} - ${item.cityName})`
+      });
+    });
+
+    // Trier : ville courante d'abord, puis par nombre de trajets décroissant, puis alphabétique
+    return result.sort((a, b) => {
+      if (a.cityName === currentCity.name && b.cityName !== currentCity.name) return -1;
+      if (a.cityName !== currentCity.name && b.cityName === currentCity.name) return 1;
+      if (b.tripCount !== a.tripCount) return b.tripCount - a.tripCount;
+      return a.name.localeCompare(b.name);
+    });
+  }, [currentCity, cityActiveNeighborhoods, cities, neighborhoods]);
+
   const [inspectedTrip, setInspectedTrip] = useState<TripResult | null>(null);
   const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter'>('none');
   const [quickOriginId, setQuickOriginId] = useState<string>(cityActiveNeighborhoods[0]?.id || '');
@@ -91,6 +176,19 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [startFilter, setStartFilter] = useState('');
   const [endFilter, setEndFilter] = useState('');
+  const [jamsFilter, setJamsFilter] = useState<TripJamsFilter>('all');
+  const [advantageFilter, setAdvantageFilter] = useState<TripAdvantageFilter>('all');
+  const [distanceFilter, setDistanceFilter] = useState<TripDistanceFilter>('all');
+  const [shortageFilter, setShortageFilter] = useState<TripShortageFilter>('all');
+
+  const handleResetTripFilters = () => {
+    setStartFilter('');
+    setEndFilter('');
+    setJamsFilter('all');
+    setAdvantageFilter('all');
+    setDistanceFilter('all');
+    setShortageFilter('all');
+  };
 
   const displayedCampaign = useMemo(() => {
     if (liveCampaignOverride && liveCampaignOverride.id === activeCampaignId) {
@@ -103,6 +201,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   const alertedCampaignsRef = React.useRef<Set<string>>(new Set());
   const previousCampaignStatusRef = React.useRef<Record<string, string>>({});
   const cancelRequestedRef = React.useRef<boolean>(false);
+  const runningCampaignIdRef = React.useRef<string | null>(null);
+  const chunkAbortControllerRef = React.useRef<AbortController | null>(null);
 
   useEffect(() => {
     campaigns.forEach((camp) => {
@@ -222,6 +322,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     sampleLimit?: number | 'all';
   }) => {
     cancelRequestedRef.current = false;
+    const abortCtrl = new AbortController();
+    chunkAbortControllerRef.current = abortCtrl;
     const targetKey = options.sampleLimit === 25 ? '25' : 'all';
     setLaunchingTarget(targetKey);
     try {
@@ -229,7 +331,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         cityId: currentCity.id,
         triggerType: 'manual',
         triggeredByUserId: user?.id || 'manual_user',
-        triggeredByUserName: (user?.name && !user.name.toLowerCase().includes('landry')) ? user.name : 'Admin Citrine',
+        triggeredByUserName: user?.name || 'Citrine Opérateur',
+        triggeredByUserRole: user?.role || 'employe',
         selectedClasses: ['econom'],
         sampleLimit: options.sampleLimit,
         scopeMode: options.scopeMode,
@@ -239,25 +342,32 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
 
       if (result?.campaign) {
-        onCampaignStarted(result.campaign.id);
-        handleCampaignChange(result.campaign.id);
+        const campaignId = result.campaign.id;
+        runningCampaignIdRef.current = campaignId;
+        onCampaignStarted(campaignId);
+        handleCampaignChange(campaignId);
         setLiveCampaignOverride(result.campaign);
         setTrips([]);
 
-        const campaignId = result.campaign.id;
         const totalChunks = result.totalChunks || 1;
 
         const processChunkWithRetry = async (chunkIdx: number) => {
           let lastErr: any = null;
           for (let attempt = 1; attempt <= 3; attempt++) {
-            if (cancelRequestedRef.current) break;
+            if (cancelRequestedRef.current) return null;
             try {
-              return await api.processCampaignChunk(campaignId, chunkIdx);
+              return await api.processCampaignChunk(campaignId, chunkIdx, chunkAbortControllerRef.current?.signal);
             } catch (err: any) {
+              if (cancelRequestedRef.current || err?.name === 'AbortError') {
+                return null;
+              }
               lastErr = err;
-              if (attempt < 3) await new Promise(r => setTimeout(r, 1200));
+              if (attempt < 3 && !cancelRequestedRef.current) {
+                await new Promise(r => setTimeout(r, 1200));
+              }
             }
           }
+          if (cancelRequestedRef.current) return null;
           throw lastErr || new Error(`Échec du lot ${chunkIdx}`);
         };
 
@@ -265,6 +375,14 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           if (cancelRequestedRef.current) break;
           try {
             const chunkRes = await processChunkWithRetry(chunkIdx);
+            if (cancelRequestedRef.current || !chunkRes) break;
+
+            if (chunkRes?.campaign?.status === 'cancelled') {
+              cancelRequestedRef.current = true;
+              setLiveCampaignOverride(prev => prev ? { ...prev, status: 'cancelled' } : chunkRes.campaign);
+              break;
+            }
+
             if (chunkRes?.campaign) {
               setLiveCampaignOverride(prev => {
                 if (prev && (prev.completedPairs || 0) > (chunkRes.campaign.completedPairs || 0)) {
@@ -280,7 +398,10 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                 return [...prev, ...fresh];
               });
             }
-          } catch (chunkErr) {
+          } catch (chunkErr: any) {
+            if (cancelRequestedRef.current || chunkErr?.name === 'AbortError') {
+              break;
+            }
             console.error(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
           }
         }
@@ -291,16 +412,42 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           const finalTrips = await api.getCampaignResults(campaignId);
           setTrips(finalTrips || []);
           if (onRefresh) await onRefresh();
+        } else {
+          // Si interruption : garantir le statut 'cancelled' immédiatement
+          setLiveCampaignOverride(prev => prev ? { ...prev, status: 'cancelled' } : null);
+          const partialTrips = await api.getCampaignResults(campaignId).catch(() => []);
+          if (partialTrips && partialTrips.length > 0) {
+            setTrips(partialTrips);
+          }
+          if (onRefresh) await onRefresh();
         }
       }
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Erreur', text: err?.message || 'Erreur de démarrage' });
+      if (!cancelRequestedRef.current) {
+        Swal.fire({ icon: 'error', title: 'Erreur', text: err?.message || 'Erreur de démarrage' });
+      }
     } finally {
+      runningCampaignIdRef.current = null;
+      chunkAbortControllerRef.current = null;
       setLaunchingTarget(null);
     }
   };
 
-  const handleLaunch = (overrideLimit: number | 'all') => {
+  const handleLaunch = async (overrideLimit: number | 'all') => {
+    const isSample = overrideLimit === 25;
+    const confirm = await Swal.fire({
+      title: isSample ? 'Lancer un test rapide ?' : 'Lancer la tarification complète ?',
+      text: isSample
+        ? 'Un échantillon de 25 trajets va être calculé pour cette ville.'
+        : `L'ensemble des trajets (${totalCombinations}) va être calculé.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, lancer',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: '#1F4F4A'
+    });
+    if (!confirm.isConfirmed) return;
+
     handleLaunchWithOptions({
       scopeMode: 'global',
       sampleLimit: overrideLimit
@@ -308,20 +455,32 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   };
 
   const handleCancelCampaign = async () => {
-    if (!activeCampaignId) return;
     // 1. Coupe immédiatement la boucle locale de lots en 0ms
     cancelRequestedRef.current = true;
     setIsCancelling(true);
 
-    // 2. Notifie le serveur d'annuler en mémoire (ne dépend plus de Firestore)
+    // 2. Abort immédiat du fetch réseau en cours
     try {
-      await api.cancelCampaign(activeCampaignId);
-    } catch (err: any) {
-      console.warn('[Cancel] Notification serveur:', err?.message);
-    } finally {
-      setIsCancelling(false);
-      if (onRefresh) onRefresh();
+      chunkAbortControllerRef.current?.abort();
+    } catch {}
+
+    // 3. Déterminer l'ID cible fiable
+    const targetId = runningCampaignIdRef.current || displayedCampaign?.id || activeCampaignId;
+
+    // 4. Mettre à jour l'UI locale immédiatement en 0ms
+    setLiveCampaignOverride(prev => prev ? { ...prev, status: 'cancelled' } : null);
+
+    // 5. Notifie le serveur d'annuler en mémoire vive
+    if (targetId) {
+      try {
+        await api.cancelCampaign(targetId);
+      } catch (err: any) {
+        console.warn('[Cancel] Notification serveur:', err?.message);
+      }
     }
+
+    setIsCancelling(false);
+    if (onRefresh) onRefresh();
   };
 
   const handleRunQuickTest = async () => {
@@ -354,20 +513,85 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     }
   };
 
-  const stats: PricingStatsSummary = useMemo(() => computePricingStats(trips), [trips]);
   const neighborhoodNames = useMemo(
-    () => Array.from(new Set(cityActiveNeighborhoods.map((n) => n.name))).sort(),
+    () => Array.from(new Set(cityActiveNeighborhoods.map((n) => cleanNeighborhoodName(n.name)))).sort(),
     [cityActiveNeighborhoods]
   );
+
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
-      const orig = t.origin || t.startNeighborhoodName;
-      const dest = t.destination || t.endNeighborhoodName;
+      // 1. Quartier départ
+      const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
       if (startFilter && orig !== startFilter && !orig?.includes(startFilter)) return false;
+
+      // 2. Quartier arrivée
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
       if (endFilter && dest !== endFilter && !dest?.includes(endFilter)) return false;
+
+      // 3. Trafic / Heures de pointe (jams)
+      if (jamsFilter === 'with_jams' && !t.jams) return false;
+      if (jamsFilter === 'without_jams' && t.jams) return false;
+
+      // 4. Compétitivité tarifaire
+      const yEco = getYangoPrice(t, 'econom');
+      const hEco = getHeroPrice(t, 'eco');
+      if (advantageFilter === 'hero') {
+        if (!hEco || !yEco || hEco >= yEco) return false;
+      } else if (advantageFilter === 'yango') {
+        if (!hEco || !yEco || yEco >= hEco) return false;
+      } else if (advantageFilter === 'equal') {
+        if (!hEco || !yEco || hEco !== yEco) return false;
+      }
+
+      // 5. Distance
+      const dist = t.distanceKm || 0;
+      if (distanceFilter === 'short' && dist > 3) return false;
+      if (distanceFilter === 'medium' && (dist <= 3 || dist > 7)) return false;
+      if (distanceFilter === 'long' && dist <= 7) return false;
+
+      // 6. Tension & Disponibilité Chauffeurs Yango (Pénurie)
+      if (shortageFilter === 'shortage' && !t.yangoUnavailable) return false;
+      if (shortageFilter === 'available' && t.yangoUnavailable) return false;
+
       return true;
     });
-  }, [trips, startFilter, endFilter]);
+  }, [trips, startFilter, endFilter, jamsFilter, advantageFilter, distanceFilter, shortageFilter]);
+
+  const { campaignNeighborhoods, matrixData } = useMemo(() => {
+    const set = new Set<string>();
+    const map: Record<string, Record<string, TripResult>> = {};
+
+    trips.forEach((t) => {
+      const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
+      if (!orig || !dest || orig === '—' || dest === '—') return;
+
+      set.add(orig);
+      set.add(dest);
+
+      if (!map[orig]) map[orig] = {};
+      map[orig][dest] = t;
+    });
+
+    const list = Array.from(set).sort();
+    return {
+      campaignNeighborhoods: list.length > 0 ? list : neighborhoodNames,
+      matrixData: map
+    };
+  }, [trips, neighborhoodNames]);
+
+  const isTripFiltered =
+    Boolean(startFilter) ||
+    Boolean(endFilter) ||
+    jamsFilter !== 'all' ||
+    advantageFilter !== 'all' ||
+    distanceFilter !== 'all' ||
+    shortageFilter !== 'all';
+
+  const stats: PricingStatsSummary = useMemo(
+    () => computePricingStats(isTripFiltered ? filteredTrips : trips),
+    [isTripFiltered, filteredTrips, trips]
+  );
 
   return (
     <div className="space-y-4">
@@ -379,6 +603,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         activeCampaignId={activeCampaignId}
         onCampaignChange={handleCampaignChange}
         onRefresh={onRefresh}
+        onDeleteCampaign={handleDeleteCampaign}
         activeTesterPanel={activeTesterPanel}
         onToggleTesterPanel={(panel) => setActiveTesterPanel(prev => prev === panel ? 'none' : panel)}
         totalCombinations={totalCombinations}
@@ -407,11 +632,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         <PricingArrondissementTester
           mode={activeTesterPanel}
           cityName={currentCity.name}
-          arrondissements={
-            currentCity.id === 'city_yaounde'
-              ? ['Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e']
-              : ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e']
-          }
+          arrondissementOptions={arrondissementOptions}
           isRunning={displayedCampaign?.status === 'in_progress'}
           onLaunchIntra={(arr, limit) => {
             handleLaunchWithOptions({
@@ -448,8 +669,20 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         onStartFilterChange={setStartFilter}
         endFilter={endFilter}
         onEndFilterChange={setEndFilter}
+        jamsFilter={jamsFilter}
+        onJamsFilterChange={setJamsFilter}
+        advantageFilter={advantageFilter}
+        onAdvantageFilterChange={setAdvantageFilter}
+        distanceFilter={distanceFilter}
+        onDistanceFilterChange={setDistanceFilter}
+        shortageFilter={shortageFilter}
+        onShortageFilterChange={setShortageFilter}
         activeCampaignId={activeCampaignId}
         totalTripsCount={trips.length}
+        filteredTripsCount={filteredTrips.length}
+        hasJamsInCampaign={Boolean(displayedCampaign?.hasJamsCount && displayedCampaign.hasJamsCount > 0)}
+        hasShortageInCampaign={Boolean(displayedCampaign?.yangoShortageCount && displayedCampaign.yangoShortageCount > 0)}
+        onResetFilters={handleResetTripFilters}
         onOpenRecommendations={() => setIsRecommendationsOpen(true)}
       />
 

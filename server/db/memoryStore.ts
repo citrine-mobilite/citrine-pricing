@@ -1,9 +1,38 @@
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import bcrypt from 'bcryptjs';
 import { User, City, Neighborhood, PricingCampaign, TripResult, ActivePricingSession, CanonicalTrip } from '../types.js';
-import { db, cleanFirestoreDoc, safeFirestoreWrite } from './firestore.js';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from './firestore.js';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
+
+const DATA_DIR = path.resolve(process.cwd(), 'server/data');
+const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
+
+export function saveLocalCampaignsDiskBackup() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(memoryCampaigns, null, 2), 'utf8');
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing campaigns to disk:', e.message);
+  }
+}
+
+export function loadLocalCampaignsDiskBackup() {
+  try {
+    if (fs.existsSync(CAMPAIGNS_FILE)) {
+      const raw = fs.readFileSync(CAMPAIGNS_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        memoryCampaigns = data;
+        console.log(`[Disk Backup] ${data.length} campagnes restaurées depuis le stockage local persistant.`);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning reading campaigns from disk:', e.message);
+  }
+}
 
 // Hachage sécurisé bcrypt avec salt pour l'administrateur
 const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('c!tr!n$@2026', 10);
@@ -145,7 +174,8 @@ export async function deleteHistoryForCampaign(campaignId: string) {
  * Synchronisation bidirectionnelle initiale avec Firestore
  */
 export async function syncFromFirestore() {
-  if (!db) return;
+  loadLocalCampaignsDiskBackup();
+  if (!db || isFirestoreQuotaExceeded()) return;
   try {
     const [usersRes, citiesRes, nbsRes, historyRes] = await Promise.allSettled([
       getDocs(collection(db, 'users')),
@@ -153,6 +183,13 @@ export async function syncFromFirestore() {
       getDocs(collection(db, 'neighborhoods')),
       getDocs(collection(db, 'history'))
     ]);
+
+    for (const res of [usersRes, citiesRes, nbsRes, historyRes]) {
+      if (res.status === 'rejected' && isQuotaExceededError(res.reason)) {
+        flagFirestoreQuotaExceeded(res.reason);
+        return;
+      }
+    }
 
     if (usersRes.status === 'fulfilled' && !usersRes.value.empty) {
       users = usersRes.value.docs.map(d => ({ id: d.id, ...d.data() } as User));

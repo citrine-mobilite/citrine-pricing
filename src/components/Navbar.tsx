@@ -2,7 +2,8 @@ import React from 'react';
 import {
   LogOut,
   MapPin,
-  Menu
+  Menu,
+  UserCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -21,12 +22,14 @@ const TAB_TITLES: Record<string, string> = {
   cities: 'Villes & Régions',
   neighborhoods: 'Quartiers Urbains',
   history: 'Historique des Relevés',
+  profile: 'Mon Profil',
   users: 'Gestion des Utilisateurs',
   settings: 'Paramètres Passerelles'
 };
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
+  setActiveTab,
   onToggleMobileMenu
 }) => {
   const { user, logout } = useAuth();
@@ -40,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {onToggleMobileMenu && (
           <button
             onClick={onToggleMobileMenu}
-            className="md:hidden p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition active:scale-95"
+            className="md:hidden p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition active:scale-95 cursor-pointer"
             title="Ouvrir le menu"
             aria-label="Ouvrir le menu principal"
           >
@@ -60,7 +63,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user?.name && (
               <>
                 <span aria-hidden="true" className="text-slate-300">·</span>
-                <span className="truncate max-w-[100px] sm:max-w-none text-slate-400">{user.name}</span>
+                <button
+                  onClick={() => setActiveTab('profile')}
+                  className="truncate max-w-[140px] sm:max-w-none text-slate-500 hover:text-[#1F4F4A] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+                  title="Voir mon profil"
+                >
+                  <UserCircle className="w-3 h-3 text-[#1F4F4A]" />
+                  <span>{user.name}</span>
+                </button>
               </>
             )}
           </div>
@@ -84,4 +94,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
-

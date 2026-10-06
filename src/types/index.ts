@@ -114,6 +114,7 @@ export interface PricingCampaign {
   triggerType: TriggerType;
   triggeredByUserId: string;
   triggeredByUserName: string;
+  triggeredByUserRole?: string;
   status: CampaignStatus;
   providerMode?: 'benchmark' | 'yango' | 'hero';
   selectedClasses?: string[]; // ['econom', 'business', 'comfortplus', 'moto']
@@ -137,6 +138,14 @@ export interface PricingCampaign {
   sampleLimit?: number;
   totalPossiblePairs?: number;
   isTestSample?: boolean;
+  comment?: string; // Commentaire sur la campagne (météo, trafic, etc.)
+  comments?: string;
+  scopeMode?: 'city' | 'intra' | 'inter';
+  arrondissement?: string;
+  originArrondissement?: string;
+  destArrondissement?: string;
+  hasJamsCount?: number;
+  yangoShortageCount?: number; // Nombre de trajets avec pénurie de chauffeurs Yango
   batchSize?: number;
   totalBatches?: number;
   completedBatches?: number;
@@ -208,6 +217,10 @@ export interface TripResult {
   distanceKm: number;
   durationSeconds?: number;
   durationMinutes: number;
+  jams?: boolean; // Heure de pointe / Trafic dense Yango (jams: true)
+  yangoUnavailable?: boolean; // Pénurie / Pas de voiture Yango disponible (no_free_cars_nearby)
+  yangoWaitingMinutes?: number; // Temps d'attente estimé Yango (ex: 4 min)
+  yangoUnavailableClasses?: string[]; // Classes indisponibles (ex: ['comfortplus', 'moto'])
   tariffClass?: string;
   price?: number;
   priceFormatted?: string;
@@ -269,6 +282,7 @@ export interface YangoSettings {
   userAgent?: string;
   requestDelayMs: number;
   mode?: 'live';
+  enabled?: boolean;
   classes: {
     id: string;
     name: string;
@@ -282,6 +296,7 @@ export interface HeroSettings {
   password?: string;
   requestDelayMs: number;
   mode?: 'live';
+  enabled?: boolean;
   classes?: {
     id: string;
     name: string;
@@ -294,6 +309,7 @@ export interface TripMasterSettings {
   searchVehicleEndpoint: string;
   requestDelayMs: number;
   mode: 'live';
+  enabled?: boolean;
 }
 
 export interface AuthState {

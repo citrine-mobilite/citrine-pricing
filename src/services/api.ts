@@ -45,7 +45,7 @@ export const api = {
     return [];
   },
 
-  async createUser(data: { name: string; email: string; role: string }): Promise<User> {
+  async createUser(data: { name: string; email: string; role: string; password?: string }): Promise<User> {
     const res = await fetch(`${BASE_URL}/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -58,13 +58,29 @@ export const api = {
     return res.json();
   },
 
-  async updateUser(id: string, data: Partial<User>): Promise<User> {
+  async updateUser(id: string, data: Partial<User> & { password?: string }): Promise<User> {
     const res = await fetch(`${BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error('Erreur lors de la mise à jour de l’utilisateur.');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de la mise à jour de l’utilisateur.');
+    }
+    return res.json();
+  },
+
+  async changeUserPassword(id: string, password: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE_URL}/users/${id}/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de la modification du mot de passe.');
+    }
     return res.json();
   },
 
@@ -243,26 +259,19 @@ export const api = {
       const res = await fetch(url);
       if (res.ok) {
         const freshList: PricingCampaign[] = await res.json();
-        const map = new Map<string, PricingCampaign>();
-
-        // Intégration prioritaire des campagnes en cache (1 semaine)
-        for (const c of cachedList) {
-          map.set(c.id, c);
+        // Si le serveur a renvoyé des campagnes réelles, on met à jour le cache
+        if (freshList && freshList.length > 0) {
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: freshList, timestamp: Date.now() }));
+          } catch {}
+          return freshList;
         }
-        // Mise à jour avec les campagnes fraîches renvoyées par le serveur
-        for (const c of freshList) {
-          map.set(c.id, c);
+        // Si le serveur renvoie 0 campagne (ex: quota Firestore temporairement atteint),
+        // on préserve précieusement le cache local existant de l'utilisateur !
+        if (cachedList && cachedList.length > 0) {
+          return cachedList;
         }
-
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-        );
-
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: merged, timestamp: Date.now() }));
-        } catch {}
-
-        return merged;
+        return freshList;
       }
     } catch (e) {
       console.warn('[API Client] getCampaigns network error:', e);
@@ -285,10 +294,21 @@ export const api = {
     }
   },
 
+  async syncCampaignsCache(campaigns: PricingCampaign[]): Promise<void> {
+    try {
+      await fetch(`${BASE_URL}/campaigns/sync-cache`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaigns })
+      });
+    } catch {}
+  },
+
   async startCampaign(data: {
     cityId: string;
     triggeredByUserId?: string;
     triggeredByUserName?: string;
+    triggeredByUserRole?: string;
     triggerType?: 'manual' | 'scheduled';
     selectedClasses?: string[];
     sampleLimit?: number | 'all';
@@ -296,6 +316,7 @@ export const api = {
     arrondissement?: string;
     originArrondissement?: string;
     destArrondissement?: string;
+    comment?: string;
   }): Promise<{ message: string; campaign: PricingCampaign; totalChunks: number; totalPairs: number }> {
     const res = await fetch(`${BASE_URL}/campaigns/start`, {
       method: 'POST',
@@ -330,7 +351,7 @@ export const api = {
     return result;
   },
 
-  async processCampaignChunk(campaignId: string, chunkIndex: number): Promise<{
+  async processCampaignChunk(campaignId: string, chunkIndex: number, signal?: AbortSignal): Promise<{
     success: boolean;
     chunkIndex: number;
     completedPairs: number;
@@ -340,7 +361,8 @@ export const api = {
     const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/process-chunk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chunkIndex })
+      body: JSON.stringify({ chunkIndex }),
+      signal
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -366,6 +388,20 @@ export const api = {
     return res.json();
   },
 
+  async updateCampaignComment(id: string, comment: string): Promise<PricingCampaign> {
+    const res = await fetch(`${BASE_URL}/campaigns/${id}/comment`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de la mise à jour du commentaire.');
+    }
+    const data = await res.json();
+    return data.campaign;
+  },
+
   async stepCampaign(id: string): Promise<{ success: boolean; campaign?: PricingCampaign }> {
     try {
       const res = await fetch(`${BASE_URL}/campaigns/${id}/step`, { method: 'POST' });
@@ -376,11 +412,37 @@ export const api = {
 
   async deleteCampaign(id: string): Promise<void> {
     await invalidateCampaignTripsCache(id);
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('citrine_campaigns_')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.data)) {
+              parsed.data = parsed.data.filter((c: any) => c.id !== id);
+              localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          }
+        }
+      }
+    } catch {}
+
     const res = await fetch(`${BASE_URL}/campaigns/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la campagne.');
   },
 
   async deleteAllCampaigns(): Promise<void> {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/campaigns`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de toutes les campagnes.');
   },

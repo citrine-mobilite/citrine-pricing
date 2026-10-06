@@ -6,6 +6,7 @@ export let yangoSettings: SystemSettings = {
   bearerToken: '',
   mode: 'real',
   requestDelayMs: 250,
+  enabled: true,
   updatedAt: new Date().toISOString()
 };
 
@@ -35,6 +36,156 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Number((R * c).toFixed(2));
+}
+
+export function extractYangoDistance(json: any, fallbackDistKm: number): { distanceKm: number; distanceMeters: number; isRoadDistance: boolean } {
+  if (!json) {
+    return {
+      distanceKm: fallbackDistKm,
+      distanceMeters: Math.round(fallbackDistKm * 1000),
+      isRoadDistance: false
+    };
+  }
+
+  let distRaw = json.distance ?? json.distance_meters ?? json.route_length ?? json.route_distance ?? null;
+
+  // Search inside service_levels if not found at root
+  if (distRaw === null && Array.isArray(json.service_levels)) {
+    for (const sl of json.service_levels) {
+      if (sl.distance !== undefined && sl.distance !== null) {
+        distRaw = sl.distance;
+        break;
+      }
+      if (sl.route_distance !== undefined && sl.route_distance !== null) {
+        distRaw = sl.route_distance;
+        break;
+      }
+    }
+  }
+
+  if (distRaw === null || distRaw === undefined) {
+    return {
+      distanceKm: fallbackDistKm,
+      distanceMeters: Math.round(fallbackDistKm * 1000),
+      isRoadDistance: false
+    };
+  }
+
+  // Case 1: String formatted (e.g. "2,5 км", "2.5 km", "850 м", "850 m", "14,2")
+  if (typeof distRaw === 'string') {
+    const s = distRaw.trim().toLowerCase();
+    const isKm = s.includes('км') || s.includes('km');
+    const isMeters = (s.includes('м') || s.endsWith('m') || s.includes('meter')) && !isKm;
+
+    // Convert comma to dot decimal: "2,5" -> "2.5"
+    const cleaned = s.replace(',', '.').replace(/[^\d.]/g, '');
+    const num = parseFloat(cleaned);
+
+    if (!isNaN(num) && num > 0) {
+      if (isKm) {
+        // e.g. "2,5 км" -> 2.5 km
+        return {
+          distanceKm: Number(num.toFixed(2)),
+          distanceMeters: Math.round(num * 1000),
+          isRoadDistance: true
+        };
+      }
+      if (isMeters) {
+        // e.g. "850 м" -> 0.85 km
+        return {
+          distanceKm: Number((num / 1000).toFixed(2)),
+          distanceMeters: Math.round(num),
+          isRoadDistance: true
+        };
+      }
+      // If no unit is explicit:
+      // If > 50, it is in meters (e.g. "2500" -> 2.5 km)
+      if (num > 50) {
+        return {
+          distanceKm: Number((num / 1000).toFixed(2)),
+          distanceMeters: Math.round(num),
+          isRoadDistance: true
+        };
+      }
+      // If <= 50, it is in km (e.g. "2.5" -> 2.5 km)
+      return {
+        distanceKm: Number(num.toFixed(2)),
+        distanceMeters: Math.round(num * 1000),
+        isRoadDistance: true
+      };
+    }
+  }
+
+  // Case 2: Number
+  if (typeof distRaw === 'number' && distRaw > 0) {
+    if (distRaw > 50) {
+      // In meters
+      return {
+        distanceKm: Number((distRaw / 1000).toFixed(2)),
+        distanceMeters: Math.round(distRaw),
+        isRoadDistance: true
+      };
+    }
+    // In kilometers
+    return {
+      distanceKm: Number(distRaw.toFixed(2)),
+      distanceMeters: Math.round(distRaw * 1000),
+      isRoadDistance: true
+    };
+  }
+
+  return {
+    distanceKm: fallbackDistKm,
+    distanceMeters: Math.round(fallbackDistKm * 1000),
+    isRoadDistance: false
+  };
+}
+
+export function extractYangoDuration(json: any, fallbackDurationMin: number): number {
+  if (!json) return fallbackDurationMin;
+
+  // 1. time_seconds (e.g. 442 seconds -> Math.round(442/60) = 7 min or Math.ceil(442/60) = 8 min)
+  if (typeof json.time_seconds === 'number' && json.time_seconds > 0) {
+    return Math.max(1, Math.round(json.time_seconds / 60));
+  }
+
+  // 2. time as string (e.g. "8 мин", "8 min", "12 min")
+  if (typeof json.time === 'string' && json.time.trim()) {
+    const num = parseInt(json.time.replace(/[^\d]/g, ''), 10);
+    if (!isNaN(num) && num > 0) return num;
+  }
+
+  // 3. time as number (seconds)
+  if (typeof json.time === 'number' && json.time > 0) {
+    return Math.max(1, Math.round(json.time / 60));
+  }
+
+  if (typeof json.travel_time_seconds === 'number' && json.travel_time_seconds > 0) {
+    return Math.max(1, Math.round(json.travel_time_seconds / 60));
+  }
+
+  if (typeof json.duration_seconds === 'number' && json.duration_seconds > 0) {
+    return Math.max(1, Math.round(json.duration_seconds / 60));
+  }
+
+  if (typeof json.time_text === 'string' && json.time_text.trim()) {
+    const parsed = parseInt(json.time_text.replace(/[^\d]/g, ''), 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  // Check in service_levels
+  if (Array.isArray(json.service_levels)) {
+    for (const sl of json.service_levels) {
+      if (typeof sl.time_seconds === 'number' && sl.time_seconds > 0) {
+        return Math.max(1, Math.round(sl.time_seconds / 60));
+      }
+      if (typeof sl.time === 'number' && sl.time > 0) {
+        return Math.max(1, Math.round(sl.time / 60));
+      }
+    }
+  }
+
+  return fallbackDurationMin;
 }
 
 function extractPriceNumber(sl: any): number {
@@ -81,6 +232,7 @@ export async function callYangoRoutestats(
   price: number;
   priceFormatted: string;
   distanceKm: number;
+  distanceMeters?: number;
   durationMinutes: number;
   classes?: Record<string, { price: number; name: string }>;
   availableClasses?: string[];
@@ -89,6 +241,11 @@ export async function callYangoRoutestats(
   priceConfortPlus?: number;
   priceMoto?: number;
   waitingTimeMinutes?: number;
+  jams?: boolean;
+  yangoUnavailable?: boolean;
+  yangoWaitingMinutes?: number;
+  yangoUnavailableClasses?: string[];
+  availableCars?: string[];
   latencyMs: number;
   httpStatus?: number;
   errorMessage?: string;
@@ -98,6 +255,19 @@ export async function callYangoRoutestats(
   const startTime = Date.now();
   const distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
   const durationMin = Math.max(2, Math.round((distKm / 25) * 60));
+
+  if (yangoSettings.enabled === false) {
+    return {
+      success: false,
+      source: 'yango_disabled',
+      price: 0,
+      priceFormatted: '0 ' + cityCurrency,
+      distanceKm: distKm,
+      durationMinutes: durationMin,
+      latencyMs: 0,
+      errorMessage: 'Agrégateur Yango désactivé'
+    };
+  }
 
   const payload = {
     route: [
@@ -156,17 +326,45 @@ export async function callYangoRoutestats(
 
     const serviceLevels: any[] = json.service_levels || json.tariffs || json.options || json.offers || [];
 
-    const classes: Record<string, { price: number; name: string }> = {};
+    const classes: Record<string, { price: number; name: string; unavailable?: boolean; waitingMinutes?: number }> = {};
+    const unavailableClasses: string[] = [];
+    const availableCarsList: string[] = [];
     let priceEconom = 0;
     let priceConfort = 0;
     let priceConfortPlus = 0;
     let priceMoto = 0;
+    let primaryClassUnavailable = false;
+    let estimatedWaitingMinutes: number | undefined = undefined;
 
     serviceLevels.forEach((sl: any) => {
       const clsName = (sl.class || sl.tariff_class || sl.name || '').toLowerCase();
+      const isUnavailable = Boolean(sl.tariff_unavailable || sl.tariff_unavailable?.code === 'no_free_cars_nearby');
+
+      if (isUnavailable) {
+        unavailableClasses.push(clsName);
+        if (clsName === 'econom' || clsName === 'standard' || clsName === 'eco' || clsName === 'éco') {
+          primaryClassUnavailable = true;
+        }
+      }
+
+      if (sl.cars && Array.isArray(sl.cars)) {
+        sl.cars.forEach((c: string) => {
+          if (c && !availableCarsList.includes(c)) availableCarsList.push(c);
+        });
+      }
+
+      if (sl.estimated_waiting?.seconds && !estimatedWaitingMinutes) {
+        estimatedWaitingMinutes = Math.max(1, Math.round(sl.estimated_waiting.seconds / 60));
+      }
+
       const p = extractPriceNumber(sl);
       if (p > 0) {
-        classes[clsName] = { price: p, name: sl.name || sl.class_name || clsName };
+        classes[clsName] = {
+          price: p,
+          name: sl.name || sl.class_name || clsName,
+          unavailable: isUnavailable,
+          waitingMinutes: sl.estimated_waiting?.seconds ? Math.round(sl.estimated_waiting.seconds / 60) : undefined
+        };
         if (clsName === 'econom' || clsName === 'standard' || clsName === 'eco' || clsName === 'éco') {
           priceEconom = p;
         } else if (clsName === 'business' || clsName === 'comfort' || clsName === 'confort') {
@@ -179,25 +377,32 @@ export async function callYangoRoutestats(
       }
     });
 
-    const realDist = json.distance ? (parseFloat(String(json.distance).replace(/[^\d.]/g, '')) || distKm) : distKm;
-    const realDurationMin = json.time_seconds ? Math.round(json.time_seconds / 60) : durationMin;
+    const distInfo = extractYangoDistance(json, distKm);
+    const realDurationMin = extractYangoDuration(json, durationMin);
 
     const chosenPrice = priceEconom || priceConfort || priceMoto || 0;
+    const hasJams = Boolean(json.jams === true);
 
     return {
       success: chosenPrice > 0,
       source: 'yango_live',
       price: chosenPrice,
       priceFormatted: chosenPrice > 0 ? `${chosenPrice.toLocaleString('fr-FR')} ${cityCurrency}` : 'Non disponible',
-      distanceKm: realDist,
+      distanceKm: distInfo.distanceKm,
+      distanceMeters: distInfo.distanceMeters,
       durationMinutes: realDurationMin,
+      jams: hasJams,
+      yangoUnavailable: primaryClassUnavailable,
+      yangoWaitingMinutes: estimatedWaitingMinutes,
+      yangoUnavailableClasses: unavailableClasses,
+      availableCars: availableCarsList,
       classes,
       availableClasses: Object.keys(classes),
       priceEconom: priceEconom || undefined,
       priceConfort: priceConfort || undefined,
       priceConfortPlus: priceConfortPlus || undefined,
       priceMoto: priceMoto || undefined,
-      waitingTimeMinutes: 3,
+      waitingTimeMinutes: estimatedWaitingMinutes || 3,
       latencyMs: Date.now() - startTime,
       httpStatus: 200,
       rawJson: json

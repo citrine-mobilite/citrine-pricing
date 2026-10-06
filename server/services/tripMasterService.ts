@@ -7,6 +7,7 @@ export let tripMasterSettings: SystemSettings = {
   distanceEndpoint: 'https://tripmastercameroon.com/get-distance',
   mode: 'real',
   requestDelayMs: 250,
+  enabled: true,
   updatedAt: new Date().toISOString()
 };
 
@@ -82,6 +83,17 @@ export async function callTripMasterStats(
   const startTime = Date.now();
   const distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
   const durationMin = Math.max(2, Math.round((distKm / 25) * 60));
+
+  if (tripMasterSettings.enabled === false) {
+    return {
+      success: false,
+      source: 'tripmaster_disabled',
+      distanceKm: distKm,
+      durationMinutes: durationMin,
+      latencyMs: 0,
+      errorMessage: 'Agrégateur Trip Master désactivé'
+    };
+  }
 
   let priceEco = 0;
   let priceConfort = 0;

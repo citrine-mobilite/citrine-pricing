@@ -1,6 +1,6 @@
 import React from 'react';
 import { PricingCampaign } from '../../types';
-import { StopCircle, RotateCw, Clock } from 'lucide-react';
+import { StopCircle, RotateCw, Clock, UserCircle } from 'lucide-react';
 import { computeCampaignDuration } from '../../utils/durationUtils';
 
 interface PricingLiveTrackerProps {
@@ -38,7 +38,7 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
             />
           </span>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xs font-bold text-slate-900">
                 {isRunning
                   ? 'Exécution Parallèle en cours'
@@ -49,6 +49,12 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
               <span className="text-[11px] text-slate-400 font-medium">
                 ({campaign.cityName})
               </span>
+              {campaign.triggeredByUserName && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#1F4F4A] bg-[#1F4F4A]/10 px-2 py-0.5 rounded-full border border-[#1F4F4A]/20">
+                  <UserCircle className="w-3 h-3" />
+                  <span>Lancé par : {campaign.triggeredByUserName}</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-500">
               Traitement automatique par lots de 10 trajets
@@ -84,7 +90,7 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
       {/* Progress Bar & Indicators */}
       <div className="mt-3 space-y-2">
         <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-slate-800">
               {campaign.completedPairs || 0} / {campaign.totalPairs} trajets traités
             </span>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { PricingCampaign } from '../types';
+import { PricingCampaign, City } from '../types';
 import { SearchableSelect, SearchableOption } from './SearchableSelect';
 import {
   TrendingUp,
@@ -8,12 +8,18 @@ import {
   Calendar,
   LineChart as LineChartIcon,
   BarChart3,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Filter,
+  RotateCcw,
+  MapPin,
+  Building2,
+  Zap
 } from 'lucide-react';
 import Highcharts from 'highcharts';
 
 interface TemporalComparisonViewProps {
   campaigns: PricingCampaign[];
+  cities?: City[];
   onSelectCampaign?: (campaignId: string) => void;
 }
 
@@ -42,11 +48,52 @@ const VEHICLE_CLASSES: VehicleClassConfig[] = [
 ];
 
 export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
-  campaigns
+  campaigns,
+  cities = []
 }) => {
   const [selectedClass, setSelectedClass] = useState<VehicleClassKey>('eco');
   const [mode, setMode] = useState<ComparisonMode>('campaign_pair');
   const [chartType, setChartType] = useState<ChartType>('spline');
+
+  // Filtres analytiques de l'historique d'évolution
+  const [cityFilter, setCityFilter] = useState<string>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'city_wide' | 'arrondissement' | 'test_sample'>('all');
+  const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
+  const [jamsFilter, setJamsFilter] = useState<'all' | 'with_jams' | 'without_jams'>('all');
+
+  const availableArrondissements = useMemo(() => {
+    const set = new Set<string>();
+    campaigns.forEach(c => {
+      if (c.arrondissement) set.add(c.arrondissement);
+    });
+    ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e', 'Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e'].forEach(a => set.add(a));
+    return Array.from(set).sort();
+  }, [campaigns]);
+
+  // Campagnes filtrées pour l'évolution temporelle
+  const filteredCampaigns = useMemo(() => {
+    return campaigns.filter((c) => {
+      if (cityFilter !== 'all' && c.cityId !== cityFilter) return false;
+
+      const isSample = Boolean(c.isTestSample || (c.sampleLimit && c.sampleLimit <= 50) || (c.totalPairs && c.totalPairs <= 50));
+      const isIntra = Boolean(c.scopeMode === 'intra' || c.arrondissement);
+
+      if (scopeFilter === 'test_sample' && !isSample) return false;
+      if (scopeFilter === 'city_wide' && (isSample || isIntra)) return false;
+      if (scopeFilter === 'arrondissement') {
+        if (!isIntra) return false;
+        if (arrondissementFilter !== 'all' && c.arrondissement !== arrondissementFilter) return false;
+      }
+
+      if (jamsFilter === 'with_jams') {
+        if (!c.hasJamsCount || c.hasJamsCount <= 0) return false;
+      } else if (jamsFilter === 'without_jams') {
+        if (c.hasJamsCount && c.hasJamsCount > 0) return false;
+      }
+
+      return true;
+    });
+  }, [campaigns, cityFilter, scopeFilter, arrondissementFilter, jamsFilter]);
 
   // Format default custom date to today YYYY-MM-DD
   const todayStr = useMemo(() => {
@@ -57,12 +104,23 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
 
   // Sort campaigns chronologically descending (newest first)
   const sorted = useMemo(() => {
-    return [...campaigns].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-  }, [campaigns]);
+    return [...filteredCampaigns].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  }, [filteredCampaigns]);
 
   // Initial selection for pairwise mode: most recent (B) vs previous (A)
   const [campaignAId, setCampaignAId] = useState<string>(sorted[1]?.id || sorted[0]?.id || '');
   const [campaignBId, setCampaignBId] = useState<string>(sorted[0]?.id || '');
+
+  useEffect(() => {
+    if (sorted.length > 0) {
+      if (!sorted.some(c => c.id === campaignBId)) {
+        setCampaignBId(sorted[0]?.id || '');
+      }
+      if (!sorted.some(c => c.id === campaignAId)) {
+        setCampaignAId(sorted[1]?.id || sorted[0]?.id || '');
+      }
+    }
+  }, [sorted]);
 
   // Helper to extract class price for a campaign
   const getClassPrice = (c: PricingCampaign, op: 'yango' | 'hero' | 'tripmaster', cls: VehicleClassKey): number => {
@@ -606,7 +664,144 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
 
   return (
     <div className="space-y-4">
-      
+      {/* 0. Barre de filtres de l'évolution temporelle */}
+      <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 text-[#1F4F4A] flex items-center justify-center">
+              <Filter className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <span>Filtrer l'Historique d'Évolution</span>
+                <span className="text-[11px] font-semibold text-[#1F4F4A] bg-teal-50 px-2 py-0.5 rounded-full normal-case">
+                  {filteredCampaigns.length} / {campaigns.length} relevé(s) analysé(s)
+                </span>
+              </h3>
+            </div>
+          </div>
+
+          {(cityFilter !== 'all' || scopeFilter !== 'all' || arrondissementFilter !== 'all' || jamsFilter !== 'all') && (
+            <button
+              onClick={() => {
+                setCityFilter('all');
+                setScopeFilter('all');
+                setArrondissementFilter('all');
+                setJamsFilter('all');
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Réinitialiser les filtres</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 text-xs">
+          {/* Ville */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-[#1F4F4A]" />
+              <span>Ville</span>
+            </label>
+            <select
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
+            >
+              <option value="all">Toutes les villes</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Périmètre */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-[#1F4F4A]" />
+              <span>Périmètre</span>
+            </label>
+            <select
+              value={scopeFilter}
+              onChange={(e) => {
+                setScopeFilter(e.target.value as any);
+                if (e.target.value !== 'arrondissement') setArrondissementFilter('all');
+              }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
+            >
+              <option value="all">Tous les périmètres</option>
+              <option value="city_wide">Ville entière</option>
+              <option value="arrondissement">Par Arrondissement</option>
+              <option value="test_sample">Échantillons test (&le; 50)</option>
+            </select>
+          </div>
+
+          {/* Arrondissement Spécifique si sélectionné */}
+          {scopeFilter === 'arrondissement' ? (
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-teal-600" />
+                <span>Arrondissement</span>
+              </label>
+              <select
+                value={arrondissementFilter}
+                onChange={(e) => setArrondissementFilter(e.target.value)}
+                className="w-full bg-teal-50 border border-teal-300 text-teal-900 rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
+              >
+                <option value="all">Tous les arrondissements</option>
+                {availableArrondissements.map((arr) => (
+                  <option key={arr} value={arr}>{arr}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-500" />
+                <span>Trafic / Heures de pointe</span>
+              </label>
+              <select
+                value={jamsFilter}
+                onChange={(e) => setJamsFilter(e.target.value as any)}
+                className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
+                  jamsFilter === 'with_jams'
+                    ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="all">Tous (Pointe & Fluide)</option>
+                <option value="with_jams">🚗 En pointe / trafic dense (jams)</option>
+                <option value="without_jams">🟢 Fluide uniquement</option>
+              </select>
+            </div>
+          )}
+
+          {/* 4e colonne si scopeFilter === 'arrondissement' */}
+          {scopeFilter === 'arrondissement' && (
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-500" />
+                <span>Trafic / Heures de pointe</span>
+              </label>
+              <select
+                value={jamsFilter}
+                onChange={(e) => setJamsFilter(e.target.value as any)}
+                className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
+                  jamsFilter === 'with_jams'
+                    ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="all">Tous (Pointe & Fluide)</option>
+                <option value="with_jams">🚗 En pointe / trafic dense (jams)</option>
+                <option value="without_jams">🟢 Fluide uniquement</option>
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Header and Controls */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs space-y-3">
         

@@ -1,11 +1,13 @@
 import React from 'react';
-import { Search, FileSpreadsheet, FileText, Download, FileCode, X } from 'lucide-react';
+import { Search, FileSpreadsheet, FileText, FileCode, X, BookOpen, Scroll } from 'lucide-react';
 
 interface DataTableHeaderProps {
   search: string;
   onSearchChange: (val: string) => void;
   searchPlaceholder?: string;
   totalCount: number;
+  displayMode: 'pagination' | 'infinite';
+  onDisplayModeChange: (mode: 'pagination' | 'infinite') => void;
   onExportExcel: () => void;
   onExportCsv: () => void;
   onExportPdf: () => void;
@@ -18,6 +20,8 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
   onSearchChange,
   searchPlaceholder = 'Rechercher...',
   totalCount,
+  displayMode,
+  onDisplayModeChange,
   onExportExcel,
   onExportCsv,
   onExportPdf,
@@ -39,23 +43,51 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
         {search && (
           <button
             onClick={() => onSearchChange('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
 
-      {/* Right Buttons: Actions, Excel, CSV, JSON, PDF */}
-      <div className="flex items-center gap-2 self-end sm:self-auto">
+      {/* Right Controls: Mode Toggle & Export Buttons */}
+      <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
         {actions}
 
-        <div className="h-5 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
+        {/* Display Mode Toggle */}
+        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+          <button
+            onClick={() => onDisplayModeChange('pagination')}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+              displayMode === 'pagination'
+                ? 'bg-white text-[#1F4F4A] shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+            title="Mode Pagination classique par pages"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Pages</span>
+          </button>
+          <button
+            onClick={() => onDisplayModeChange('infinite')}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+              displayMode === 'infinite'
+                ? 'bg-white text-[#1F4F4A] shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+            title="Mode Défilement Infini (Chargement automatique)"
+          >
+            <Scroll className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Défilement</span>
+          </button>
+        </div>
+
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5 hidden sm:block" />
 
         <button
           onClick={onExportExcel}
           disabled={totalCount === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-sm transition hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           title={`Exporter l'intégralité des ${totalCount.toLocaleString('fr-FR')} enregistrements au format Microsoft Excel (.xlsx)`}
         >
           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
@@ -68,19 +100,19 @@ export const DataTableHeader: React.FC<DataTableHeaderProps> = ({
           <button
             onClick={onExportJson}
             disabled={totalCount === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-sm transition hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            title="Exporter le JSON canonique ultra-léger (Départ, Arrivée, Prix par agrégateur et classe)"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg shadow-2xs transition hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="Exporter le JSON canonique ultra-léger"
           >
             <FileCode className="w-3.5 h-3.5 text-amber-600" />
-            <span className="hidden md:inline">JSON Léger</span>
+            <span className="hidden md:inline">JSON</span>
           </button>
         )}
 
         <button
           onClick={onExportPdf}
           disabled={totalCount === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-sm transition hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          title="Générer un rapport PDF imprimable"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          title="Générer un rapport PDF"
         >
           <FileText className="w-3.5 h-3.5 text-rose-600" />
           <span className="hidden md:inline">PDF</span>
