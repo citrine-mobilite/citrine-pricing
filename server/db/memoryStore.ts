@@ -87,12 +87,18 @@ export function loadLocalCampaignsDiskBackup() {
       if (Array.isArray(data) && data.length > 0) {
         memoryCampaigns = data;
         console.log(`[Disk Backup] ${data.length} campagnes restaurées depuis le stockage local persistant.`);
-        // Pré-charger les trajets existants
-        for (const camp of data) {
+        
+        // Trier par date décroissante pour identifier les plus récentes
+        const sorted = [...data].sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime());
+        
+        // Pré-charger les trajets existants en RAM uniquement pour les 100 campagnes les plus récentes pour économiser la RAM
+        const limitToPreload = sorted.slice(0, 100);
+        for (const camp of limitToPreload) {
           if (camp?.id) {
             loadCampaignTripsDiskBackup(camp.id);
           }
         }
+        console.log(`[Memory Shield] Trajets des ${limitToPreload.length} campagnes les plus récentes pré-chargés en RAM. Les plus anciennes restent sur le disque et seront chargées instantanément à la demande.`);
       }
     }
   } catch (e: any) {

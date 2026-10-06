@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch, query, orderBy, limit } from 'firebase/firestore';
 import {
   db,
   cleanFirestoreDoc,
@@ -51,10 +51,35 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
 
   if (db && !isFirestoreQuotaExceeded() && (cachedFirestoreCampaigns.length === 0 || forceRefresh || now - lastCampaignsFirestoreFetch > 60000)) {
     try {
-      const snap = await getDocs(collection(db, 'campaigns'));
+      // On limite la synchronisation Firestore aux 25 campagnes les plus récentes pour préserver au maximum les quotas de lecture !
+      const campaignsQuery = query(
+        collection(db, 'campaigns'),
+        orderBy('startedAt', 'desc'),
+        limit(25)
+      );
+      const snap = await getDocs(campaignsQuery);
       if (!snap.empty) {
         cachedFirestoreCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
         lastCampaignsFirestoreFetch = now;
+
+        // Écrire agressivement les campagnes de Firestore sur le disque local persistant
+        let diskUpdated = false;
+        for (const camp of cachedFirestoreCampaigns) {
+          const idx = memoryCampaigns.findIndex(m => m.id === camp.id);
+          if (idx < 0) {
+            memoryCampaigns.push(camp);
+            diskUpdated = true;
+          } else {
+            // Mettre à jour si les valeurs Firestore sont plus complètes
+            if (JSON.stringify(memoryCampaigns[idx]) !== JSON.stringify(camp)) {
+              memoryCampaigns[idx] = { ...memoryCampaigns[idx], ...camp };
+              diskUpdated = true;
+            }
+          }
+        }
+        if (diskUpdated) {
+          saveLocalCampaignsDiskBackup();
+        }
       }
     } catch (e: any) {
       lastCampaignsFirestoreFetch = now + 5 * 60 * 1000;
@@ -137,6 +162,8 @@ router.post('/api/campaigns/sync-cache', (req: Request, res: Response) => {
 // 2. Détail d'une campagne
 router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+
+  // 1. Session active en cours
   const chunkSession = campaignSessions.get(id);
   if (chunkSession) {
     return res.json(chunkSession.campaign);
@@ -146,11 +173,30 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
     return res.json(session.campaign);
   }
 
+  // 2. Recherche en RAM locale du serveur (memoryCampaigns et cachedFirestoreCampaigns)
+  const mem = memoryCampaigns.find(c => c.id === id);
+  if (mem) {
+    res.setHeader('X-Cache', 'HIT-RAM');
+    return res.json(mem);
+  }
+
+  const cached = cachedFirestoreCampaigns.find(c => c.id === id);
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT-CACHE');
+    return res.json(cached);
+  }
+
+  // 3. Uniquement en dernier recours, requêter Firestore
   if (db && !isFirestoreQuotaExceeded()) {
     try {
       const snap = await getDoc(doc(db, 'campaigns', id));
       if (snap.exists()) {
-        return res.json({ id: snap.id, ...snap.data() });
+        const data = { id: snap.id, ...snap.data() } as PricingCampaign;
+        // Mettre en cache
+        memoryCampaigns.push(data);
+        saveLocalCampaignsDiskBackup();
+        res.setHeader('X-Cache', 'HIT-FIRESTORE');
+        return res.json(data);
       }
     } catch (e: any) {
       if (isQuotaExceededError(e)) {
@@ -160,9 +206,6 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
       }
     }
   }
-
-  const mem = memoryCampaigns.find(c => c.id === id);
-  if (mem) return res.json(mem);
 
   return res.status(404).json({ error: 'Campagne introuvable.' });
 });
