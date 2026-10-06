@@ -97,19 +97,19 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       sortable: true,
       align: 'right',
       render: (t) => (
-        <div className="flex flex-col items-end">
-          <span className="font-mono text-slate-700 text-xs font-medium">{t.distanceKm} km</span>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-slate-800 text-xs font-semibold">{t.distanceKm} km</span>
           {t.jams && (
             <span
-              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-200 text-amber-900 border border-amber-300 whitespace-nowrap"
-              title="Trafic dense / Heure de pointe détecté par Yango (jams: true)"
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
+              title="Embouteillage détecté par Yango"
             >
-              🚗 Jams
+              🚗 Embouteillage
             </span>
           )}
         </div>
       ),
-      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Jams)' : ''}`
+      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Embouteillage)' : ''}`
     },
     {
       key: 'yango_eco',
@@ -118,15 +118,17 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       align: 'right',
       render: (t) => (
         <div className="flex flex-col items-end">
-          {renderCellPrice(getYangoPrice(t, 'econom'), 'yango')}
           {t.yangoUnavailable ? (
             <span
-              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap"
-              title="Pénurie Yango : aucun chauffeur disponible sur cette zone"
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
+              title="Pénurie de véhicules : aucun chauffeur disponible"
             >
               ⚠️ Pénurie
             </span>
-          ) : t.waitingTimeMinutes && t.waitingTimeMinutes > 5 ? (
+          ) : (
+            renderCellPrice(getYangoPrice(t, 'econom'), 'yango')
+          )}
+          {!t.yangoUnavailable && t.waitingTimeMinutes && t.waitingTimeMinutes > 5 ? (
             <span
               className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 whitespace-nowrap"
               title={`Attente estimée : ~${t.waitingTimeMinutes} min`}
@@ -136,7 +138,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
           ) : null}
         </div>
       ),
-      exportValue: (t) => getYangoPrice(t, 'econom') || ''
+      exportValue: (t) => `${getYangoPrice(t, 'econom') || ''}${t.yangoUnavailable ? ' (Pénurie de véhicules)' : ''}`
     },
     {
       key: 'yango_confort',
@@ -313,8 +315,12 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                   <div
                     key={t.id}
                     className={`rounded-xl border p-3.5 shadow-2xs space-y-2.5 transition ${
-                      t.jams
-                        ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/40'
+                      t.yangoUnavailable && t.jams
+                        ? 'bg-amber-50/95 border-amber-300 ring-1 ring-amber-300/60'
+                        : t.yangoUnavailable
+                        ? 'bg-purple-50/90 border-purple-300 ring-1 ring-purple-300/60'
+                        : t.jams
+                        ? 'bg-amber-50/95 border-amber-300 ring-1 ring-amber-300/60'
                         : 'bg-white border-slate-200/90'
                     }`}
                   >
@@ -326,8 +332,8 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                           <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="truncate">{dest}</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
-                          <span>{t.distanceKm} km</span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-slate-600">
+                          <span className="font-semibold">{t.distanceKm} km</span>
                           {t.durationMinutes && (
                             <>
                               <span>·</span>
@@ -335,8 +341,13 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                             </>
                           )}
                           {t.jams && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-200 text-amber-900">
-                              🚗 Pointe (jams)
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-950 border border-amber-400">
+                              🚗 Embouteillage
+                            </span>
+                          )}
+                          {t.yangoUnavailable && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-950 border border-purple-400">
+                              ⚠️ Pénurie de véhicules
                             </span>
                           )}
                         </div>
@@ -355,12 +366,22 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
                       {/* Yango */}
                       <div className={`p-2 rounded-lg border ${
-                        isYangoCheaper ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50/60 border-slate-100'
+                        t.yangoUnavailable
+                          ? 'bg-purple-50 border-purple-200'
+                          : isYangoCheaper
+                          ? 'bg-amber-50/60 border-amber-200'
+                          : 'bg-slate-50/60 border-slate-100'
                       }`}>
                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Yango</div>
-                        <div className="text-xs font-extrabold text-slate-900 mt-0.5">
-                          {yEco ? `${yEco.toLocaleString('fr-FR')} F` : '—'}
-                        </div>
+                        {t.yangoUnavailable ? (
+                          <div className="text-xs font-bold text-purple-900 mt-0.5">
+                            ⚠️ Pénurie
+                          </div>
+                        ) : (
+                          <div className="text-xs font-extrabold text-slate-900 mt-0.5">
+                            {yEco ? `${yEco.toLocaleString('fr-FR')} F` : '—'}
+                          </div>
+                        )}
                         <div className="text-[9px] text-slate-400">Éco</div>
                       </div>
 
@@ -435,11 +456,18 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
           data={normalizedTrips}
           isLoading={isLoading}
           hasGroupedHeaders
-          rowClassName={(t) =>
-            t.jams
-              ? 'bg-amber-50/90 hover:bg-amber-100/90 border-l-4 border-l-amber-500 text-amber-950 font-medium'
-              : 'hover:bg-slate-50/60'
-          }
+          rowClassName={(t) => {
+            if (t.jams && t.yangoUnavailable) {
+              return 'bg-amber-50/80 hover:bg-amber-100/70 text-slate-900 font-medium transition-colors';
+            }
+            if (t.jams) {
+              return 'bg-amber-50/70 hover:bg-amber-100/60 text-slate-900 font-medium transition-colors';
+            }
+            if (t.yangoUnavailable) {
+              return 'bg-purple-50/60 hover:bg-purple-100/60 text-slate-900 font-medium transition-colors';
+            }
+            return 'hover:bg-slate-50/60 transition-colors';
+          }}
           pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
           defaultPageSize={25}
           exportFileName={`pricing_${cityName.toLowerCase()}_${trips.length}_trajets`}

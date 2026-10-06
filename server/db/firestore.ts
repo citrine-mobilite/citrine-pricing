@@ -321,6 +321,10 @@ function legacyToCanonical(t: any): CanonicalTrip {
     destination: dest,
     distanceKm: t.distanceKm ?? t.km ?? 0,
     durationMin: t.durationMinutes ?? t.durationMin ?? 0,
+    jams: Boolean(t.jams !== undefined ? t.jams : t.hasJams),
+    yangoUnavailable: Boolean(t.yangoUnavailable !== undefined ? t.yangoUnavailable : t.shortage || t.noCars),
+    yangoWaitingMinutes: t.yangoWaitingMinutes ?? t.waitingTimeMinutes,
+    yangoUnavailableClasses: t.yangoUnavailableClasses,
     prices: {
       yango: { eco: yEco, confort: yConf, confortPlus: yConfPlus, moto: yMoto },
       heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },

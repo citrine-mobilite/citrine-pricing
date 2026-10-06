@@ -8,6 +8,7 @@ import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/fi
 import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
+const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
 
 export function saveLocalCampaignsDiskBackup() {
@@ -19,6 +20,65 @@ export function saveLocalCampaignsDiskBackup() {
   }
 }
 
+export function saveCampaignTripsDiskBackup(campaignId: string, trips: TripResult[], canonicalTrips?: CanonicalTrip[]) {
+  try {
+    if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
+    if (Array.isArray(trips) && trips.length > 0) {
+      const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(trips, null, 2), 'utf8');
+    }
+    if (Array.isArray(canonicalTrips) && canonicalTrips.length > 0) {
+      const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+      fs.writeFileSync(canonPath, JSON.stringify(canonicalTrips, null, 2), 'utf8');
+    }
+  } catch (e: any) {
+    console.warn(`[Disk Backup] Warning writing trips for ${campaignId} to disk:`, e.message);
+  }
+}
+
+export function loadCampaignTripsDiskBackup(campaignId: string): TripResult[] | null {
+  try {
+    const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        memoryCampaignTrips[campaignId] = data;
+        return data;
+      }
+    }
+    const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+    if (fs.existsSync(canonPath)) {
+      const raw = fs.readFileSync(canonPath, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        memoryCampaignCanonicalTrips[campaignId] = data;
+        const mapped = data.map((t: CanonicalTrip) => ({
+          id: t.id,
+          campaignId,
+          origin: t.origin,
+          destination: t.destination,
+          distanceKm: t.distanceKm,
+          durationMinutes: t.durationMin,
+          jams: Boolean(t.jams),
+          yangoUnavailable: Boolean(t.yangoUnavailable),
+          yangoWaitingMinutes: t.yangoWaitingMinutes,
+          yangoUnavailableClasses: t.yangoUnavailableClasses,
+          prices: t.prices,
+          cheapest: t.cheapest,
+          status: t.status,
+          createdAt: t.createdAt
+        })) as unknown as TripResult[];
+        memoryCampaignTrips[campaignId] = mapped;
+        return mapped;
+      }
+    }
+  } catch (e: any) {
+    console.warn(`[Disk Backup] Warning reading trips for ${campaignId} from disk:`, e.message);
+  }
+  return null;
+}
+
 export function loadLocalCampaignsDiskBackup() {
   try {
     if (fs.existsSync(CAMPAIGNS_FILE)) {
@@ -27,6 +87,12 @@ export function loadLocalCampaignsDiskBackup() {
       if (Array.isArray(data) && data.length > 0) {
         memoryCampaigns = data;
         console.log(`[Disk Backup] ${data.length} campagnes restaurées depuis le stockage local persistant.`);
+        // Pré-charger les trajets existants
+        for (const camp of data) {
+          if (camp?.id) {
+            loadCampaignTripsDiskBackup(camp.id);
+          }
+        }
       }
     }
   } catch (e: any) {
@@ -37,27 +103,8 @@ export function loadLocalCampaignsDiskBackup() {
 // Hachage sécurisé bcrypt avec salt pour l'administrateur
 const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('c!tr!n$@2026', 10);
 
-// In-memory fallback and reactive state cache
-export let users: User[] = [
-  {
-    id: 'usr_citrine_admin',
-    name: 'Citrine Mobilité (Super Admin)',
-    email: 'citrinemobilite@gmail.com',
-    role: 'admin',
-    active: true,
-    passwordHash: DEFAULT_PASSWORD_HASH,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'user_responsable_default',
-    name: 'Responsable Opérations',
-    email: 'responsable@citrine-pricing.cm',
-    role: 'responsable',
-    active: true,
-    passwordHash: DEFAULT_PASSWORD_HASH,
-    createdAt: new Date().toISOString()
-  }
-];
+// Reactive state cache for users loaded from database
+export let users: User[] = [];
 
 export let cities: City[] = [
   {

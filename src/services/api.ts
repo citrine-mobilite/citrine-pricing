@@ -473,6 +473,12 @@ export const api = {
     if (!hasCustomFilters) {
       const cached = await getCachedCampaignTrips(campaignId);
       if (cached && cached.length > 0) {
+        // En arrière-plan non-bloquant, synchroniser le serveur si nécessaire
+        fetch(`${BASE_URL}/campaigns/${campaignId}/sync-trips`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trips: cached })
+        }).catch(() => {});
         return cached as TripResult[];
       }
     }

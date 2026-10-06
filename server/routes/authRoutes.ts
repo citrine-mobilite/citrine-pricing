@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite } from '../db/firestore.js';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import { users, setUsers, recordHistory } from '../db/memoryStore.js';
 import { User } from '../types.js';
 
@@ -11,54 +11,30 @@ const router = Router();
 const DEFAULT_SALT_ROUNDS = 10;
 const DEFAULT_PASSWORD = 'citrin$@2026';
 
-// Initialisation sécurisée du compte Super Admin Citrine en base Firestore
+// Synchronisation au démarrage depuis la base de données Firestore
 export async function bootstrapCitrineAdmin() {
-  if (db) {
+  if (db && !isFirestoreQuotaExceeded()) {
     try {
       const snap = await getDocs(collection(db, 'users'));
       if (!snap.empty) {
-        const dbUsers = snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        const dbAdmin = dbUsers.find(u => u.role === 'admin');
-        if (dbAdmin) {
-          const idx = users.findIndex(u => u.id === dbAdmin.id || u.role === 'admin');
-          if (idx !== -1) {
-            users[idx] = { ...users[idx], ...dbAdmin };
-          } else {
-            users.unshift(dbAdmin);
-          }
-          return;
+        const dbUsers = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          .filter(u => !u.deleted && u.email && u.role) as User[];
+        if (dbUsers.length > 0) {
+          setUsers(dbUsers);
         }
       }
     } catch (e: any) {
-      console.warn('[Firestore] bootstrap admin read notice:', e.message);
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] bootstrap admin notice:', e.message);
+      }
     }
-  }
-
-  const cleanEmail = 'citrinemobilite@gmail.com';
-  const defaultHash = await bcrypt.hash(DEFAULT_PASSWORD, DEFAULT_SALT_ROUNDS);
-
-  let admin = users.find(u => u.role === 'admin');
-  if (!admin) {
-    admin = {
-      id: 'usr_citrine_admin',
-      name: 'Citrine Mobilité (Super Admin)',
-      email: cleanEmail,
-      role: 'admin',
-      active: true,
-      passwordHash: defaultHash,
-      createdAt: new Date().toISOString()
-    };
-    users.unshift(admin);
-  }
-
-  if (db) {
-    await safeFirestoreWrite('bootstrapCitrineAdmin', () => 
-      setDoc(doc(db!, 'users', admin!.id), cleanFirestoreDoc(admin), { merge: true })
-    );
   }
 }
 
-// Lancement de l'initialisation
+// Lancement de la synchronisation
 bootstrapCitrineAdmin().catch(err => console.warn('[Auth] Bootstrap admin notice:', err.message));
 
 // 1. Auth routes
@@ -71,8 +47,8 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
   const cleanEmail = email.trim().toLowerCase();
   let user = users.find(u => u.email.toLowerCase() === cleanEmail);
 
-  // Si l'utilisateur n'est pas encore en mémoire locale, tentative de récupération Firestore
-  if (!user && db) {
+  // Si l'utilisateur n'est pas encore en mémoire locale et que Firestore est dispo, tentative de récupération
+  if (db && !user && !isFirestoreQuotaExceeded()) {
     try {
       const snap = await getDocs(collection(db, 'users'));
       if (!snap.empty) {
@@ -81,31 +57,23 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
           return data.email && data.email.toLowerCase() === cleanEmail && !data.deleted;
         });
         if (found) {
-          user = { id: found.id, ...found.data() } as User;
-          users.push(user);
+          const fetchedUser = { id: found.id, ...found.data() } as User;
+          if (user) {
+            const idx = users.findIndex(u => u.id === (user as User).id);
+            users[idx] = { ...(user as User), ...fetchedUser };
+            user = users[idx];
+          } else {
+            user = fetchedUser;
+            users.push(user);
+          }
         }
       }
     } catch (e: any) {
-      console.warn('[Firestore] error finding user on login:', e.message);
-    }
-  }
-
-  // Auto-création / synchronisation pour citrinemobilite@gmail.com
-  if (!user && cleanEmail === 'citrinemobilite@gmail.com') {
-    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, DEFAULT_SALT_ROUNDS);
-    user = {
-      id: 'usr_citrine_admin',
-      name: 'Citrine Mobilité (Super Admin)',
-      email: 'citrinemobilite@gmail.com',
-      role: 'admin',
-      active: true,
-      passwordHash,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
-    };
-    users.unshift(user);
-    if (db) {
-      await safeFirestoreWrite('seedCitrineAdmin', () => setDoc(doc(db!, 'users', user!.id), cleanFirestoreDoc(user)));
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] error finding user on login:', e.message);
+      }
     }
   }
 
@@ -117,20 +85,18 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'Ce compte utilisateur a été désactivé.' });
   }
 
-  // Vérification du mot de passe avec Bcrypt & Salt
+  // Vérification stricte du mot de passe avec Bcrypt
   let isPasswordValid = false;
   if (user.passwordHash) {
     isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-  } else {
-    // Si aucun hash présent (ex: compte créé auparavant), vérification du mot de passe standard et hachage
-    if (password === DEFAULT_PASSWORD || (cleanEmail === 'citrinemobilite@gmail.com' && password === 'c!tr!n$@2026')) {
-      isPasswordValid = true;
-      user.passwordHash = await bcrypt.hash(password, DEFAULT_SALT_ROUNDS);
-      if (db) {
-        await safeFirestoreWrite('updateUserPasswordHash', () => 
-          setDoc(doc(db!, 'users', user!.id), { passwordHash: user!.passwordHash }, { merge: true })
-        );
-      }
+  } else if (password === DEFAULT_PASSWORD) {
+    // Si aucun hash présent sur un très ancien compte, initialisation unique
+    isPasswordValid = true;
+    user.passwordHash = await bcrypt.hash(password, DEFAULT_SALT_ROUNDS);
+    if (db) {
+      await safeFirestoreWrite('updateUserPasswordHash', () => 
+        setDoc(doc(db!, 'users', user!.id), { passwordHash: user!.passwordHash }, { merge: true })
+      );
     }
   }
 
@@ -157,7 +123,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
 // 2. User management (Servis depuis la RAM en priorité - 0 lecture Firestore)
 router.get('/api/users', async (req: Request, res: Response) => {
   const forceRefresh = req.query.forceRefresh === 'true';
-  if (db && (users.length === 0 || forceRefresh)) {
+  if (db && !isFirestoreQuotaExceeded() && (users.length === 0 || forceRefresh)) {
     try {
       const snap = await getDocs(collection(db, 'users'));
       if (!snap.empty) {
@@ -169,7 +135,11 @@ router.get('/api/users', async (req: Request, res: Response) => {
         }
       }
     } catch (e: any) {
-      console.warn('[Firestore] get users error:', e.message);
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] get users notice:', e.message);
+      }
     }
   }
   // Ne jamais exposer les hashs de mot de passe publiquement

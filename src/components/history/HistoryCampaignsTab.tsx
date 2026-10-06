@@ -339,12 +339,12 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
               onChange={(e) => setJamsFilter(e.target.value as any)}
               className={`rounded-lg px-2 py-1 text-xs font-medium border focus:outline-none ${
                 jamsFilter === 'with_jams'
-                  ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold'
+                  ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
                   : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
               <option value="all">Tous trafics</option>
-              <option value="with_jams">🚗 Pointe / Jams</option>
+              <option value="with_jams">🚗 Embouteillages</option>
               <option value="without_jams">🟢 Fluide</option>
             </select>
           </div>

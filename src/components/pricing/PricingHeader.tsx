@@ -1,7 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { City, PricingCampaign } from '../../types';
-import { Play, RotateCw, Trash2, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock, MessageSquare, Zap, UserCircle } from 'lucide-react';
+import { Play, RotateCw, Trash2, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock, MessageSquare, Zap, UserCircle, AlertTriangle } from 'lucide-react';
 import { computeCampaignDuration } from '../../utils/durationUtils';
 import { SearchableSelect } from '../SearchableSelect';
 import { api } from '../../services/api';
@@ -164,11 +164,21 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
 
           {activeCampaign && Boolean(activeCampaign.hasJamsCount && activeCampaign.hasJamsCount > 0) && (
             <span
-              className="hidden md:inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
-              title="Trajets détectés avec du trafic dense / heure de pointe par Yango (jams: true)"
+              className="hidden md:inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
+              title="Trajets détectés avec du trafic dense / embouteillages"
             >
-              <Zap className="w-3 h-3 text-amber-600" />
-              <span>{activeCampaign.hasJamsCount} pointe</span>
+              <Zap className="w-3 h-3 text-amber-700" />
+              <span>{activeCampaign.hasJamsCount} embouteillage(s)</span>
+            </span>
+          )}
+
+          {activeCampaign && Boolean(activeCampaign.yangoShortageCount && activeCampaign.yangoShortageCount > 0) && (
+            <span
+              className="hidden md:inline-flex items-center gap-1 bg-purple-100 text-purple-950 border border-purple-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
+              title="Trajets où aucun chauffeur VTC Yango n'était disponible (pénurie de véhicules)"
+            >
+              <AlertTriangle className="w-3 h-3 text-purple-700" />
+              <span>{activeCampaign.yangoShortageCount} pénurie(s) de véhicules</span>
             </span>
           )}
 

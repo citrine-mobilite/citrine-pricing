@@ -126,10 +126,20 @@ export function DataTableBody<T extends Record<string, any>>({
                 key={item.id || index}
                 className={`${rowClassName ? rowClassName(item, index) : 'hover:bg-slate-50/60'} transition-colors`}
               >
-                {columns.map((col) => (
+                {columns.map((col, colIndex) => (
                   <td
                     key={col.key}
                     className={`py-3 px-4 ${
+                      colIndex === 0
+                        ? item.yangoUnavailable && item.jams
+                          ? 'border-l-4 border-l-amber-500'
+                          : item.yangoUnavailable
+                          ? 'border-l-4 border-l-purple-600'
+                          : item.jams
+                          ? 'border-l-4 border-l-amber-500'
+                          : 'border-l-4 border-l-transparent'
+                        : ''
+                    } ${
                       col.align === 'right'
                         ? 'text-right'
                         : col.align === 'center'

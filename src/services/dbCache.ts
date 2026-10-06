@@ -4,7 +4,7 @@
  * Fonctionne hors-ligne et persiste sur mobile et PC.
  */
 
-const DB_NAME = 'citrine_pwa_cache_v1';
+const DB_NAME = 'citrine_pwa_cache_v2';
 const DB_VERSION = 1;
 const STORE_TRIPS = 'campaign_trips';
 const STORE_COMPARISONS = 'temporal_comparisons';

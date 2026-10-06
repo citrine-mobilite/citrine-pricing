@@ -165,19 +165,19 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       sortable: true,
       align: 'right',
       render: (t) => (
-        <div className="flex flex-col items-end">
-          <span className="font-mono text-xs font-medium text-slate-700">{t.distanceKm} km</span>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-slate-800 text-xs font-semibold">{t.distanceKm} km</span>
           {t.jams && (
             <span
-              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-200 text-amber-900 border border-amber-300 whitespace-nowrap"
-              title="Heure de pointe / Trafic dense Yango (jams: true)"
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
+              title="Embouteillage détecté par Yango"
             >
-              🚗 Jams
+              🚗 Embouteillage
             </span>
           )}
         </div>
       ),
-      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Jams)' : ''}`
+      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Embouteillage)' : ''}`
     },
     {
       key: 'yango_eco',
@@ -186,15 +186,17 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
       align: 'right',
       render: (t) => (
         <div className="flex flex-col items-end">
-          {renderCellPrice(getYangoPrice(t, 'econom'), 'yango')}
           {t.yangoUnavailable ? (
             <span
-              className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap"
-              title="Pénurie Yango : aucun chauffeur disponible sur cette zone"
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
+              title="Pénurie de véhicules : aucun chauffeur disponible"
             >
               ⚠️ Pénurie
             </span>
-          ) : t.waitingTimeMinutes && t.waitingTimeMinutes > 5 ? (
+          ) : (
+            renderCellPrice(getYangoPrice(t, 'econom'), 'yango')
+          )}
+          {!t.yangoUnavailable && t.waitingTimeMinutes && t.waitingTimeMinutes > 5 ? (
             <span
               className="mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 whitespace-nowrap"
               title={`Attente estimée : ~${t.waitingTimeMinutes} min`}
@@ -204,7 +206,7 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
           ) : null}
         </div>
       ),
-      exportValue: (t) => getYangoPrice(t, 'econom') || ''
+      exportValue: (t) => `${getYangoPrice(t, 'econom') || ''}${t.yangoUnavailable ? ' (Pénurie de véhicules)' : ''}`
     },
     {
       key: 'yango_confort',
@@ -310,11 +312,18 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
         columns={columns}
         data={normalizedTrips}
         isLoading={isLoading}
-        rowClassName={(t) =>
-          t.jams
-            ? 'bg-amber-50/90 hover:bg-amber-100/90 border-l-4 border-l-amber-500 text-amber-950 font-medium'
-            : 'hover:bg-slate-50/60'
-        }
+        rowClassName={(t) => {
+          if (t.jams && t.yangoUnavailable) {
+            return 'bg-amber-50/80 hover:bg-amber-100/70 text-slate-900 font-medium transition-colors';
+          }
+          if (t.jams) {
+            return 'bg-amber-50/70 hover:bg-amber-100/60 text-slate-900 font-medium transition-colors';
+          }
+          if (t.yangoUnavailable) {
+            return 'bg-purple-50/60 hover:bg-purple-100/60 text-slate-900 font-medium transition-colors';
+          }
+          return 'hover:bg-slate-50/60 transition-colors';
+        }}
         pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
         defaultPageSize={25}
         searchPlaceholder="Rechercher par départ ou arrivée..."

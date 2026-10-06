@@ -766,12 +766,12 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
                 onChange={(e) => setJamsFilter(e.target.value as any)}
                 className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
                   jamsFilter === 'with_jams'
-                    ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold'
+                    ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
                 <option value="all">Tous (Pointe & Fluide)</option>
-                <option value="with_jams">🚗 En pointe / trafic dense (jams)</option>
+                <option value="with_jams">🚗 Embouteillages (Trafic dense)</option>
                 <option value="without_jams">🟢 Fluide uniquement</option>
               </select>
             </div>
@@ -782,19 +782,19 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
                 <Zap className="w-3 h-3 text-amber-500" />
-                <span>Trafic / Heures de pointe</span>
+                <span>Trafic / Embouteillages</span>
               </label>
               <select
                 value={jamsFilter}
                 onChange={(e) => setJamsFilter(e.target.value as any)}
                 className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
                   jamsFilter === 'with_jams'
-                    ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold'
+                    ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
                 <option value="all">Tous (Pointe & Fluide)</option>
-                <option value="with_jams">🚗 En pointe / trafic dense (jams)</option>
+                <option value="with_jams">🚗 Embouteillages (Trafic dense)</option>
                 <option value="without_jams">🟢 Fluide uniquement</option>
               </select>
             </div>

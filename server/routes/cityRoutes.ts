@@ -1,19 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite } from '../db/firestore.js';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced } from '../db/memoryStore.js';
 import { City, Neighborhood } from '../types.js';
 
 const router = Router();
 
-// Cities (Servies depuis la RAM en priorité - 0 lecture Firestore)
+// Cities (Servies depuis la RAM en priorité - 0 lecture Firestore inutile)
 router.get('/api/cities', async (req: Request, res: Response) => {
-  const forceRefresh = req.query.forceRefresh === 'true';
-
   await ensureSynced().catch(() => {});
 
-  if (db && forceRefresh) {
+  const forceRefresh = req.query.forceRefresh === 'true';
+
+  // Ne requêter Firestore QUE si la RAM est vide ou en cas de rafraîchissement forcé explicite
+  if (db && !isFirestoreQuotaExceeded() && (cities.length === 0 || forceRefresh)) {
     try {
       const snap = await getDocs(collection(db, 'cities'));
       if (!snap.empty) {
@@ -21,7 +22,11 @@ router.get('/api/cities', async (req: Request, res: Response) => {
         setCities(dbCities);
       }
     } catch (e: any) {
-      console.warn('[Firestore] get cities error:', e.message);
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] get cities notice:', e.message);
+      }
     }
   }
 
@@ -130,7 +135,7 @@ router.get('/api/neighborhoods', async (req: Request, res: Response) => {
 
   await ensureSynced().catch(() => {});
 
-  if (db && forceRefresh === 'true') {
+  if (db && !isFirestoreQuotaExceeded() && forceRefresh === 'true') {
     try {
       const snap = await getDocs(collection(db, 'neighborhoods'));
       if (!snap.empty) {
@@ -138,7 +143,11 @@ router.get('/api/neighborhoods', async (req: Request, res: Response) => {
         setNeighborhoods(dbNbs);
       }
     } catch (e: any) {
-      console.warn('[Firestore] get neighborhoods error:', e.message);
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      } else {
+        console.warn('[Firestore] get neighborhoods notice:', e.message);
+      }
     }
   }
 

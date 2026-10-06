@@ -21,7 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // 1. Listen for live Firebase auth state and sync with DB users
+    // Listen for live Firebase auth state or verify saved local session
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         try {
@@ -30,69 +30,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             (u) => u.email.toLowerCase() === (fbUser.email || '').toLowerCase() || u.id === fbUser.uid
           );
 
-          if (matchedUser) {
+          if (matchedUser && matchedUser.active) {
             setUser(matchedUser);
             localStorage.setItem('vtc_pricing_user', JSON.stringify(matchedUser));
+          } else if (matchedUser && !matchedUser.active) {
+            setUser(null);
+            localStorage.removeItem('vtc_pricing_user');
           } else {
-            let role: UserRole = 'employe';
-            if (
-              fbUser.email === 'citrinemobilite@gmail.com' ||
-              fbUser.email === 'landrymouns@gmail.com' ||
-              fbUser.email === 'admin@vtc-pricing.internal'
-            ) {
-              role = 'admin';
-            }
-
             const currentUser: User = {
               id: fbUser.uid,
               email: fbUser.email || '',
               name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
-              role,
+              role: 'admin',
               active: true,
-              createdAt: new Date().toISOString(),
-              lastLoginAt: new Date().toISOString()
+              createdAt: new Date().toISOString()
             };
             setUser(currentUser);
             localStorage.setItem('vtc_pricing_user', JSON.stringify(currentUser));
           }
         } catch {
-          const currentUser: User = {
-            id: fbUser.uid,
-            email: fbUser.email || '',
-            name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
-            role: 'admin',
-            active: true,
-            createdAt: new Date().toISOString()
-          };
-          setUser(currentUser);
+          const saved = localStorage.getItem('vtc_pricing_user');
+          setUser(saved ? JSON.parse(saved) : null);
         }
         setIsLoading(false);
       } else {
-        // Fallback to local session if no Firebase user
-        const savedUser = localStorage.getItem('vtc_pricing_user');
-        if (savedUser) {
+        // Verify local session against database
+        const saved = localStorage.getItem('vtc_pricing_user');
+        const token = localStorage.getItem('vtc_pricing_token');
+        if (saved) {
           try {
-            const parsed = JSON.parse(savedUser);
-            // Rafraîchir les données depuis la base si possible
+            const parsed = JSON.parse(saved);
+            if (!parsed || !parsed.email) {
+              localStorage.removeItem('vtc_pricing_user');
+              localStorage.removeItem('vtc_pricing_token');
+              setUser(null);
+              setIsLoading(false);
+              return;
+            }
+            // Restauration immédiate de l'utilisateur connecté pour préserver le jeton et éviter la redirection sur F5
+            setUser(parsed);
+            setIsLoading(false);
+
+            // Vérification asynchrone en arrière-plan du compte en base
             api.getUsers()
               .then((dbUsers) => {
-                const refreshed = dbUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === (parsed.email || '').toLowerCase());
-                if (refreshed) {
-                  setUser(refreshed);
-                  localStorage.setItem('vtc_pricing_user', JSON.stringify(refreshed));
-                } else {
-                  setUser(parsed);
+                const matched = dbUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === (parsed.email || '').toLowerCase());
+                if (matched && matched.active) {
+                  setUser(matched);
+                  localStorage.setItem('vtc_pricing_user', JSON.stringify(matched));
+                } else if (matched && !matched.active) {
+                  // Compte désactivé en base -> déconnexion forcée
+                  setUser(null);
+                  localStorage.removeItem('vtc_pricing_user');
+                  localStorage.removeItem('vtc_pricing_token');
                 }
               })
-              .catch(() => setUser(parsed));
+              .catch(() => {
+                // En cas de micro-coupure réseau, garder la session de l'utilisateur actif
+              });
           } catch {
             localStorage.removeItem('vtc_pricing_user');
+            localStorage.removeItem('vtc_pricing_token');
             setUser(null);
+            setIsLoading(false);
           }
         } else {
           setUser(null);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     });
 
@@ -103,6 +108,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await api.login(email, pass);
     setUser(res.user);
     localStorage.setItem('vtc_pricing_user', JSON.stringify(res.user));
+    if (res.token) {
+      localStorage.setItem('vtc_pricing_token', res.token);
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -111,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = await loginWithGoogle();
       setUser(userData);
       localStorage.setItem('vtc_pricing_user', JSON.stringify(userData));
+      localStorage.setItem('vtc_pricing_token', `google_token_${userData.id}_${Date.now()}`);
     } finally {
       setIsLoading(false);
     }
@@ -120,6 +129,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await logoutFirebase().catch(() => {});
     setUser(null);
     localStorage.removeItem('vtc_pricing_user');
+    localStorage.removeItem('vtc_pricing_token');
+    sessionStorage.clear();
   };
 
   const hasRole = (roles: UserRole[]): boolean => {

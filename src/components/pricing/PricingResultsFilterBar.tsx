@@ -133,19 +133,19 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
           />
         </div>
 
-        {/* 3. Trafic / Heures de pointe (Jams) */}
+        {/* 3. Trafic / Embouteillages */}
         <div>
           <select
             value={jamsFilter}
             onChange={(e) => onJamsFilterChange(e.target.value as TripJamsFilter)}
             className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none transition ${
               jamsFilter === 'with_jams'
-                ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold'
+                ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
                 : 'bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
             <option value="all">Trafic : Tous</option>
-            <option value="with_jams">🚗 Pointe / Jams ({hasJamsInCampaign ? 'Détecté' : 'Actif'})</option>
+            <option value="with_jams">🚗 Embouteillages ({hasJamsInCampaign ? 'Détecté' : 'Actif'})</option>
             <option value="without_jams">🟢 Fluide uniquement</option>
           </select>
         </div>
@@ -181,9 +181,9 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
                 : 'bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
-            <option value="all">Dispo Yango : Tous</option>
-            <option value="shortage">⚠️ Pénurie Yango (Pas de voiture)</option>
-            <option value="available">✅ Chauffeurs Yango dispos</option>
+            <option value="all">Véhicules : Tous les trajets</option>
+            <option value="shortage">⚠️ Pénurie de véhicules ({hasShortageInCampaign ? 'Détecté' : 'Actif'})</option>
+            <option value="available">🟢 Véhicules disponibles</option>
           </select>
         </div>
 

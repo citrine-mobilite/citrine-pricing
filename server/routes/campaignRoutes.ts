@@ -23,9 +23,11 @@ import {
   recordHistory,
   deleteHistoryForCampaign,
   ensureSynced,
-  saveLocalCampaignsDiskBackup
+  saveLocalCampaignsDiskBackup,
+  saveCampaignTripsDiskBackup,
+  loadCampaignTripsDiskBackup
 } from '../db/memoryStore.js';
-import { PricingCampaign, CanonicalTrip } from '../types.js';
+import { PricingCampaign, CanonicalTrip, TripResult } from '../types.js';
 import {
   initializeCampaignSession,
   processCampaignChunk,
@@ -492,13 +494,13 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
 });
 
-// 7. Résultats des trajets (Exploite notre cache RAM et JSON canonique pour garantir 0 lecture Firestore)
+// 7. Résultats des trajets (Exploite notre cache RAM, disque local et JSON canonique pour garantir 0 lecture Firestore)
 router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   // 1. Session active en cours
   const session = activePricingSessions.get(id);
-  if (session) {
+  if (session && session.trips.length > 0) {
     res.setHeader('X-Cache', 'HIT-SESSION');
     return res.json(session.trips);
   }
@@ -509,28 +511,59 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
     return res.json(memoryCampaignTrips[id]);
   }
 
-  // 3. Lecture du JSON canonique en base de données Firestore
-  const canonicalTrips = await loadCanonicalCampaignResults(id);
-  if (canonicalTrips.length > 0) {
-    const cleanTrips = canonicalTrips.map(t => ({
-      id: t.id,
-      campaignId: id,
-      origin: t.origin,
-      destination: t.destination,
-      distanceKm: t.distanceKm,
-      durationMinutes: t.durationMin,
-      prices: t.prices,
-      cheapest: t.cheapest,
-      status: t.status,
-      createdAt: t.createdAt
-    }));
+  // 3. Cache disque local serveur persistant (survit aux redémarrages et quotas)
+  const diskTrips = loadCampaignTripsDiskBackup(id);
+  if (diskTrips && diskTrips.length > 0) {
+    res.setHeader('X-Cache', 'HIT-DISK');
+    return res.json(diskTrips);
+  }
 
-    memoryCampaignTrips[id] = cleanTrips as any;
-    return res.json(cleanTrips);
+  // 4. Lecture du JSON canonique en base de données Firestore (si quota disponible)
+  if (!isFirestoreQuotaExceeded()) {
+    const canonicalTrips = await loadCanonicalCampaignResults(id);
+    if (canonicalTrips.length > 0) {
+      const cleanTrips = canonicalTrips.map(t => ({
+        id: t.id,
+        campaignId: id,
+        origin: t.origin,
+        destination: t.destination,
+        distanceKm: t.distanceKm,
+        durationMinutes: t.durationMin,
+        jams: Boolean(t.jams),
+        yangoUnavailable: Boolean(t.yangoUnavailable),
+        yangoWaitingMinutes: t.yangoWaitingMinutes,
+        yangoUnavailableClasses: t.yangoUnavailableClasses,
+        prices: t.prices,
+        cheapest: t.cheapest,
+        status: t.status,
+        createdAt: t.createdAt
+      })) as unknown as TripResult[];
+
+      memoryCampaignTrips[id] = cleanTrips;
+      // Sauvegarder immédiatement sur disque local pour les prochains redémarrages
+      saveCampaignTripsDiskBackup(id, cleanTrips, canonicalTrips);
+      res.setHeader('X-Cache', 'HIT-FIRESTORE');
+      return res.json(cleanTrips);
+    }
   }
 
   // Si aucun trajet n'est encore enregistré ou si la campagne débute, renvoyer un tableau vide [] avec statut 200 (pas d'erreur 404)
   return res.json([]);
+});
+
+// 7b. Route de synchronisation bidirectionnelle des trajets depuis le client (IndexedDB -> Disque Serveur)
+router.post('/api/campaigns/:id/sync-trips', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { trips } = req.body;
+
+  if (Array.isArray(trips) && trips.length > 0) {
+    memoryCampaignTrips[id] = trips;
+    saveCampaignTripsDiskBackup(id, trips);
+    console.log(`[Sync Trips] ${trips.length} trajets synchronisés depuis le client pour la campagne ${id}.`);
+    return res.json({ success: true, count: trips.length });
+  }
+
+  return res.status(400).json({ error: 'Format de trajets invalide.' });
 });
 
 // 8. Endpoint Téléchargement JSON Canonique Ultra-Léger

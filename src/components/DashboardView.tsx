@@ -228,9 +228,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             })}
           </span>
           {c.hasJamsCount && c.hasJamsCount > 0 ? (
-            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300">
-              <Zap className="w-2.5 h-2.5 text-amber-600" />
-              <span>{c.hasJamsCount} trajets en pointe</span>
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-950 bg-amber-200 px-1.5 py-0.5 rounded border border-amber-300">
+              <Zap className="w-2.5 h-2.5 text-amber-700" />
+              <span>{c.hasJamsCount} embouteillage(s)</span>
+            </span>
+          ) : null}
+          {c.yangoShortageCount && c.yangoShortageCount > 0 ? (
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-950 bg-purple-200 px-1.5 py-0.5 rounded border border-purple-300">
+              <span>{c.yangoShortageCount} pénurie(s)</span>
             </span>
           ) : null}
         </div>

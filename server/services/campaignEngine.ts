@@ -18,7 +18,9 @@ import {
   neighborhoods,
   cities,
   recordHistory,
-  ensureSynced
+  ensureSynced,
+  saveCampaignTripsDiskBackup,
+  saveLocalCampaignsDiskBackup
 } from '../db/memoryStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
@@ -365,9 +367,11 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
     await saveCanonicalCampaignBatch(campaignId, session.city.name, chunkIndex, chunkCanonicalTrips);
   }
 
-  // Synchro mémoire
+  // Synchro mémoire & disque local persistant
   memoryCampaignTrips[campaignId] = session.trips;
   memoryCampaignCanonicalTrips[campaignId] = session.canonicalTrips;
+  saveCampaignTripsDiskBackup(campaignId, session.trips, session.canonicalTrips);
+  saveLocalCampaignsDiskBackup();
 
   return {
     success: true,
@@ -464,11 +468,14 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
 
   campaign.canonicalTripsCount = canonicalTrips.length;
 
-  // Persistance Firestore finale (1 seule écriture finale pour mettre à jour les statistiques globales et le statut 'completed')
+  // Persistance Firestore finale des métadonnées ET des résultats canoniques complets
   if (db) {
     await safeFirestoreWrite('finalizeCampaignMeta', async () => {
       await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
     });
+    if (canonicalTrips && canonicalTrips.length > 0) {
+      await saveCanonicalCampaignResults(campaignId, campaign.cityName, canonicalTrips);
+    }
   }
 
   const existingIdx = memoryCampaigns.findIndex(c => c.id === campaignId);
@@ -485,6 +492,8 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
   if (canonicalTrips && canonicalTrips.length > 0) {
     memoryCampaignCanonicalTrips[campaignId] = canonicalTrips;
   }
+  saveCampaignTripsDiskBackup(campaignId, memoryCampaignTrips[campaignId] || [], canonicalTrips);
+  saveLocalCampaignsDiskBackup();
 
   campaignSessions.delete(campaignId);
 
