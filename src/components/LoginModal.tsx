@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { HeroLogo } from './HeroLogo';
-import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 interface LoginModalProps {
   onClose: () => void;
@@ -11,6 +11,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
   const { login, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -125,13 +126,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#F0FAFA]/60 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F4F4A] placeholder-slate-400 focus:outline-none focus:border-[#3D8B85] focus:bg-white"
+                className="w-full bg-[#F0FAFA]/60 border border-slate-200 rounded-lg pl-9 pr-9 py-2 text-xs text-[#1F4F4A] placeholder-slate-400 focus:outline-none focus:border-[#3D8B85] focus:bg-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-md transition cursor-pointer"
+                title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
