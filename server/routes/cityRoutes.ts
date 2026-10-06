@@ -29,7 +29,7 @@ router.get('/api/cities', async (req: Request, res: Response) => {
   const enriched = cities.map(c => ({
     ...c,
     neighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id).length,
-    activeNeighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id && n.active).length
+    activeNeighborhoodsCount: c.active ? neighborhoods.filter(n => n.cityId === c.id && n.active).length : 0
   }));
 
   return res.json(enriched);
@@ -78,7 +78,23 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
   if (currency !== undefined) city.currency = currency.trim().toUpperCase();
   if (currencySymbol !== undefined) city.currencySymbol = currencySymbol;
   if (center !== undefined) city.center = center;
-  if (active !== undefined) city.active = Boolean(active);
+  if (active !== undefined) {
+    const isNewActive = Boolean(active);
+    city.active = isNewActive;
+    if (!isNewActive) {
+      // Lorsqu'une ville est désactivée, ses quartiers ne sont plus monitorés
+      neighborhoods.forEach(n => {
+        if (n.cityId === id) {
+          n.active = false;
+          if (db) {
+            safeFirestoreWrite('deactivateNbOnCityDisable', () =>
+              setDoc(doc(db!, 'neighborhoods', n.id), { active: false }, { merge: true })
+            );
+          }
+        }
+      });
+    }
+  }
   if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
 
   await safeFirestoreWrite('updateCity', () => setDoc(doc(db!, 'cities', id), cleanFirestoreDoc(city), { merge: true }));

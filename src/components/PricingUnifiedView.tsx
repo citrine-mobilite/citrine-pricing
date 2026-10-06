@@ -84,8 +84,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     autoSchedule: { enabled: false, slots: [] }
   };
   const cityActiveNeighborhoods = useMemo(
-    () => neighborhoods.filter((n) => n.cityId === currentCity?.id && n.active),
-    [neighborhoods, currentCity?.id]
+    () => (currentCity?.active ? neighborhoods.filter((n) => n.cityId === currentCity?.id && n.active) : []),
+    [neighborhoods, currentCity?.id, currentCity?.active]
   );
   const totalCombinations = useMemo(
     () => calculatePossibleBenchmarkPairsCount(cityActiveNeighborhoods),
@@ -93,6 +93,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   );
 
   const arrondissementOptions = useMemo<ArrondissementInfo[]>(() => {
+    if (!currentCity?.active) return [];
     const map = new Map<string, { name: string; cityName: string; count: number }>();
 
     // Arrondissements de référence pour la ville active
@@ -104,7 +105,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       map.set(arr, { name: arr, cityName: currentCity.name, count: 0 });
     });
 
-    // Quartiers actifs de la ville courante
+    // Quartiers actifs de la ville courante uniquement
     cityActiveNeighborhoods.forEach((nb) => {
       const arrName = detectArrondissement(nb);
       if (!map.has(arrName)) {
@@ -114,36 +115,9 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       }
     });
 
-    // Ajout des arrondissements des autres villes actives pour que le Select2 permette la recherche multi-villes
-    const otherCities = cities.filter((c) => c.id !== currentCity.id && c.active);
-    otherCities.forEach((city) => {
-      const cityNbs = neighborhoods.filter((n) => n.cityId === city.id && n.active);
-      const otherStandardArrs = city.id === 'city_yaounde'
-        ? ['Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e']
-        : city.id === 'city_douala'
-        ? ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e']
-        : [`${city.name} 1er`, `${city.name} 2e`];
-
-      otherStandardArrs.forEach((arr) => {
-        if (!map.has(arr)) {
-          map.set(arr, { name: arr, cityName: city.name, count: 0 });
-        }
-      });
-
-      cityNbs.forEach((nb) => {
-        const arrName = detectArrondissement(nb);
-        if (!map.has(arrName)) {
-          map.set(arrName, { name: arrName, cityName: city.name, count: 1 });
-        } else {
-          map.get(arrName)!.count += 1;
-        }
-      });
-    });
-
     const MAX_CALLS_PER_NB = 5;
     const result: ArrondissementInfo[] = [];
     map.forEach((item) => {
-      // Un quartier ne peut être appelé que 5 fois maximum
       const callsPerNb = Math.min(MAX_CALLS_PER_NB, Math.max(0, item.count - 1));
       const tripCount = item.count >= 2 ? item.count * callsPerNb : 0;
       result.push({
@@ -155,14 +129,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
     });
 
-    // Trier : ville courante d'abord, puis par nombre de trajets décroissant, puis alphabétique
     return result.sort((a, b) => {
-      if (a.cityName === currentCity.name && b.cityName !== currentCity.name) return -1;
-      if (a.cityName !== currentCity.name && b.cityName === currentCity.name) return 1;
       if (b.tripCount !== a.tripCount) return b.tripCount - a.tripCount;
       return a.name.localeCompare(b.name);
     });
-  }, [currentCity, cityActiveNeighborhoods, cities, neighborhoods]);
+  }, [currentCity, cityActiveNeighborhoods]);
 
   const [inspectedTrip, setInspectedTrip] = useState<TripResult | null>(null);
   const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter'>('none');

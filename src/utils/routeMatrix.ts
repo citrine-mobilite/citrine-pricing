@@ -170,6 +170,7 @@ export function generateBenchmarkPairs(
 
         for (const dest of activeNbs) {
           if (dest.id === origin.id) continue;
+          if (origin.cityId && dest.cityId && origin.cityId !== dest.cityId) continue;
           if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
 
           const destArr = detectArrondissement(dest);
@@ -212,6 +213,7 @@ export function generateBenchmarkPairs(
 
       for (const dest of activeNbs) {
         if (dest.id === origin.id) continue;
+        if (origin.cityId && dest.cityId && origin.cityId !== dest.cityId) continue;
         if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
 
         const pairKey = getPairKey(origin.id, dest.id);

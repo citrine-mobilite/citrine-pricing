@@ -41,10 +41,15 @@ export const LauncherCitySelectorCard: React.FC<LauncherCitySelectorCardProps> =
           >
             {cities.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} ({c.country}) — {c.currency}
+                {c.name} ({c.country}) — {c.currency} {!c.active ? '(Inactive)' : ''}
               </option>
             ))}
           </select>
+          {!currentCity?.active && (
+            <p className="text-[11px] text-amber-700 font-semibold mt-1">
+              ⚠️ Ville désactivée : les pricings ne peuvent pas être lancés.
+            </p>
+          )}
         </div>
 
         <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between">

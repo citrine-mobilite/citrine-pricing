@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { PricingCampaign } from '../types';
@@ -17,7 +17,8 @@ import {
   Check,
   ChevronRight,
   ShieldCheck,
-  Lock
+  Lock,
+  MapPin
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -57,12 +58,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     );
   }
 
-  // Filter campaigns launched by this user
-  const myCampaigns = campaigns.filter(
-    (c) =>
-      c.triggeredByUserId === user.id ||
-      (c.triggeredByUserName && c.triggeredByUserName.toLowerCase() === user.name.toLowerCase())
-  );
+  // Filter campaigns launched by this user & limit strictly to the last 5
+  const myRecentCampaigns = useMemo(() => {
+    return campaigns
+      .filter(
+        (c) =>
+          c.triggeredByUserId === user.id ||
+          (c.triggeredByUserName && c.triggeredByUserName.toLowerCase() === user.name.toLowerCase())
+      )
+      .slice(0, 5);
+  }, [campaigns, user]);
+
+  const totalMyCampaignsCount = useMemo(() => {
+    return campaigns.filter(
+      (c) =>
+        c.triggeredByUserId === user.id ||
+        (c.triggeredByUserName && c.triggeredByUserName.toLowerCase() === user.name.toLowerCase())
+    ).length;
+  }, [campaigns, user]);
 
   const handleUpdateName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +176,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#1F4F4A] text-white flex items-center justify-center font-black text-2xl uppercase shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-[#1F4F4A] text-white flex items-center justify-center font-black text-2xl uppercase shadow-sm shrink-0">
               {user.name.substring(0, 2)}
             </div>
             <div>
@@ -195,7 +208,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           <div className="flex items-center gap-3 self-start md:self-auto">
             <div className="bg-[#F0FAFA] border border-[#3D8B85]/20 rounded-xl px-4 py-2.5 text-center">
-              <div className="text-lg font-black text-[#1F4F4A]">{myCampaigns.length}</div>
+              <div className="text-lg font-black text-[#1F4F4A]">{totalMyCampaignsCount}</div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-[#3D8B85]">Pricing Lancés</div>
             </div>
           </div>
@@ -204,7 +217,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Profile Settings (Name & Password) */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-6 space-y-6">
           
           {/* Card: Edit Name */}
           <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs">
@@ -355,8 +368,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         </div>
 
-        {/* Right Column: My Recent Campaigns */}
-        <div className="lg:col-span-5 space-y-6">
+        {/* Right Column: 5 Last Realized Campaigns (Simple & Clean Cards) */}
+        <div className="lg:col-span-6 space-y-4">
           <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
@@ -364,44 +377,69 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <Zap className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">Mes Campagnes Récentes</h2>
-                  <p className="text-xs text-slate-500">{myCampaigns.length} relevé(s) lancé(s) par vous</p>
+                  <h2 className="text-sm font-bold text-slate-900">Dernières Campagnes Réalisées</h2>
+                  <p className="text-xs text-slate-500">
+                    Les 5 derniers relevés lancés par {user.name}
+                  </p>
                 </div>
               </div>
             </div>
 
-            {myCampaigns.length === 0 ? (
-              <div className="text-center py-6 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            {myRecentCampaigns.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                 Vous n'avez pas encore lancé de campagne de pricing.
               </div>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                {myCampaigns.map((c) => (
+              <div className="space-y-3">
+                {myRecentCampaigns.map((c) => (
                   <button
                     key={c.id}
                     onClick={() => {
                       onSelectCampaign(c.id);
                       onNavigate('pricing');
                     }}
-                    className="w-full text-left p-3 rounded-xl border border-slate-200/80 hover:border-[#3D8B85] hover:bg-[#F0FAFA] transition flex items-center justify-between group cursor-pointer"
+                    className="w-full text-left p-3.5 rounded-xl border border-slate-200/80 hover:border-[#3D8B85] hover:bg-[#F0FAFA] transition flex items-center justify-between group cursor-pointer shadow-2xs"
                   >
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 group-hover:text-[#1F4F4A] flex items-center gap-1.5">
+                    <div className="space-y-1">
+                      <div className="text-xs font-bold text-slate-900 group-hover:text-[#1F4F4A] flex items-center gap-2">
                         <span>{c.cityName}</span>
-                        <span className="text-[10px] font-normal text-slate-400">
-                          ({c.completedPairs || c.totalPairs} trajets)
+                        {c.arrondissement ? (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                            <MapPin className="w-2.5 h-2.5" />
+                            <span>{c.arrondissement}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-normal">Toute la ville</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                        <span>
+                          {new Date(c.startedAt).toLocaleString('fr-FR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                        <span>•</span>
+                        <span className="font-semibold text-slate-700">
+                          {c.completedPairs || c.totalPairs} trajets
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {new Date(c.startedAt).toLocaleString('fr-FR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[#1F4F4A] transition-transform group-hover:translate-x-0.5" />
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          c.status === 'completed'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}
+                      >
+                        {c.status === 'completed' ? 'Succès' : 'En cours'}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[#1F4F4A] transition-transform group-hover:translate-x-0.5" />
+                    </div>
                   </button>
                 ))}
               </div>

@@ -33,7 +33,7 @@ export const CityLaunchChoiceModal: React.FC<CityLaunchChoiceModalProps> = ({
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              Lancer Benchmark : {city.name}
+              Lancer Pricing : {city.name}
             </h2>
             <p className="text-xs text-slate-500">
               {city.activeNeighborhoodsCount || 0} quartiers actifs • {(city.possiblePairs || 0).toLocaleString('fr-FR')} trajets

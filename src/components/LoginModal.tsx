@@ -163,11 +163,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose }) => {
 
             <button
               type="button"
-              onClick={() => selectDemoAccount('responsable@citrine-pricing.cm')}
+              onClick={() => selectDemoAccount('doleres@citrine-pricing.com')}
               className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition cursor-pointer"
             >
-              <div className="text-[11px] font-semibold text-slate-900">Sarah</div>
-              <div className="text-[10px] text-slate-400 truncate">sarah@...</div>
+              <div className="text-[11px] font-semibold text-slate-900">Doleres</div>
+              <div className="text-[10px] text-slate-400 truncate">doleres@...</div>
             </button>
 
             <button

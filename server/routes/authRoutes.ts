@@ -9,14 +9,35 @@ import { User } from '../types.js';
 const router = Router();
 
 const DEFAULT_SALT_ROUNDS = 10;
-const DEFAULT_PASSWORD = 'c!tr!n$@2026';
+const DEFAULT_PASSWORD = 'citrin$@2026';
 
 // Initialisation sécurisée du compte Super Admin Citrine en base Firestore
 export async function bootstrapCitrineAdmin() {
+  if (db) {
+    try {
+      const snap = await getDocs(collection(db, 'users'));
+      if (!snap.empty) {
+        const dbUsers = snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+        const dbAdmin = dbUsers.find(u => u.role === 'admin');
+        if (dbAdmin) {
+          const idx = users.findIndex(u => u.id === dbAdmin.id || u.role === 'admin');
+          if (idx !== -1) {
+            users[idx] = { ...users[idx], ...dbAdmin };
+          } else {
+            users.unshift(dbAdmin);
+          }
+          return;
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Firestore] bootstrap admin read notice:', e.message);
+    }
+  }
+
   const cleanEmail = 'citrinemobilite@gmail.com';
   const defaultHash = await bcrypt.hash(DEFAULT_PASSWORD, DEFAULT_SALT_ROUNDS);
-  
-  let admin = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+  let admin = users.find(u => u.role === 'admin');
   if (!admin) {
     admin = {
       id: 'usr_citrine_admin',
@@ -28,10 +49,6 @@ export async function bootstrapCitrineAdmin() {
       createdAt: new Date().toISOString()
     };
     users.unshift(admin);
-  } else {
-    admin.passwordHash = defaultHash;
-    admin.role = 'admin';
-    admin.active = true;
   }
 
   if (db) {

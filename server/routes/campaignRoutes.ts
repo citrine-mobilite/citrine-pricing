@@ -190,6 +190,9 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
+  if (!city.active) {
+    return res.status(400).json({ error: 'Impossible de lancer un pricing sur une ville inactive. Activez la ville d’abord.' });
+  }
 
   const activeNbs = neighborhoods.filter(n => n.cityId === cityId && n.active);
   if (activeNbs.length < 2) {

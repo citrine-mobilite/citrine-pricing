@@ -21,39 +21,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // 1. Listen for live Firebase auth state
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+    // 1. Listen for live Firebase auth state and sync with DB users
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        let role: UserRole = 'employe';
-        if (
-          fbUser.email === 'citrinemobilite@gmail.com' ||
-          fbUser.email === 'landrymouns@gmail.com' ||
-          fbUser.email === 'admin@vtc-pricing.internal'
-        ) {
-          role = 'admin';
-        }
+        try {
+          const dbUsers = await api.getUsers();
+          const matchedUser = dbUsers.find(
+            (u) => u.email.toLowerCase() === (fbUser.email || '').toLowerCase() || u.id === fbUser.uid
+          );
 
-        let userName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur';
-        if (
-          fbUser.email === 'citrinemobilite@gmail.com' ||
-          fbUser.email === 'landrymouns@gmail.com' ||
-          fbUser.email === 'admin@vtc-pricing.internal' ||
-          userName.toLowerCase().includes('landry')
-        ) {
-          userName = 'Admin Citrine';
-        }
+          if (matchedUser) {
+            setUser(matchedUser);
+            localStorage.setItem('vtc_pricing_user', JSON.stringify(matchedUser));
+          } else {
+            let role: UserRole = 'employe';
+            if (
+              fbUser.email === 'citrinemobilite@gmail.com' ||
+              fbUser.email === 'landrymouns@gmail.com' ||
+              fbUser.email === 'admin@vtc-pricing.internal'
+            ) {
+              role = 'admin';
+            }
 
-        const currentUser: User = {
-          id: fbUser.uid,
-          email: fbUser.email || '',
-          name: userName,
-          role,
-          active: true,
-          createdAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString()
-        };
-        setUser(currentUser);
-        localStorage.setItem('vtc_pricing_user', JSON.stringify(currentUser));
+            const currentUser: User = {
+              id: fbUser.uid,
+              email: fbUser.email || '',
+              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
+              role,
+              active: true,
+              createdAt: new Date().toISOString(),
+              lastLoginAt: new Date().toISOString()
+            };
+            setUser(currentUser);
+            localStorage.setItem('vtc_pricing_user', JSON.stringify(currentUser));
+          }
+        } catch {
+          const currentUser: User = {
+            id: fbUser.uid,
+            email: fbUser.email || '',
+            name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
+            role: 'admin',
+            active: true,
+            createdAt: new Date().toISOString()
+          };
+          setUser(currentUser);
+        }
         setIsLoading(false);
       } else {
         // Fallback to local session if no Firebase user
@@ -61,11 +73,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (savedUser) {
           try {
             const parsed = JSON.parse(savedUser);
-            if (parsed.name && parsed.name.toLowerCase().includes('landry')) {
-              parsed.name = 'Citrine Mobilité (Super Admin)';
-              localStorage.setItem('vtc_pricing_user', JSON.stringify(parsed));
-            }
-            setUser(parsed);
+            // Rafraîchir les données depuis la base si possible
+            api.getUsers()
+              .then((dbUsers) => {
+                const refreshed = dbUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === (parsed.email || '').toLowerCase());
+                if (refreshed) {
+                  setUser(refreshed);
+                  localStorage.setItem('vtc_pricing_user', JSON.stringify(refreshed));
+                } else {
+                  setUser(parsed);
+                }
+              })
+              .catch(() => setUser(parsed));
           } catch {
             localStorage.removeItem('vtc_pricing_user');
             setUser(null);

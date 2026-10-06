@@ -98,7 +98,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
               options={cities.map((c) => ({
                 value: c.id,
                 label: c.name,
-                sublabel: c.country
+                sublabel: `${c.country}${!c.active ? ' • (Désactivée)' : ''}`
               }))}
               value={currentCity.id}
               onChange={onSelectCityId}

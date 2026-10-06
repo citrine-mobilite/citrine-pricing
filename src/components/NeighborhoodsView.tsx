@@ -35,7 +35,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     autoSchedule: { enabled: false, slots: [] }
   };
   const cityNeighborhoods = neighborhoods.filter((n) => n.cityId === currentCity?.id);
-  const activeNeighborhoods = cityNeighborhoods.filter((n) => n.active);
+  const activeNeighborhoods = currentCity?.active ? cityNeighborhoods.filter((n) => n.active) : [];
 
   // Filter by Arrondissement
   const [selectedArrondissement, setSelectedArrondissement] = useState<string>('all');
@@ -192,6 +192,13 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         onReloadOfficialDouala={handleReloadOfficialDouala}
         isLoadingOfficial={isLoadingOfficial}
       />
+
+      {!currentCity?.active && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2.5 shadow-2xs">
+          <span className="font-semibold text-amber-900 shrink-0">⚠️ Ville désactivée :</span>
+          <span>Les quartiers de <strong>{currentCity.name}</strong> ne sont pas monitorés et les relevés de pricing y sont suspendus.</span>
+        </div>
+      )}
 
       <NeighborhoodQuickInfo
         totalCount={cityNeighborhoods.length}

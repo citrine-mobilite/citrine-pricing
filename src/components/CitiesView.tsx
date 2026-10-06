@@ -220,7 +220,7 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg transition disabled:opacity-40"
           >
             <Play className="w-3 h-3 fill-white" />
-            <span>Benchmark</span>
+            <span>Pricing</span>
           </button>
           <button onClick={() => openEditModal(c)} className="p-1 text-slate-400 hover:text-slate-700 rounded transition">
             <Edit3 className="w-3.5 h-3.5" />
