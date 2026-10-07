@@ -287,7 +287,14 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
         yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
         yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
         prices: {
-          yango: { eco: yEco, confort: yConf, confortPlus: yConfPlus, moto: yMoto },
+          yango: { 
+            eco: yEco, 
+            confort: yConf, 
+            confortPlus: yConfPlus, 
+            moto: yMoto,
+            jams: Boolean(yangoStats.jams),
+            yangoUnavailable: Boolean(yangoStats.yangoUnavailable)
+          },
           heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
           tripMaster: { eco: tmEco, confort: tmConf, moto: tmMoto }
         },
@@ -312,7 +319,14 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
         yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
         yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
         prices: {
-          yango: { eco: yEco, confort: yConf, confortPlus: yConfPlus, moto: yMoto },
+          yango: { 
+            eco: yEco, 
+            confort: yConf, 
+            confortPlus: yConfPlus, 
+            moto: yMoto,
+            jams: Boolean(yangoStats.jams),
+            yangoUnavailable: Boolean(yangoStats.yangoUnavailable)
+          },
           heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
           tripMaster: { eco: tmEco, confort: tmConf, moto: tmMoto }
         },

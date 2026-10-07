@@ -771,7 +771,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
                 }`}
               >
                 <option value="all">Tous (Pointe & Fluide)</option>
-                <option value="with_jams">🚗 Embouteillages (Trafic dense)</option>
+                <option value="with_jams">🚗 Heure de pointe</option>
                 <option value="without_jams">🟢 Fluide uniquement</option>
               </select>
             </div>
@@ -782,7 +782,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
                 <Zap className="w-3 h-3 text-amber-500" />
-                <span>Trafic / Embouteillages</span>
+                <span>Heure de pointe</span>
               </label>
               <select
                 value={jamsFilter}
@@ -794,7 +794,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
                 }`}
               >
                 <option value="all">Tous (Pointe & Fluide)</option>
-                <option value="with_jams">🚗 Embouteillages (Trafic dense)</option>
+                <option value="with_jams">🚗 Heure de pointe</option>
                 <option value="without_jams">🟢 Fluide uniquement</option>
               </select>
             </div>

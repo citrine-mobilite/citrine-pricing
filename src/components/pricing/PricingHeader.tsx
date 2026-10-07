@@ -165,10 +165,10 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
           {activeCampaign && Boolean(activeCampaign.hasJamsCount && activeCampaign.hasJamsCount > 0) && (
             <span
               className="hidden md:inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
-              title="Trajets détectés avec du trafic dense / embouteillages"
+              title="Trajets détectés en heure de pointe"
             >
               <Zap className="w-3 h-3 text-amber-700" />
-              <span>{activeCampaign.hasJamsCount} embouteillage(s)</span>
+              <span>{activeCampaign.hasJamsCount} heure(s) de pointe</span>
             </span>
           )}
 

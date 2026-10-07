@@ -133,7 +133,7 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
           />
         </div>
 
-        {/* 3. Trafic / Embouteillages */}
+        {/* 3. Trafic / Heure de pointe */}
         <div>
           <select
             value={jamsFilter}
@@ -145,7 +145,7 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
             }`}
           >
             <option value="all">Trafic : Tous</option>
-            <option value="with_jams">🚗 Embouteillages ({hasJamsInCampaign ? 'Détecté' : 'Actif'})</option>
+            <option value="with_jams">🚗 Heure de pointe ({hasJamsInCampaign ? 'Détecté' : 'Actif'})</option>
             <option value="without_jams">🟢 Fluide uniquement</option>
           </select>
         </div>

@@ -344,7 +344,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
               }`}
             >
               <option value="all">Tous trafics</option>
-              <option value="with_jams">🚗 Embouteillages</option>
+              <option value="with_jams">🚗 Heure de pointe</option>
               <option value="without_jams">🟢 Fluide</option>
             </select>
           </div>

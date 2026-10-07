@@ -102,14 +102,14 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
           {t.jams && (
             <span
               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
-              title="Embouteillage détecté par Yango"
+              title="Heure de pointe détectée par Yango"
             >
-              🚗 Embouteillage
+              🚗 Heure de pointe
             </span>
           )}
         </div>
       ),
-      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Embouteillage)' : ''}`
+      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Heure de pointe)' : ''}`
     },
     {
       key: 'yango_eco',
@@ -315,12 +315,10 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                   <div
                     key={t.id}
                     className={`rounded-xl border p-3.5 shadow-2xs space-y-2.5 transition ${
-                      t.yangoUnavailable && t.jams
+                      !t.jams
                         ? 'bg-amber-50/95 border-amber-300 ring-1 ring-amber-300/60'
                         : t.yangoUnavailable
                         ? 'bg-purple-50/90 border-purple-300 ring-1 ring-purple-300/60'
-                        : t.jams
-                        ? 'bg-amber-50/95 border-amber-300 ring-1 ring-amber-300/60'
                         : 'bg-white border-slate-200/90'
                     }`}
                   >
@@ -342,7 +340,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                           )}
                           {t.jams && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-950 border border-amber-400">
-                              🚗 Embouteillage
+                              🚗 Heure de pointe
                             </span>
                           )}
                           {t.yangoUnavailable && (
@@ -457,15 +455,15 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
           isLoading={isLoading}
           hasGroupedHeaders
           rowClassName={(t) => {
-            if (t.jams && t.yangoUnavailable) {
-              return 'bg-amber-50/80 hover:bg-amber-100/70 text-slate-900 font-medium transition-colors';
-            }
-            if (t.jams) {
+            if (!t.jams) {
+              // Quand jams est false, c'est jaune (fluide)
               return 'bg-amber-50/70 hover:bg-amber-100/60 text-slate-900 font-medium transition-colors';
             }
             if (t.yangoUnavailable) {
+              // Quand jams est true mais pénurie, c'est violet
               return 'bg-purple-50/60 hover:bg-purple-100/60 text-slate-900 font-medium transition-colors';
             }
+            // Quand jams est true, c'est normal (blanc)
             return 'hover:bg-slate-50/60 transition-colors';
           }}
           pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}

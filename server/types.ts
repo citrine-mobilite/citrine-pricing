@@ -37,6 +37,8 @@ export interface CanonicalTripPrices {
     confort: number | null;
     confortPlus: number | null;
     moto: number | null;
+    jams?: boolean;
+    yangoUnavailable?: boolean;
   };
   heroCab: {
     eco: number | null;
@@ -57,7 +59,7 @@ export interface CanonicalTrip {
   destination: string;
   distanceKm: number;
   durationMin: number;
-  jams?: boolean; // Heure de pointe / Trafic dense détecté par Yango (jams: true)
+  jams?: boolean; // Heure de pointe détectée par Yango (jams: true)
   yangoUnavailable?: boolean; // Pénurie / Pas de voiture Yango disponible (no_free_cars_nearby)
   yangoWaitingMinutes?: number; // Temps d'attente estimé Yango (ex: 4 min)
   yangoUnavailableClasses?: string[]; // Classes indisponibles (ex: ['comfortplus', 'moto'])
@@ -151,7 +153,7 @@ export interface TripResult {
   distanceKm: number;
   durationSeconds?: number;
   durationMinutes: number;
-  jams?: boolean; // Heure de pointe / Trafic dense détecté par Yango (jams: true)
+  jams?: boolean; // Heure de pointe détectée par Yango (jams: true)
   yangoUnavailable?: boolean; // Pénurie / Pas de voiture Yango disponible (no_free_cars_nearby)
   yangoWaitingMinutes?: number; // Temps d'attente estimé Yango (ex: 4 min)
   yangoUnavailableClasses?: string[]; // Classes indisponibles (ex: ['comfortplus', 'moto'])

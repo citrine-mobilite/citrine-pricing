@@ -565,22 +565,32 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
   if (!isFirestoreQuotaExceeded()) {
     const canonicalTrips = await loadCanonicalCampaignResults(id);
     if (canonicalTrips.length > 0) {
-      const cleanTrips = canonicalTrips.map(t => ({
-        id: t.id,
-        campaignId: id,
-        origin: t.origin,
-        destination: t.destination,
-        distanceKm: t.distanceKm,
-        durationMinutes: t.durationMin,
-        jams: Boolean(t.jams),
-        yangoUnavailable: Boolean(t.yangoUnavailable),
-        yangoWaitingMinutes: t.yangoWaitingMinutes,
-        yangoUnavailableClasses: t.yangoUnavailableClasses,
-        prices: t.prices,
-        cheapest: t.cheapest,
-        status: t.status,
-        createdAt: t.createdAt
-      })) as unknown as TripResult[];
+      const cleanTrips = canonicalTrips.map(t => {
+        const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
+        return {
+          id: t.id,
+          campaignId: id,
+          origin: t.origin,
+          destination: t.destination,
+          distanceKm: t.distanceKm,
+          durationMinutes: t.durationMin,
+          jams: Boolean(t.jams),
+          yangoUnavailable: Boolean(t.yangoUnavailable),
+          yangoWaitingMinutes: t.yangoWaitingMinutes,
+          yangoUnavailableClasses: t.yangoUnavailableClasses,
+          prices: {
+            ...t.prices,
+            yango: {
+              ...pYango,
+              jams: pYango.jams !== undefined ? pYango.jams : Boolean(t.jams),
+              yangoUnavailable: pYango.yangoUnavailable !== undefined ? pYango.yangoUnavailable : Boolean(t.yangoUnavailable)
+            }
+          },
+          cheapest: t.cheapest,
+          status: t.status,
+          createdAt: t.createdAt
+        };
+      }) as unknown as TripResult[];
 
       memoryCampaignTrips[id] = cleanTrips;
       // Sauvegarder immédiatement sur disque local pour les prochains redémarrages

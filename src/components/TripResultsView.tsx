@@ -170,14 +170,14 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
           {t.jams && (
             <span
               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
-              title="Embouteillage détecté par Yango"
+              title="Heure de pointe détectée par Yango"
             >
-              🚗 Embouteillage
+              🚗 Heure de pointe
             </span>
           )}
         </div>
       ),
-      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Embouteillage)' : ''}`
+      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Heure de pointe)' : ''}`
     },
     {
       key: 'yango_eco',
@@ -313,15 +313,15 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
         data={normalizedTrips}
         isLoading={isLoading}
         rowClassName={(t) => {
-          if (t.jams && t.yangoUnavailable) {
-            return 'bg-amber-50/80 hover:bg-amber-100/70 text-slate-900 font-medium transition-colors';
-          }
-          if (t.jams) {
+          if (!t.jams) {
+            // Quand jams est false, c'est jaune (fluide)
             return 'bg-amber-50/70 hover:bg-amber-100/60 text-slate-900 font-medium transition-colors';
           }
           if (t.yangoUnavailable) {
+            // Quand jams est true mais pénurie, c'est violet
             return 'bg-purple-50/60 hover:bg-purple-100/60 text-slate-900 font-medium transition-colors';
           }
+          // Quand jams est true, c'est normal (blanc)
           return 'hover:bg-slate-50/60 transition-colors';
         }}
         pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}
