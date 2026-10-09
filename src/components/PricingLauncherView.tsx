@@ -76,18 +76,28 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
 
       // Exécution séquentielle des lots (Client-Driven Chunking)
       (async () => {
+        const collectedTrips: any[] = [];
+        const collectedCanonical: any[] = [];
+        const meta = {
+          cityId: currentCity.id,
+          cityName: currentCity.name,
+          currency: currentCity.currency
+        };
+
         for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          for (let attempt = 1; attempt <= 2; attempt++) {
+          for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-              await api.processCampaignChunk(campaignId, chunkIdx);
+              const cRes = await api.processCampaignChunk(campaignId, chunkIdx, undefined, meta);
+              if (cRes?.chunkTrips) collectedTrips.push(...cRes.chunkTrips);
+              if (cRes?.chunkCanonicalTrips) collectedCanonical.push(...cRes.chunkCanonicalTrips);
               break;
             } catch (e) {
-              console.warn(`Lot ${chunkIdx} tentative ${attempt}/2 échouée:`, e);
-              if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+              console.warn(`Lot ${chunkIdx} tentative ${attempt}/3 échouée:`, e);
+              if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
             }
           }
         }
-        await api.finalizeCampaign(campaignId);
+        await api.finalizeCampaign(campaignId, collectedCanonical, collectedTrips);
       })();
     } catch (err: any) {
       setError(err.message || 'Erreur lors du lancement de la campagne.');

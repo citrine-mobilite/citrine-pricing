@@ -321,20 +321,38 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         setTrips([]);
 
         const totalChunks = result.totalChunks || 1;
+        const collectedTrips: TripResult[] = [];
+        const collectedCanonicalTrips: any[] = [];
+
+        const chunkMeta = {
+          cityId: currentCity.id,
+          cityName: currentCity.name,
+          currency: currentCity.currency,
+          scopeMode: options.scopeMode,
+          arrondissement: options.arrondissement,
+          originArrondissement: options.originArrondissement,
+          destArrondissement: options.destArrondissement,
+          sampleLimit: options.sampleLimit
+        };
 
         const processChunkWithRetry = async (chunkIdx: number) => {
           let lastErr: any = null;
-          for (let attempt = 1; attempt <= 3; attempt++) {
+          for (let attempt = 1; attempt <= 4; attempt++) {
             if (cancelRequestedRef.current) return null;
             try {
-              return await api.processCampaignChunk(campaignId, chunkIdx, chunkAbortControllerRef.current?.signal);
+              return await api.processCampaignChunk(
+                campaignId, 
+                chunkIdx, 
+                chunkAbortControllerRef.current?.signal,
+                chunkMeta
+              );
             } catch (err: any) {
               if (cancelRequestedRef.current || err?.name === 'AbortError') {
                 return null;
               }
               lastErr = err;
-              if (attempt < 3 && !cancelRequestedRef.current) {
-                await new Promise(r => setTimeout(r, 1200));
+              if (attempt < 4 && !cancelRequestedRef.current) {
+                await new Promise(r => setTimeout(r, 1000 * attempt));
               }
             }
           }
@@ -363,11 +381,15 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               });
             }
             if (chunkRes?.chunkTrips && chunkRes.chunkTrips.length > 0) {
+              collectedTrips.push(...chunkRes.chunkTrips);
               setTrips(prev => {
                 const existingKeys = new Set(prev.map(t => `${t.origin}-${t.destination}`));
                 const fresh = chunkRes.chunkTrips.filter(t => !existingKeys.has(`${t.origin}-${t.destination}`));
                 return [...prev, ...fresh];
               });
+            }
+            if (chunkRes?.chunkCanonicalTrips && chunkRes.chunkCanonicalTrips.length > 0) {
+              collectedCanonicalTrips.push(...chunkRes.chunkCanonicalTrips);
             }
           } catch (chunkErr: any) {
             if (cancelRequestedRef.current || chunkErr?.name === 'AbortError') {
@@ -378,10 +400,10 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         }
 
         if (!cancelRequestedRef.current) {
-          const finalRes = await api.finalizeCampaign(campaignId);
+          const finalRes = await api.finalizeCampaign(campaignId, collectedCanonicalTrips, collectedTrips);
           if (finalRes?.campaign) setLiveCampaignOverride(finalRes.campaign);
           const finalTrips = await api.getCampaignResults(campaignId);
-          setTrips(finalTrips || []);
+          setTrips(finalTrips && finalTrips.length > 0 ? finalTrips : collectedTrips);
           if (onRefresh) await onRefresh();
         } else {
           // Si interruption : garantir le statut 'cancelled' immédiatement
@@ -389,6 +411,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           const partialTrips = await api.getCampaignResults(campaignId).catch(() => []);
           if (partialTrips && partialTrips.length > 0) {
             setTrips(partialTrips);
+          } else if (collectedTrips.length > 0) {
+            setTrips(collectedTrips);
           }
           if (onRefresh) await onRefresh();
         }

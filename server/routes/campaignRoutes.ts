@@ -355,9 +355,19 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
 router.post('/api/campaigns/:id/process-chunk', async (req: Request, res: Response) => {
   const { id } = req.params;
   const chunkIndex = parseInt(String(req.body.chunkIndex || req.query.chunkIndex || 1), 10);
+  const fallbackMeta = req.body.fallbackMeta || {
+    cityId: req.body.cityId,
+    cityName: req.body.cityName,
+    currency: req.body.currency,
+    scopeMode: req.body.scopeMode,
+    arrondissement: req.body.arrondissement,
+    originArrondissement: req.body.originArrondissement,
+    destArrondissement: req.body.destArrondissement,
+    sampleLimit: req.body.sampleLimit
+  };
 
   try {
-    const result = await processCampaignChunk(id, chunkIndex);
+    const result = await processCampaignChunk(id, chunkIndex, fallbackMeta);
     return res.json(result);
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Erreur lors du traitement du lot.' });
@@ -367,9 +377,10 @@ router.post('/api/campaigns/:id/process-chunk', async (req: Request, res: Respon
 // Finalisation de la campagne
 router.post('/api/campaigns/:id/finalize', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { canonicalTrips, trips } = req.body || {};
 
   try {
-    const campaign = await finalizeCampaignExecution(id);
+    const campaign = await finalizeCampaignExecution(id, canonicalTrips, trips);
     saveLocalCampaignsDiskBackup();
     return res.json({ success: true, campaign });
   } catch (err: any) {

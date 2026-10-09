@@ -351,17 +351,32 @@ export const api = {
     return result;
   },
 
-  async processCampaignChunk(campaignId: string, chunkIndex: number, signal?: AbortSignal): Promise<{
+  async processCampaignChunk(
+    campaignId: string, 
+    chunkIndex: number, 
+    signal?: AbortSignal,
+    meta?: {
+      cityId?: string;
+      cityName?: string;
+      currency?: string;
+      scopeMode?: string;
+      arrondissement?: string;
+      originArrondissement?: string;
+      destArrondissement?: string;
+      sampleLimit?: number | 'all';
+    }
+  ): Promise<{
     success: boolean;
     chunkIndex: number;
     completedPairs: number;
     campaign: PricingCampaign;
     chunkTrips: TripResult[];
+    chunkCanonicalTrips?: any[];
   }> {
     const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/process-chunk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chunkIndex }),
+      body: JSON.stringify({ chunkIndex, ...meta, fallbackMeta: meta }),
       signal
     });
     if (!res.ok) {
@@ -371,9 +386,15 @@ export const api = {
     return res.json();
   },
 
-  async finalizeCampaign(campaignId: string): Promise<{ success: boolean; campaign: PricingCampaign }> {
+  async finalizeCampaign(
+    campaignId: string, 
+    canonicalTrips?: any[], 
+    trips?: TripResult[]
+  ): Promise<{ success: boolean; campaign: PricingCampaign }> {
     const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/finalize`, {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canonicalTrips, trips })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
