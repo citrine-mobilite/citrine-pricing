@@ -215,6 +215,22 @@ function extractPriceNumber(sl: any): number {
     const val = parseFloat(sl.cost.replace(/[^\d.]/g, ''));
     if (!isNaN(val) && val > 0) return Math.round(val);
   }
+  if (Array.isArray(sl.details) && sl.details.length > 0) {
+    for (const d of sl.details) {
+      if (d && d.price) {
+        const val = parseFloat(String(d.price).replace(/[^\d.]/g, ''));
+        if (!isNaN(val) && val > 0) return Math.round(val);
+      }
+    }
+  }
+  if (Array.isArray(sl.details_tariff) && sl.details_tariff.length > 0) {
+    for (const dt of sl.details_tariff) {
+      if (dt && dt.type === 'price' && dt.value) {
+        const val = parseFloat(String(dt.value).replace(/[^\d.]/g, ''));
+        if (!isNaN(val) && val > 0) return Math.round(val);
+      }
+    }
+  }
   return 0;
 }
 
@@ -274,8 +290,23 @@ export async function callYangoRoutestats(
       [startLng, startLat],
       [endLng, endLat]
     ],
-    selected_class: tariffClass,
-    format_currency: true
+    selected_class: tariffClass || 'econom',
+    summary_version: 2,
+    supported_markup: 'tml-0.1',
+    supports_paid_options: true,
+    extended_description: true,
+    format_currency: true,
+    is_lightweight: false,
+    requirements: { coupon: '' },
+    tariff_requirements: [
+      { class: 'econom', requirements: { coupon: '' } },
+      { class: 'business', requirements: { coupon: '' } },
+      { class: 'comfortplus', requirements: { coupon: '' } },
+      { class: 'moto', requirements: { coupon: '' } },
+      { class: 'express', requirements: { coupon: '' } },
+      { class: 'courier', requirements: { coupon: '' } }
+    ],
+    use_toll_roads: false
   };
 
   try {
@@ -284,7 +315,9 @@ export async function callYangoRoutestats(
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15'
+      'Accept': 'application/json',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
     };
 
     if (yangoSettings.bearerToken) {
@@ -381,7 +414,13 @@ export async function callYangoRoutestats(
     const realDurationMin = extractYangoDuration(json, durationMin);
 
     const chosenPrice = priceEconom || priceConfort || priceMoto || 0;
-    const hasJams = Boolean(json.jams === true);
+    const hasJams = Boolean(
+      json.jams === true ||
+      serviceLevels.some((sl: any) =>
+        (typeof sl.paid_options?.value === 'number' && sl.paid_options.value > 1) ||
+        Boolean(sl.paid_options?.alert_properties)
+      )
+    );
 
     return {
       success: chosenPrice > 0,

@@ -283,6 +283,35 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
       console.warn(`[Firestore] loadCanonicalCampaignResults batch search:`, e?.message);
     }
 
+    // 3. Rétrocompatibilité : Document direct campaigns/${campaignId} (anciennes versions avec trajets embarqués)
+    if (allTrips.length === 0) {
+      try {
+        const campSnap = await getDoc(doc(db, 'campaigns', campaignId));
+        if (campSnap.exists()) {
+          const cData = campSnap.data();
+          if (Array.isArray(cData.canonicalTrips) && cData.canonicalTrips.length > 0) {
+            allTrips = cData.canonicalTrips;
+          } else if (Array.isArray(cData.trips) && cData.trips.length > 0) {
+            allTrips = cData.trips.map(legacyToCanonical);
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[Firestore] loadCanonicalCampaignResults camp direct search:`, e?.message);
+      }
+    }
+
+    // 4. Rétrocompatibilité : Ancienne sous-collection campaigns/${campaignId}/trip_results
+    if (allTrips.length === 0) {
+      try {
+        const subSnap = await getDocs(collection(db, 'campaigns', campaignId, 'trip_results'));
+        if (!subSnap.empty) {
+          allTrips = subSnap.docs.map(d => legacyToCanonical(d.data()));
+        }
+      } catch (e: any) {
+        console.warn(`[Firestore] loadCanonicalCampaignResults subcollection search:`, e?.message);
+      }
+    }
+
     return allTrips;
   } catch (err: any) {
     if (isQuotaExceededError(err)) {

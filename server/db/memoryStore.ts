@@ -195,7 +195,7 @@ export async function recordHistory(record: {
     ...record
   };
   historyRecords.unshift(item);
-  await safeFirestoreWrite('recordHistory', () => setDoc(doc(db!, 'history', item.id), cleanFirestoreDoc(item)));
+  // Historique conservé en mémoire et disque sans consommer d'écritures Firestore
 }
 
 export async function deleteHistoryForCampaign(campaignId: string) {

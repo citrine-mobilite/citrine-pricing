@@ -125,12 +125,11 @@ export async function initializeCampaignSession(
 
   campaignSessions.set(campaign.id, sessionState);
 
-  // Écriture initiale dans Firestore
+  // Écriture initiale unique dans Firestore des métadonnées
   if (db) {
     await safeFirestoreWrite('initCampaignMetaDoc', async () => {
       await setDoc(doc(db!, 'campaigns', campaign.id), cleanFirestoreDoc(campaign));
     });
-    await initCanonicalCampaignResults(campaign.id, city.name);
   }
 
   // Mémoire
@@ -374,9 +373,7 @@ export async function processCampaignChunk(campaignId: string, chunkIndex: numbe
   session.campaign.completedBatches = session.completedBatches;
   session.campaign.durationSeconds = Math.max(1, Math.round((Date.now() - session.startedAtMs) / 1000));
 
-  // Solution B: Exactement 1 seule écriture Firestore par lot de 10 trajets !
-  // Document dédié: {campaignId}_lot_{chunkIndex} (~2.5 Ko, 400x sous le plafond de 1 Mo).
-  // Zéro réécriture cumulative des lots précédents.
+  // Enregistrement par lot de 10 trajets dans Firestore : exactement 1 écriture par lot
   if (chunkCanonicalTrips.length > 0) {
     await saveCanonicalCampaignBatch(campaignId, session.city.name, chunkIndex, chunkCanonicalTrips);
   }
@@ -482,7 +479,7 @@ export async function finalizeCampaignExecution(campaignId: string): Promise<Pri
 
   campaign.canonicalTripsCount = canonicalTrips.length;
 
-  // Persistance Firestore finale des métadonnées ET des résultats canoniques complets
+  // Persistance Firestore finale des métadonnées ET du document consolidé unique (pour des lectures futures en 1 seule lecture)
   if (db) {
     await safeFirestoreWrite('finalizeCampaignMeta', async () => {
       await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
