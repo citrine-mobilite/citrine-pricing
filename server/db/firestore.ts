@@ -71,7 +71,8 @@ try {
 
 export { db };
 
-let firestoreQuotaExceededUntil = 0;
+let firestoreReadQuotaExceededUntil = 0;
+let firestoreWriteQuotaExceededUntil = 0;
 let warnedQuotaExceeded = false;
 
 export function isQuotaExceededError(err: any): boolean {
@@ -79,19 +80,46 @@ export function isQuotaExceededError(err: any): boolean {
   return msg.includes('Quota limit exceeded') ||
          msg.includes('RESOURCE_EXHAUSTED') ||
          msg.includes('Quota exceeded') ||
-         msg.includes('Free daily read units per project');
+         msg.includes('Free daily read units') ||
+         msg.includes('Free daily write units');
+}
+
+export function isWriteQuotaError(err: any): boolean {
+  const msg = String(err?.message || err || '').toLowerCase();
+  return msg.includes('write units') || (msg.includes('write') && isQuotaExceededError(err));
+}
+
+export function isFirestoreReadQuotaExceeded(): boolean {
+  return Date.now() < firestoreReadQuotaExceededUntil;
+}
+
+export function isFirestoreWriteQuotaExceeded(): boolean {
+  return Date.now() < firestoreWriteQuotaExceededUntil;
 }
 
 export function isFirestoreQuotaExceeded(): boolean {
-  return Date.now() < firestoreQuotaExceededUntil;
+  return isFirestoreReadQuotaExceeded();
+}
+
+export function flagFirestoreReadQuotaExceeded(err?: any) {
+  firestoreReadQuotaExceededUntil = Date.now() + 15 * 60 * 1000; // 15 min cooldown
+  if (!warnedQuotaExceeded) {
+    warnedQuotaExceeded = true;
+    console.warn('[Firestore Read Shield] Quota journalier de lecture atteint (Free Tier). Bascule transparente en lecture locale RAM + Disque. Les écritures Firestore continuent.');
+    setTimeout(() => { warnedQuotaExceeded = false; }, 15 * 60 * 1000);
+  }
+}
+
+export function flagFirestoreWriteQuotaExceeded(err?: any) {
+  firestoreWriteQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+  console.warn('[Firestore Write Shield] Quota journalier d\'écriture atteint. Bascule en sauvegarde locale persistante (RAM + Disque).');
 }
 
 export function flagFirestoreQuotaExceeded(err?: any) {
-  firestoreQuotaExceededUntil = Date.now() + 15 * 60 * 1000; // 15 min cooldown
-  if (!warnedQuotaExceeded) {
-    warnedQuotaExceeded = true;
-    console.warn('[Firestore Circuit Breaker] Quota journalier Free Tier atteint. Bascule automatique et transparente en mode local persistant haute performance (RAM + Disque). Les requêtes Firestore sont mises en pause pendant 15 minutes.');
-    setTimeout(() => { warnedQuotaExceeded = false; }, 15 * 60 * 1000);
+  if (isWriteQuotaError(err)) {
+    flagFirestoreWriteQuotaExceeded(err);
+  } else {
+    flagFirestoreReadQuotaExceeded(err);
   }
 }
 
@@ -114,14 +142,19 @@ export function cleanFirestoreDoc(obj: any): any {
 
 /**
  * Exécution sécurisée d'écriture Firestore avec capture d'erreurs
+ * Même si les lectures sont épuisées, les écritures sont autorisées tant que le quota d'écriture n'est pas plein !
  */
 export async function safeFirestoreWrite<T>(opName: string, op: () => Promise<T>): Promise<T | null> {
-  if (!db || isFirestoreQuotaExceeded()) return null;
+  if (!db || isFirestoreWriteQuotaExceeded()) return null;
   try {
     return await op();
   } catch (err: any) {
     if (isQuotaExceededError(err)) {
-      flagFirestoreQuotaExceeded(err);
+      if (isWriteQuotaError(err)) {
+        flagFirestoreWriteQuotaExceeded(err);
+      } else {
+        flagFirestoreReadQuotaExceeded(err);
+      }
       return null;
     }
     console.error(`[Firestore Error - ${opName}]:`, err?.message || err);
