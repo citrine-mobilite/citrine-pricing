@@ -21,7 +21,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
   // Modal state (Create / Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | number | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'responsable' | 'employe'>('employe');
@@ -69,7 +69,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ users, onRefresh }) => {
     setIsPasswordModalOpen(true);
   };
 
-  const handleConfirmPasswordReset = async (userId: string, newPassword: string) => {
+  const handleConfirmPasswordReset = async (userId: string | number, newPassword: string) => {
     setIsResettingPassword(true);
     try {
       await api.changeUserPassword(userId, newPassword);

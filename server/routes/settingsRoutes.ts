@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import {
   cities,
@@ -182,7 +182,7 @@ router.delete('/api/history', async (_req: Request, res: Response) => {
 
 router.delete('/api/history/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const filtered = historyRecords.filter(h => h.id !== id);
+  const filtered = historyRecords.filter(h => String(h.id) !== String(id) && h.uuid !== id);
   setHistoryRecords(filtered);
   return res.json({ success: true, message: 'Entrée d’historique supprimée.' });
 });
@@ -226,9 +226,27 @@ router.get('/api/export/db-structure', async (_req: Request, res: Response) => {
   }
 });
 
-// 2. Export Full Database with Data (Servi depuis la RAM et stockage local - 0 lecture Firestore)
+// 2. Export Full Database with Data
 router.get('/api/export/db-full', async (_req: Request, res: Response) => {
   try {
+    let campaignsList: any[] = [];
+    let tripsList: any[] = [];
+
+    if (db) {
+      try {
+        const campSnap = await getDocs(collection(db, 'campaigns'));
+        if (!campSnap.empty) {
+          campaignsList = campSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+        const tripsSnap = await getDocs(collection(db, 'trips'));
+        if (!tripsSnap.empty) {
+          tripsList = tripsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+      } catch (err: any) {
+        console.warn('[Export] Firestore read warning:', err.message);
+      }
+    }
+
     const fullData = {
       exportType: 'full_database_with_data',
       exportedAt: new Date().toISOString(),
@@ -241,7 +259,8 @@ router.get('/api/export/db-full', async (_req: Request, res: Response) => {
         hero: heroSettings,
         tripmaster: tripMasterSettings
       },
-      campaigns: memoryCampaigns
+      campaigns: campaignsList,
+      trips: tripsList
     };
 
     res.setHeader('Content-Type', 'application/json');

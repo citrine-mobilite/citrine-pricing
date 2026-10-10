@@ -42,9 +42,9 @@ function AppContent() {
   // Campaign selection helper: updates both selectedCampaignId and selectedCityId
   const handleSelectCampaign = useCallback((campaignId: string) => {
     setSelectedCampaignId(campaignId);
-    const targetCampaign = campaigns.find((c) => c.id === campaignId);
+    const targetCampaign = campaigns.find((c) => String(c.id) === String(campaignId));
     if (targetCampaign) {
-      setSelectedCityId(targetCampaign.cityId);
+      setSelectedCityId(String(targetCampaign.cityId));
     }
     setActiveTab('pricing');
   }, [campaigns]);
@@ -60,12 +60,12 @@ function AppContent() {
 
       if (citiesData && citiesData.length > 0) {
         setCities(citiesData);
-        setSelectedCityId((prev) => (citiesData.some((c) => c.id === prev) ? prev : citiesData[0].id));
+        setSelectedCityId((prev) => (citiesData.some((c) => String(c.id) === String(prev)) ? prev : String(citiesData[0].id)));
       }
 
       if (campaignsData && campaignsData.length > 0) {
         setCampaigns(campaignsData);
-        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
+        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => String(c.id) === String(prev)) ? prev : String(campaignsData[0].id)));
       } else {
         setCampaigns([]);
         setSelectedCampaignId(null);
@@ -77,7 +77,7 @@ function AppContent() {
 
       // Fetch neighborhoods for all cities
       if (citiesData && citiesData.length > 0) {
-        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(c.id, forceRefresh));
+        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(String(c.id), forceRefresh));
         const nbsResults = await Promise.all(nbsPromises);
         const allNbs = nbsResults.flat();
         if (allNbs && allNbs.length > 0) {

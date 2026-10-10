@@ -395,7 +395,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <button
                     key={c.id}
                     onClick={() => {
-                      onSelectCampaign(c.id);
+                      onSelectCampaign(String(c.id));
                       onNavigate('pricing');
                     }}
                     className="w-full text-left p-3.5 rounded-xl border border-slate-200/80 hover:border-[#3D8B85] hover:bg-[#F0FAFA] transition flex items-center justify-between group cursor-pointer shadow-2xs"

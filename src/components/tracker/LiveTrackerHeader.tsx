@@ -68,7 +68,7 @@ export const LiveTrackerHeader: React.FC<LiveTrackerHeaderProps> = ({
         {isFinished && (
           <button
             onClick={() => {
-              onSelectCampaign(campaign.id);
+              onSelectCampaign(String(campaign.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg transition cursor-pointer shadow-sm"

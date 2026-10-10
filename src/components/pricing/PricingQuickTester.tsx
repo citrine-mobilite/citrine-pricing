@@ -84,7 +84,7 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <SearchableSelect
             id="quick-origin-select"
             options={cityActiveNeighborhoods.map((n) => ({
-              value: n.id,
+              value: String(n.id),
               label: n.name,
               sublabel: n.zoneType ? `Zone ${n.zoneType}` : undefined
             }))}
@@ -107,7 +107,7 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <SearchableSelect
             id="quick-dest-select"
             options={cityActiveNeighborhoods.map((n) => ({
-              value: n.id,
+              value: String(n.id),
               label: n.name,
               sublabel: n.zoneType ? `Zone ${n.zoneType}` : undefined
             }))}

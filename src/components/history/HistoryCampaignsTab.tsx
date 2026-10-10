@@ -419,7 +419,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
         <div className="flex items-center justify-end gap-2">
           <button
             onClick={() => {
-              onSelectCampaign(c.id);
+              onSelectCampaign(String(c.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#1F4F4A] hover:bg-[#1F4F4A]/10 rounded-lg transition cursor-pointer"
@@ -428,7 +428,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={(e) => handleDeleteCampaign(c.id, e)}
+            onClick={(e) => handleDeleteCampaign(String(c.id), e)}
             title="Supprimer cette campagne"
             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
           >
@@ -751,7 +751,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
-                              onSelectCampaign(c.id);
+                              onSelectCampaign(String(c.id));
                               onNavigate('pricing');
                             }}
                             className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#1F4F4A] bg-[#1F4F4A]/10 hover:bg-[#1F4F4A] hover:text-white rounded-lg transition cursor-pointer"
@@ -760,7 +760,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                             <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={(e) => handleDeleteCampaign(c.id, e)}
+                            onClick={(e) => handleDeleteCampaign(String(c.id), e)}
                             title="Supprimer cette campagne"
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 rounded-lg transition cursor-pointer"
                           >

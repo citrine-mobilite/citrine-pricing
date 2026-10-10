@@ -5,7 +5,6 @@ import {
   db,
   cleanFirestoreDoc,
   safeFirestoreWrite,
-  safeFirestoreRead,
   loadCanonicalCampaignResults,
   initCanonicalCampaignResults,
   deleteCanonicalCampaign,
@@ -19,7 +18,6 @@ import {
   neighborhoods,
   users,
   memoryCampaigns,
-  setMemoryCampaigns,
   memoryCampaignTrips,
   memoryCampaignCanonicalTrips,
   activePricingSessions,
@@ -46,27 +44,34 @@ import { getNextSequence } from '../db/counters.js';
 
 const router = Router();
 
-export function findCampaign(idOrUuid: string | number): PricingCampaign | undefined {
-  const str = String(idOrUuid);
-  return memoryCampaigns.find(c => String(c.id) === str || c.uuid === str);
-}
+// 1. Liste des campagnes (Servie depuis la RAM & disque local - 0 lecture Firestore consommée)
+let lastCampaignsFirestoreFetch = 0;
+let cachedFirestoreCampaigns: PricingCampaign[] = [];
 
-// 1. Liste des 25 dernières campagnes (Servie à 100% depuis la mémoire RAM - 0 lecture Firestore sur refresh)
 router.get('/api/campaigns', async (req: Request, res: Response) => {
   const forceRefresh = req.query.forceRefresh === 'true';
+  const now = Date.now();
+  let list: PricingCampaign[] = [];
 
-  // Si la mémoire est vide ou si un rafraîchissement est forcé ET que le quota le permet :
+  // Zéro lecture Firestore si les campagnes sont déjà présentes en mémoire vive (RAM)
   if (memoryCampaigns.length === 0 && db && !isFirestoreQuotaExceeded()) {
     try {
-      // Strictement limité aux 25 campagnes les plus récentes
       const campaignsQuery = query(
         collection(db, 'campaigns'),
         orderBy('startedAt', 'desc'),
         limit(25)
       );
-      const snap = await safeFirestoreRead('get25LatestCampaigns', () => getDocs(campaignsQuery), 25);
-      if (snap && !snap.empty) {
-        setMemoryCampaigns(snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign)));
+      const snap = await getDocs(campaignsQuery);
+      if (!snap.empty) {
+        cachedFirestoreCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
+        lastCampaignsFirestoreFetch = now;
+
+        for (const camp of cachedFirestoreCampaigns) {
+          const idx = memoryCampaigns.findIndex(m => String(m.id) === String(camp.id) || m.uuid === camp.uuid || m.uuid === camp.id);
+          if (idx < 0) {
+            memoryCampaigns.push(camp);
+          }
+        }
         saveLocalCampaignsDiskBackup();
       }
     } catch (e: any) {
@@ -76,9 +81,23 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
     }
   }
 
-  let list: PricingCampaign[] = [...memoryCampaigns];
+  // Utilisation immédiate de l'état mémoire vive RAM
+  list = [...memoryCampaigns];
 
-  // Fusion avec les campagnes actives en mémoire (Sessions en temps réel)
+  // Fusion avec memoryCampaigns (l'état RAM serveur plus récent l'emporte sur un snapshot Firestore retardataire)
+  for (const memCamp of memoryCampaigns) {
+    const idx = list.findIndex(c => c.id === memCamp.id);
+    if (idx >= 0) {
+      // Si la version mémoire est completed ou plus avancée en completedPairs, elle prime
+      if (memCamp.status === 'completed' || (memCamp.completedPairs || 0) >= (list[idx].completedPairs || 0)) {
+        list[idx] = { ...list[idx], ...memCamp };
+      }
+    } else {
+      list.unshift({ ...memCamp });
+    }
+  }
+
+  // Fusion avec les campagnes actives en mémoire (Chunking sessions & Worker sessions)
   for (const [id, session] of campaignSessions.entries()) {
     const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
@@ -98,7 +117,7 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
 
   list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
-  // Nettoyage des statuts pour les campagnes terminées
+  // Nettoyage des campagnes réellement terminées
   list = list.map(c => {
     if (c.status === 'in_progress') {
       const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
@@ -109,10 +128,7 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
     return c;
   });
 
-  // Strictement limité aux 10 dernières campagnes
-  const final10 = list.slice(0, 10);
-  res.setHeader('X-Cache', 'HIT-RAM-STRICT-10');
-  return res.json(final10);
+  return res.json(list);
 });
 
 // Route de synchronisation du cache local client vers la mémoire et le disque du serveur
@@ -137,29 +153,34 @@ router.post('/api/campaigns/sync-cache', (req: Request, res: Response) => {
 // 2. Détail d'une campagne
 router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const mem = findCampaign(id);
-  const uuid = mem?.uuid || id;
 
   // 1. Session active en cours
-  const chunkSession = campaignSessions.get(uuid) || campaignSessions.get(id);
+  const chunkSession = campaignSessions.get(id);
   if (chunkSession) {
     return res.json(chunkSession.campaign);
   }
-  const session = activePricingSessions.get(uuid) || activePricingSessions.get(id);
+  const session = activePricingSessions.get(id);
   if (session) {
     return res.json(session.campaign);
   }
 
-  // 2. Recherche en RAM locale du serveur (10 dernières campagnes en mémoire)
+  // 2. Recherche en RAM locale du serveur (memoryCampaigns et cachedFirestoreCampaigns)
+  const mem = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
   if (mem) {
     res.setHeader('X-Cache', 'HIT-RAM');
     return res.json(mem);
   }
 
+  const cached = cachedFirestoreCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT-CACHE');
+    return res.json(cached);
+  }
+
   // 3. Uniquement en dernier recours, requêter Firestore
   if (db && !isFirestoreQuotaExceeded()) {
     try {
-      const snap = await getDoc(doc(db, 'campaigns', uuid));
+      const snap = await getDoc(doc(db, 'campaigns', id));
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() } as PricingCampaign;
         // Mettre en cache
@@ -202,7 +223,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
   }
 
-  const city = cities.find(c => c.id === cityId);
+  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
@@ -210,7 +231,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Impossible de lancer un pricing sur une ville inactive. Activez la ville d’abord.' });
   }
 
-  const activeNbs = neighborhoods.filter(n => n.cityId === cityId && n.active);
+  const activeNbs = neighborhoods.filter(n => (String(n.cityId) === String(city.id) || n.cityId === city.uuid) && n.active);
   if (activeNbs.length < 2) {
     return res.status(400).json({ error: 'Au moins 2 quartiers actifs sont requis pour calculer des trajets.' });
   }
@@ -267,12 +288,12 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     ? String(triggeredByUserName).trim()
     : (triggerType === 'scheduled' ? 'Planificateur Automatique' : 'Citrine Opérateur');
 
-  const campaignUuid = randomUUID();
   const campaignNumericId = getNextSequence('campaigns');
+  const campaignUuid = randomUUID();
   const campaign: PricingCampaign = {
     id: campaignNumericId,
     uuid: campaignUuid,
-    cityId: city.uuid || String(city.id),
+    cityId: String(city.uuid || city.id),
     cityName: city.name,
     currency: city.currency,
     triggerType: triggerType || 'manual',
@@ -416,8 +437,7 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
   const trimmedComment = typeof comment === 'string' ? comment.trim() : undefined;
 
   // 1. Mettre à jour en mémoire
-  const memCamp = findCampaign(id);
-  const campUuid = memCamp?.uuid || id;
+  const memCamp = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
   if (memCamp) {
     if (trimmedComment !== undefined) {
       memCamp.comment = trimmedComment;
@@ -428,12 +448,25 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     }
   }
 
-  // 2. Sauvegarde disque local
+  // 2. Mettre à jour dans le cache Firestore
+  const cached = cachedFirestoreCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
+  if (cached) {
+    if (trimmedComment !== undefined) {
+      cached.comment = trimmedComment;
+      cached.comments = trimmedComment;
+    }
+    if (timeSlotOverride !== undefined) {
+      cached.timeSlotOverride = timeSlotOverride === 'auto' ? undefined : timeSlotOverride;
+    }
+  }
+
+  // 3. Sauvegarde disque local
   saveLocalCampaignsDiskBackup();
 
-  // 3. Sauvegarde Firestore
+  // 4. Sauvegarde Firestore
   if (db && !isFirestoreQuotaExceeded()) {
     try {
+      const docId = memCamp?.uuid || id;
       const updatePayload: Record<string, any> = {};
       if (trimmedComment !== undefined) {
         updatePayload.comment = trimmedComment;
@@ -443,7 +476,7 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
         updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
       }
       await safeFirestoreWrite('updateCampaignComment', () =>
-        setDoc(doc(db!, 'campaigns', campUuid), cleanFirestoreDoc(updatePayload), { merge: true })
+        setDoc(doc(db!, 'campaigns', docId), cleanFirestoreDoc(updatePayload), { merge: true })
       );
     } catch (e: any) {
       console.warn('[Firestore] Warning saving campaign comment:', e.message);
@@ -459,33 +492,38 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     metadata: { campaignId: id, timeSlotOverride }
   }).catch(() => {});
 
-  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp });
+  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp || cached });
 });
 
 // 5. Suppression globale
 router.delete('/api/campaigns', async (_req: Request, res: Response) => {
-  const campsToDelete = [...memoryCampaigns];
+  cachedFirestoreCampaigns = [];
   memoryCampaigns.length = 0;
-  for (const cid of Object.keys(memoryCampaignTrips)) {
-    delete memoryCampaignTrips[cid];
+  for (const id of Object.keys(memoryCampaignTrips)) {
+    delete memoryCampaignTrips[id];
   }
-  for (const cid of Object.keys(memoryCampaignCanonicalTrips)) {
-    delete memoryCampaignCanonicalTrips[cid];
+  for (const id of Object.keys(memoryCampaignCanonicalTrips)) {
+    delete memoryCampaignCanonicalTrips[id];
   }
   campaignSessions.clear();
   activePricingSessions.clear();
   deleteAllCampaignTripsDiskBackup();
   saveLocalCampaignsDiskBackup();
 
-  if (db && !isFirestoreQuotaExceeded() && !isFirestoreWriteQuotaExceeded() && campsToDelete.length > 0) {
+  if (db && !isFirestoreQuotaExceeded() && !isFirestoreWriteQuotaExceeded()) {
     try {
-      const batch = writeBatch(db);
-      for (const c of campsToDelete) {
-        const docId = c.uuid || String(c.id);
-        batch.delete(doc(db, 'campaigns', docId));
-        batch.delete(doc(db, 'campaign_results', docId));
+      const snap = await getDocs(collection(db, 'campaigns'));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
       }
-      await batch.commit();
+      const resSnap = await getDocs(collection(db, 'campaign_results'));
+      if (!resSnap.empty) {
+        const batch = writeBatch(db);
+        resSnap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     } catch (e: any) {
       if (isQuotaExceededError(e)) {
         flagFirestoreQuotaExceeded(e);
@@ -506,37 +544,31 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
 // 6. Suppression unique
 router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
-  const campNumId = targetCamp?.id ? String(targetCamp.id) : null;
+  const memCamp = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
+  const targetIds = [id, memCamp ? String(memCamp.id) : null, memCamp?.uuid].filter(Boolean) as string[];
+
+  for (const tid of targetIds) {
+    cachedFirestoreCampaigns = cachedFirestoreCampaigns.filter(c => String(c.id) !== tid && c.uuid !== tid);
+    delete memoryCampaignTrips[tid];
+    delete memoryCampaignCanonicalTrips[tid];
+    campaignSessions.delete(tid);
+    deleteCampaignTripsDiskBackup(tid);
+  }
 
   const idx = memoryCampaigns.findIndex(c => String(c.id) === String(id) || c.uuid === id);
   if (idx >= 0) memoryCampaigns.splice(idx, 1);
-
-  delete memoryCampaignTrips[campUuid];
-  delete memoryCampaignCanonicalTrips[campUuid];
-  if (campNumId) {
-    delete memoryCampaignTrips[campNumId];
-    delete memoryCampaignCanonicalTrips[campNumId];
-  }
-
-  campaignSessions.delete(campUuid);
-  activePricingSessions.delete(campUuid);
-  if (campNumId) {
-    campaignSessions.delete(campNumId);
-    activePricingSessions.delete(campNumId);
-  }
-
-  deleteCampaignTripsDiskBackup(campUuid);
-  if (campNumId) deleteCampaignTripsDiskBackup(campNumId);
   saveLocalCampaignsDiskBackup();
 
   // Nettoyage de l'historique en mémoire locale
-  deleteHistoryForCampaign(campUuid).catch(() => {});
+  for (const tid of targetIds) {
+    deleteHistoryForCampaign(tid).catch(() => {});
+  }
 
   // Nettoyage Firestore asynchrone non-bloquant si les écritures sont permises
   if (db && !isFirestoreWriteQuotaExceeded()) {
-    deleteCanonicalCampaign(campUuid).catch(() => {});
+    for (const tid of targetIds) {
+      deleteCanonicalCampaign(tid).catch(() => {});
+    }
   }
 
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
@@ -545,44 +577,44 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
 // 7. Résultats des trajets (Exploite notre cache RAM, disque local et JSON canonique pour garantir 0 lecture Firestore)
 router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
-  const campNumId = targetCamp?.id ? String(targetCamp.id) : null;
+  const memCamp = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
+  const targetIds = [id, memCamp ? String(memCamp.id) : null, memCamp?.uuid].filter(Boolean) as string[];
 
   // 1. Session active en cours
-  const session = activePricingSessions.get(campUuid) || (campNumId ? activePricingSessions.get(campNumId) : undefined);
-  if (session && session.trips.length > 0) {
-    res.setHeader('X-Cache', 'HIT-SESSION');
-    return res.json(session.trips);
+  for (const tid of targetIds) {
+    const session = activePricingSessions.get(tid);
+    if (session && session.trips.length > 0) {
+      res.setHeader('X-Cache', 'HIT-SESSION');
+      return res.json(session.trips);
+    }
   }
 
   // 2. Cache mémoire RAM serveur instantané (2ms, 0 lecture Firestore)
-  if (memoryCampaignTrips[campUuid] && memoryCampaignTrips[campUuid].length > 0) {
-    res.setHeader('X-Cache', 'HIT-RAM');
-    return res.json(memoryCampaignTrips[campUuid]);
-  }
-  if (campNumId && memoryCampaignTrips[campNumId] && memoryCampaignTrips[campNumId].length > 0) {
-    res.setHeader('X-Cache', 'HIT-RAM');
-    return res.json(memoryCampaignTrips[campNumId]);
+  for (const tid of targetIds) {
+    if (memoryCampaignTrips[tid] && memoryCampaignTrips[tid].length > 0) {
+      res.setHeader('X-Cache', 'HIT-RAM');
+      return res.json(memoryCampaignTrips[tid]);
+    }
   }
 
   // 3. Cache disque local serveur persistant (survit aux redémarrages et quotas)
-  const diskTrips = loadCampaignTripsDiskBackup(campUuid) || (campNumId ? loadCampaignTripsDiskBackup(campNumId) : null);
-  if (diskTrips && diskTrips.length > 0) {
-    res.setHeader('X-Cache', 'HIT-DISK');
-    return res.json(diskTrips);
+  for (const tid of targetIds) {
+    const diskTrips = loadCampaignTripsDiskBackup(tid);
+    if (diskTrips && diskTrips.length > 0) {
+      res.setHeader('X-Cache', 'HIT-DISK');
+      return res.json(diskTrips);
+    }
   }
 
   // 4. Lecture du JSON canonique en base de données Firestore (si quota disponible)
   if (!isFirestoreQuotaExceeded()) {
-    const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
+    const canonicalTrips = await loadCanonicalCampaignResults(id);
     if (canonicalTrips.length > 0) {
       const cleanTrips = canonicalTrips.map(t => {
         const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
         return {
           id: t.id,
-          uuid: t.uuid,
-          campaignId: campUuid,
+          campaignId: id,
           origin: t.origin,
           destination: t.destination,
           distanceKm: t.distanceKm,
@@ -605,9 +637,9 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
         };
       }) as unknown as TripResult[];
 
-      memoryCampaignTrips[campUuid] = cleanTrips;
+      memoryCampaignTrips[id] = cleanTrips;
       // Sauvegarder immédiatement sur disque local pour les prochains redémarrages
-      saveCampaignTripsDiskBackup(campUuid, cleanTrips, canonicalTrips);
+      saveCampaignTripsDiskBackup(id, cleanTrips, canonicalTrips);
       res.setHeader('X-Cache', 'HIT-FIRESTORE');
       return res.json(cleanTrips);
     }
@@ -621,13 +653,11 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
 router.post('/api/campaigns/:id/sync-trips', (req: Request, res: Response) => {
   const { id } = req.params;
   const { trips } = req.body;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
 
   if (Array.isArray(trips) && trips.length > 0) {
-    memoryCampaignTrips[campUuid] = trips;
-    saveCampaignTripsDiskBackup(campUuid, trips);
-    console.log(`[Sync Trips] ${trips.length} trajets synchronisés depuis le client pour la campagne ${campUuid}.`);
+    memoryCampaignTrips[id] = trips;
+    saveCampaignTripsDiskBackup(id, trips);
+    console.log(`[Sync Trips] ${trips.length} trajets synchronisés depuis le client pour la campagne ${id}.`);
     return res.json({ success: true, count: trips.length });
   }
 
@@ -637,24 +667,22 @@ router.post('/api/campaigns/:id/sync-trips', (req: Request, res: Response) => {
 // 8. Endpoint Téléchargement JSON Canonique Ultra-Léger
 router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
 
   let canonicalTrips: CanonicalTrip[] = [];
 
-  const session = activePricingSessions.get(campUuid);
+  const session = activePricingSessions.get(id);
   if (session) {
     canonicalTrips = session.canonicalTrips;
-  } else if (memoryCampaignCanonicalTrips[campUuid]) {
-    canonicalTrips = memoryCampaignCanonicalTrips[campUuid];
+  } else if (memoryCampaignCanonicalTrips[id]) {
+    canonicalTrips = memoryCampaignCanonicalTrips[id];
   } else {
-    canonicalTrips = await loadCanonicalCampaignResults(campUuid);
+    canonicalTrips = await loadCanonicalCampaignResults(id);
   }
 
-  let campaign = targetCamp || memoryCampaigns.find(c => c.uuid === campUuid || String(c.id) === String(id));
+  let campaign = memoryCampaigns.find(c => c.id === id);
   if (!campaign && db) {
     try {
-      const snap = await getDoc(doc(db, 'campaigns', campUuid));
+      const snap = await getDoc(doc(db, 'campaigns', id));
       if (snap.exists()) {
         campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
       }
@@ -662,12 +690,11 @@ router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Respon
   }
 
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', `attachment; filename="pricing_canonical_${campUuid}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="pricing_canonical_${id}.json"`);
 
   return res.json({
     format: 'citrine.vtc.canonical.v1',
-    campaignId: campUuid,
-    campaignNumber: campaign?.id,
+    campaignId: id,
     cityName: campaign?.cityName || 'Douala',
     exportedAt: new Date().toISOString(),
     totalTrips: canonicalTrips.length,
@@ -678,14 +705,12 @@ router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Respon
 // 9. Export CSV / Excel
 router.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
-  const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
+  const canonicalTrips = await loadCanonicalCampaignResults(id);
 
-  let campaign = targetCamp || memoryCampaigns.find(c => c.uuid === campUuid || String(c.id) === String(id));
+  let campaign = memoryCampaigns.find(c => c.id === id);
   if (!campaign && db) {
     try {
-      const snap = await getDoc(doc(db, 'campaigns', campUuid));
+      const snap = await getDoc(doc(db, 'campaigns', id));
       if (snap.exists()) {
         campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
       }

@@ -166,16 +166,16 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
   }, [filteredCampaigns]);
 
   // Initial selection for pairwise mode: most recent (B) vs previous (A)
-  const [campaignAId, setCampaignAId] = useState<string>(sorted[1]?.id || sorted[0]?.id || '');
-  const [campaignBId, setCampaignBId] = useState<string>(sorted[0]?.id || '');
+  const [campaignAId, setCampaignAId] = useState<string>(String(sorted[1]?.id || sorted[0]?.id || ''));
+  const [campaignBId, setCampaignBId] = useState<string>(String(sorted[0]?.id || ''));
 
   useEffect(() => {
     if (sorted.length > 0) {
-      if (!sorted.some(c => c.id === campaignBId)) {
-        setCampaignBId(sorted[0]?.id || '');
+      if (!sorted.some(c => String(c.id) === String(campaignBId))) {
+        setCampaignBId(String(sorted[0]?.id || ''));
       }
-      if (!sorted.some(c => c.id === campaignAId)) {
-        setCampaignAId(sorted[1]?.id || sorted[0]?.id || '');
+      if (!sorted.some(c => String(c.id) === String(campaignAId))) {
+        setCampaignAId(String(sorted[1]?.id || sorted[0]?.id || ''));
       }
     }
   }, [sorted]);

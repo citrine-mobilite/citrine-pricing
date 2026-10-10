@@ -1,8 +1,8 @@
 export type UserRole = 'admin' | 'responsable' | 'employe';
 
 export interface User {
-  id: number;
-  uuid: string;
+  id: number | string;
+  uuid?: string;
   email: string;
   name: string;
   role: UserRole;
@@ -13,8 +13,8 @@ export interface User {
 }
 
 export interface City {
-  id: number;
-  uuid: string;
+  id: number | string;
+  uuid?: string;
   name: string;
   country: string;
   currency: string;
@@ -34,8 +34,8 @@ export interface City {
 }
 
 export interface Neighborhood {
-  id: number;
-  uuid: string;
+  id: number | string;
+  uuid?: string;
   cityId: string;
   cityName?: string;
   ville?: string;
@@ -115,8 +115,8 @@ export interface HeroQuote {
 }
 
 export interface PricingCampaign {
-  id: number;
-  uuid: string;
+  id: number | string;
+  uuid?: string;
   cityId: string;
   cityName: string;
   currency: string;
@@ -220,8 +220,8 @@ export interface CanonicalTripPrices {
 }
 
 export interface TripResult {
-  id: number;
-  uuid: string;
+  id: number | string;
+  uuid?: string;
   campaignId: string;
   cityId?: string;
   cityName?: string;
@@ -338,7 +338,8 @@ export interface AuthState {
 }
 
 export interface HistoryRecord {
-  id: string;
+  id: number | string;
+  uuid?: string;
   action: string;
   eventType: 'campaign' | 'system' | 'settings' | 'users' | 'neighborhoods' | 'cities';
   title: string;

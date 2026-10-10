@@ -6,7 +6,7 @@ import { api } from '../../services/api';
 export function usePricingCampaign(
   campaigns: PricingCampaign[],
   selectedCityId: string,
-  propSelectedCampaignId?: string | number | null,
+  propSelectedCampaignId?: string | null,
   onSelectCampaignId?: (id: string) => void,
   onSelectCityId?: (id: string) => void,
   onRefresh?: () => void
@@ -17,35 +17,30 @@ export function usePricingCampaign(
   );
 
   const [internalCampaignId, setInternalCampaignId] = useState<string>(() => {
-    if (propSelectedCampaignId) {
-      const match = campaigns.find((c) => String(c.id) === String(propSelectedCampaignId) || c.uuid === String(propSelectedCampaignId));
-      if (match) return match.uuid || String(match.id);
+    if (propSelectedCampaignId && campaigns.some((c) => String(c.id) === String(propSelectedCampaignId))) {
+      return String(propSelectedCampaignId);
     }
-    const firstCity = cityCampaigns[0];
-    if (firstCity) return firstCity.uuid || String(firstCity.id);
-    const firstOverall = campaigns[0];
-    return firstOverall ? (firstOverall.uuid || String(firstOverall.id)) : '';
+    return String(cityCampaigns[0]?.id || campaigns[0]?.id || '');
   });
 
   useEffect(() => {
     if (propSelectedCampaignId) {
-      const match = campaigns.find((c) => String(c.id) === String(propSelectedCampaignId) || c.uuid === String(propSelectedCampaignId));
-      if (match) {
-        setInternalCampaignId(match.uuid || String(match.id));
+      setInternalCampaignId(String(propSelectedCampaignId));
+    } else if (!internalCampaignId) {
+      const activeForCity = campaigns.filter((c) => c.cityId === selectedCityId);
+      if (activeForCity.length > 0) {
+        setInternalCampaignId(String(activeForCity[0].id));
       }
-    } else if (!internalCampaignId && cityCampaigns.length > 0) {
-      setInternalCampaignId(cityCampaigns[0].uuid || String(cityCampaigns[0].id));
     }
-  }, [propSelectedCampaignId, campaigns, cityCampaigns, internalCampaignId]);
+  }, [propSelectedCampaignId, campaigns, selectedCityId, internalCampaignId]);
 
   const activeCampaignId = internalCampaignId;
-  const activeCampaign = campaigns.find((c) => c.uuid === activeCampaignId || String(c.id) === activeCampaignId);
+  const activeCampaign = campaigns.find((c) => String(c.id) === String(activeCampaignId));
 
   const handleCampaignChange = (newCampaignId: string) => {
-    const targetCamp = campaigns.find((c) => c.uuid === newCampaignId || String(c.id) === newCampaignId);
-    const resolvedId = targetCamp?.uuid || newCampaignId;
-    setInternalCampaignId(resolvedId);
-    if (onSelectCampaignId) onSelectCampaignId(resolvedId);
+    setInternalCampaignId(newCampaignId);
+    if (onSelectCampaignId) onSelectCampaignId(newCampaignId);
+    const targetCamp = campaigns.find((c) => String(c.id) === String(newCampaignId));
     if (targetCamp && targetCamp.cityId !== selectedCityId && onSelectCityId) {
       onSelectCityId(targetCamp.cityId);
     }
@@ -53,9 +48,6 @@ export function usePricingCampaign(
 
   const handleDeleteCampaign = async () => {
     if (!activeCampaignId) return;
-    const targetCamp = campaigns.find((c) => c.uuid === activeCampaignId || String(c.id) === activeCampaignId);
-    const resolvedId = targetCamp?.uuid || activeCampaignId;
-
     const result = await Swal.fire({
       title: 'Supprimer cette campagne ?',
       text: 'Cette action est irréversible et supprimera également tous les trajets associés.',
@@ -68,13 +60,12 @@ export function usePricingCampaign(
 
     if (result.isConfirmed) {
       try {
-        await api.deleteCampaign(resolvedId);
-        const otherCampaigns = cityCampaigns.filter(
-          (c) => c.uuid !== resolvedId && String(c.id) !== resolvedId
+        await api.deleteCampaign(activeCampaignId);
+        const otherCampaigns = campaigns.filter(
+          (c) => String(c.id) !== String(activeCampaignId) && c.cityId === selectedCityId
         );
-        const nextCamp = otherCampaigns[0] || campaigns.find((c) => c.uuid !== resolvedId && String(c.id) !== resolvedId);
-        const nextId = nextCamp ? (nextCamp.uuid || String(nextCamp.id)) : '';
-        handleCampaignChange(nextId);
+        const nextId = otherCampaigns[0]?.id || campaigns.filter((c) => String(c.id) !== String(activeCampaignId))[0]?.id || '';
+        handleCampaignChange(String(nextId));
         if (onRefresh) await onRefresh();
         Swal.fire({ title: 'Supprimée !', text: 'Campagne supprimée.', icon: 'success', timer: 1500, showConfirmButton: false });
       } catch (err: any) {

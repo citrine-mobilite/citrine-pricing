@@ -187,7 +187,7 @@ export async function getFirestoreCities(): Promise<City[]> {
 export async function saveFirestoreCity(city: City): Promise<void> {
   const path = `cities/${city.id}`;
   try {
-    await setDoc(doc(db, 'cities', city.id), city, { merge: true });
+    await setDoc(doc(db, 'cities', String(city.id)), city, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
@@ -196,7 +196,7 @@ export async function saveFirestoreCity(city: City): Promise<void> {
 export async function getFirestoreNeighborhoods(cityId: string): Promise<Neighborhood[]> {
   const path = `cities/${cityId}/neighborhoods`;
   try {
-    const snapshot = await getDocs(collection(db, 'cities', cityId, 'neighborhoods'));
+    const snapshot = await getDocs(collection(db, 'cities', String(cityId), 'neighborhoods'));
     return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Neighborhood));
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, path);
@@ -206,7 +206,7 @@ export async function getFirestoreNeighborhoods(cityId: string): Promise<Neighbo
 export async function saveFirestoreNeighborhood(cityId: string, nb: Neighborhood): Promise<void> {
   const path = `cities/${cityId}/neighborhoods/${nb.id}`;
   try {
-    await setDoc(doc(db, 'cities', cityId, 'neighborhoods', nb.id), nb, { merge: true });
+    await setDoc(doc(db, 'cities', String(cityId), 'neighborhoods', String(nb.id)), nb, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
@@ -225,7 +225,7 @@ export async function getFirestoreCampaigns(): Promise<PricingCampaign[]> {
 export async function saveFirestoreCampaign(campaign: PricingCampaign): Promise<void> {
   const path = `campaigns/${campaign.id}`;
   try {
-    await setDoc(doc(db, 'campaigns', campaign.id), campaign, { merge: true });
+    await setDoc(doc(db, 'campaigns', String(campaign.id)), campaign, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
@@ -234,7 +234,7 @@ export async function saveFirestoreCampaign(campaign: PricingCampaign): Promise<
 export async function saveFirestoreTripResult(campaignId: string, trip: TripResult): Promise<void> {
   const path = `campaigns/${campaignId}/trip_results/${trip.id}`;
   try {
-    await setDoc(doc(db, 'campaigns', campaignId, 'trip_results', trip.id), trip, { merge: true });
+    await setDoc(doc(db, 'campaigns', String(campaignId), 'trip_results', String(trip.id)), trip, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
@@ -244,19 +244,19 @@ export async function saveFirestoreTripResult(campaignId: string, trip: TripResu
 
 export async function getFirestoreStats(): Promise<{ userCount: number; cityCount: number; neighborhoodCount: number }> {
   try {
-    const [cRes, uRes] = await Promise.all([
-      fetch('/api/cities').then(r => r.json()).catch(() => []),
-      fetch('/api/users').then(r => r.json()).catch(() => [])
+    const [usersSnap, citiesSnap, nbsSnap] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'cities')),
+      getDocs(collection(db, 'neighborhoods'))
     ]);
-    const citiesList = Array.isArray(cRes) ? cRes : [];
-    const totalNbs = citiesList.reduce((acc, c) => acc + (c.neighborhoodsCount || 0), 0);
     return {
-      userCount: Array.isArray(uRes) ? uRes.length : 0,
-      cityCount: citiesList.length,
-      neighborhoodCount: totalNbs
+      userCount: usersSnap.size,
+      cityCount: citiesSnap.size,
+      neighborhoodCount: nbsSnap.size
     };
   } catch (err) {
-    return { userCount: 4, cityCount: 2, neighborhoodCount: 267 };
+    console.warn('Could not query Firestore stats:', err);
+    return { userCount: 0, cityCount: 0, neighborhoodCount: 0 };
   }
 }
 

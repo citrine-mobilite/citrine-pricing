@@ -127,7 +127,7 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
         triggerType: 'manual',
         selectedClasses: ['econom'],
         sampleLimit: mode === 'sample_25' ? 25 : 'all',
-        triggeredByUserId: user?.id,
+        triggeredByUserId: user?.id ? String(user.id) : undefined,
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe'
       });
@@ -168,7 +168,7 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
       sortable: true,
       render: (c) => (
         <button
-          onClick={() => onSelectCityNeighborhoods(c.id)}
+          onClick={() => onSelectCityNeighborhoods(String(c.id))}
           className="inline-flex items-center gap-1.5 text-xs text-[#1F4F4A] hover:underline font-semibold"
         >
           <Compass className="w-3.5 h-3.5" />

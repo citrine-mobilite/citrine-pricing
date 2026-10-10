@@ -60,7 +60,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   const handleToggleAllCampaigns = (checked: boolean) => {
     if (checked) {
-      setSelectedCampaignIds(campaigns.filter((c) => c.status === 'completed').map((c) => c.id));
+      setSelectedCampaignIds(campaigns.filter((c) => c.status === 'completed').map((c) => String(c.id)));
     } else {
       setSelectedCampaignIds([]);
     }

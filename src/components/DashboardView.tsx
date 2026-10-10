@@ -393,7 +393,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center justify-end gap-2.5">
           <button
             onClick={() => {
-              onSelectCampaign(c.id);
+              onSelectCampaign(String(c.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F4F4A] hover:underline cursor-pointer"
@@ -402,7 +402,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ArrowRight className="w-3 h-3" />
           </button>
           <button
-            onClick={(e) => handleDeleteCampaign(c.id, e)}
+            onClick={(e) => handleDeleteCampaign(String(c.id), e)}
             title="Supprimer cette campagne"
             className="p-1 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
           >

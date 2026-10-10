@@ -70,13 +70,12 @@ function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promi
 }
 
 export function cancelChunkCampaignSession(campaignId: string): boolean {
-  const memCamp = memoryCampaigns.find(c => String(c.id) === String(campaignId) || c.uuid === campaignId);
-  const campUuid = memCamp?.uuid || campaignId;
-
-  const session = campaignSessions.get(campUuid) || campaignSessions.get(campaignId);
+  const session = campaignSessions.get(campaignId);
   if (session) {
     session.campaign.status = 'cancelled';
+    // Ne PAS supprimer de campaignSessions afin que les requêtes de lots suivantes soient rejetées immédiatement
   }
+  const memCamp = memoryCampaigns.find(c => c.id === campaignId);
   if (memCamp) {
     memCamp.status = 'cancelled';
   }
@@ -84,7 +83,7 @@ export function cancelChunkCampaignSession(campaignId: string): boolean {
   // Notification d'arrière-plan sans blocage ("Fire & Forget")
   // Même si Firestore est en panne ou hors quota, l'arrêt en RAM prend effet en 0ms
   if (db) {
-    const firestorePromise = setDoc(doc(db, 'campaigns', campUuid), { status: 'cancelled' }, { merge: true });
+    const firestorePromise = setDoc(doc(db, 'campaigns', campaignId), { status: 'cancelled' }, { merge: true });
     Promise.race([
       firestorePromise,
       new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore timeout')), 1500))
@@ -115,6 +114,19 @@ export async function initializeCampaignSession(
     });
   }
 
+  if (typeof campaign.id !== 'number') {
+    const existingNum = Number(campaign.id);
+    if (!isNaN(existingNum) && existingNum > 0) {
+      campaign.uuid = campaign.uuid || String(campaign.id);
+      campaign.id = existingNum;
+    } else {
+      campaign.uuid = campaign.uuid || String(campaign.id);
+      campaign.id = getNextSequence('campaigns');
+    }
+  } else if (!campaign.uuid) {
+    campaign.uuid = randomUUID();
+  }
+
   campaign.totalBatches = chunks.length;
   campaign.workersCount = 1;
   campaign.status = 'in_progress';
@@ -131,21 +143,27 @@ export async function initializeCampaignSession(
     startedAtMs: Date.now()
   };
 
-  const campUuid = campaign.uuid || String(campaign.id);
-  campaignSessions.set(campUuid, sessionState);
   campaignSessions.set(String(campaign.id), sessionState);
+  if (campaign.uuid) {
+    campaignSessions.set(campaign.uuid, sessionState);
+  }
 
-  // Écriture initiale unique dans Firestore des métadonnées
+  // Écriture initiale unique dans Firestore des métadonnées (utilise le docId = uuid ou String(id))
   if (db) {
+    const firestoreDocId = campaign.uuid || String(campaign.id);
     await safeFirestoreWrite('initCampaignMetaDoc', async () => {
-      await setDoc(doc(db!, 'campaigns', campUuid), cleanFirestoreDoc(campaign));
+      await setDoc(doc(db!, 'campaigns', firestoreDocId), cleanFirestoreDoc(campaign));
     });
   }
 
   // Mémoire
   memoryCampaigns.unshift(campaign);
-  memoryCampaignTrips[campUuid] = sessionState.trips;
-  memoryCampaignCanonicalTrips[campUuid] = sessionState.canonicalTrips;
+  memoryCampaignTrips[String(campaign.id)] = sessionState.trips;
+  memoryCampaignCanonicalTrips[String(campaign.id)] = sessionState.canonicalTrips;
+  if (campaign.uuid) {
+    memoryCampaignTrips[campaign.uuid] = sessionState.trips;
+    memoryCampaignCanonicalTrips[campaign.uuid] = sessionState.canonicalTrips;
+  }
 
   return { totalChunks: chunks.length, totalPairs: pairs.length };
 }
@@ -330,8 +348,8 @@ export async function processCampaignChunk(
       confCandidates.sort((a, b) => (a.p as number) - (b.p as number));
       const cheaperConf = confCandidates[0]?.name || null;
 
+      const tripNumericId = getNextSequence('trips');
       const tripUuid = randomUUID();
-      const tripId = getNextSequence('trips');
       const cleanOrigin = cleanNeighborhoodName(origin.name);
       const cleanDest = cleanNeighborhoodName(dest.name);
 
@@ -339,7 +357,7 @@ export async function processCampaignChunk(
       const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) ? yangoStats.durationMinutes : durationMin;
 
       const canonicalTrip: CanonicalTrip = {
-        id: tripId,
+        id: tripNumericId,
         uuid: tripUuid,
         origin: cleanOrigin,
         destination: cleanDest,
@@ -371,9 +389,9 @@ export async function processCampaignChunk(
       };
 
       const tripRow: TripResult = {
-        id: tripId,
+        id: tripNumericId,
         uuid: tripUuid,
-        campaignId: session.campaign.uuid || campaignId,
+        campaignId,
         origin: cleanOrigin,
         destination: cleanDest,
         distanceKm: tripDistanceKm,
@@ -632,19 +650,18 @@ export async function finalizeCampaignExecution(
   }
 
   campaign.canonicalTripsCount = canonicalTrips.length;
-  const campaignUuid = campaign.uuid || campaignId;
 
   // Persistance Firestore finale des métadonnées ET du document consolidé unique (pour des lectures futures en 1 seule lecture)
   if (db) {
     await safeFirestoreWrite('finalizeCampaignMeta', async () => {
-      await setDoc(doc(db!, 'campaigns', campaignUuid), cleanFirestoreDoc(campaign));
+      await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
     });
     if (canonicalTrips && canonicalTrips.length > 0) {
-      await saveCanonicalCampaignResults(campaignUuid, campaign.cityName, canonicalTrips);
+      await saveCanonicalCampaignResults(campaignId, campaign.cityName, canonicalTrips);
     }
   }
 
-  const existingIdx = memoryCampaigns.findIndex(c => c.uuid === campaignUuid || String(c.id) === String(campaign.id));
+  const existingIdx = memoryCampaigns.findIndex(c => String(c.id) === String(campaignId) || c.uuid === campaignId);
   if (existingIdx >= 0) {
     memoryCampaigns[existingIdx] = campaign;
   } else {
@@ -652,17 +669,23 @@ export async function finalizeCampaignExecution(
   }
 
   // Cache mémoire RAM serveur immédiat (0 lecture Firestore pour les futures consultations)
+  const idStr = String(campaign.id);
+  const uuidStr = campaign.uuid || campaignId;
   if (session?.trips && session.trips.length > 0) {
-    memoryCampaignTrips[campaignUuid] = session.trips;
+    memoryCampaignTrips[idStr] = session.trips;
+    memoryCampaignTrips[uuidStr] = session.trips;
   }
   if (canonicalTrips && canonicalTrips.length > 0) {
-    memoryCampaignCanonicalTrips[campaignUuid] = canonicalTrips;
+    memoryCampaignCanonicalTrips[idStr] = canonicalTrips;
+    memoryCampaignCanonicalTrips[uuidStr] = canonicalTrips;
   }
-  saveCampaignTripsDiskBackup(campaignUuid, memoryCampaignTrips[campaignUuid] || [], canonicalTrips);
+  saveCampaignTripsDiskBackup(campaignId, memoryCampaignTrips[campaignId] || [], canonicalTrips);
+  if (campaign.uuid && campaign.uuid !== campaignId) {
+    saveCampaignTripsDiskBackup(campaign.uuid, memoryCampaignTrips[campaignId] || [], canonicalTrips);
+  }
   saveLocalCampaignsDiskBackup();
 
-  campaignSessions.delete(campaignUuid);
-  campaignSessions.delete(String(campaign.id));
+  campaignSessions.delete(campaignId);
 
   await recordHistory({
     action: 'complete_campaign',

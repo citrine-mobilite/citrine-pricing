@@ -44,7 +44,7 @@ export const CityLaunchChoiceModal: React.FC<CityLaunchChoiceModalProps> = ({
         <div className="space-y-3 pt-2">
           {/* Quick 25 Sample */}
           <button
-            onClick={() => onChoice(city.id, 'sample_25')}
+            onClick={() => onChoice(String(city.id), 'sample_25')}
             disabled={isStartingCampaign}
             className="w-full p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 text-left transition flex items-center justify-between cursor-pointer group"
           >
@@ -62,7 +62,7 @@ export const CityLaunchChoiceModal: React.FC<CityLaunchChoiceModalProps> = ({
 
           {/* Full Benchmark */}
           <button
-            onClick={() => onChoice(city.id, 'full')}
+            onClick={() => onChoice(String(city.id), 'full')}
             disabled={isStartingCampaign}
             className="w-full p-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left transition flex items-center justify-between cursor-pointer group"
           >
@@ -80,7 +80,7 @@ export const CityLaunchChoiceModal: React.FC<CityLaunchChoiceModalProps> = ({
 
           {/* Just Open View */}
           <button
-            onClick={() => onChoice(city.id, 'navigate')}
+            onClick={() => onChoice(String(city.id), 'navigate')}
             className="w-full py-2 text-center text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
           >
             Ouvrir simplement le tableau de bord

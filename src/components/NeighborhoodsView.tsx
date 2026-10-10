@@ -203,7 +203,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const [editNbZone, setEditNbZone] = useState('commercial');
   const [editNbStatus, setEditNbStatus] = useState('actif');
   const [editNbActive, setEditNbActive] = useState(true);
-  const [editNbCityId, setEditNbCityId] = useState(currentCity?.id || 'city_douala');
+  const [editNbCityId, setEditNbCityId] = useState(String(currentCity?.id || 'city_douala'));
   const [editError, setEditError] = useState<string | null>(null);
 
   // Import Modal State
@@ -244,7 +244,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         zoneType: editNbZone as any,
         status: editNbStatus,
         active: editNbActive,
-        cityId: editNbCityId
+        cityId: String(editNbCityId)
       });
       setEditingNb(null);
       onRefresh();
@@ -261,7 +261,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     setIsSubmitting(true);
     try {
       await api.createNeighborhood({
-        cityId: currentCity?.id || cities[0]?.id || '',
+        cityId: String(currentCity?.id || cities[0]?.id || ''),
         name: newNbName.trim(),
         ville: newNbVille.trim() || currentCity?.name || '',
         departement: newNbDepartement.trim() || availableDepartements[0] || '',
@@ -294,7 +294,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     }
   };
 
-  const handleDelete = async (nbId: string) => {
+  const handleDelete = async (nbId: string | number) => {
     if (!confirm('Supprimer ce quartier ?')) return;
     try {
       await api.deleteNeighborhood(nbId);
@@ -307,7 +307,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const handleBatchToggle = async (activeState: boolean) => {
     if (selectedCityFilter !== 'all' && currentCity?.id) {
       try {
-        await api.batchToggleNeighborhoods(currentCity.id, activeState);
+        await api.batchToggleNeighborhoods(String(currentCity.id), activeState);
         onRefresh();
       } catch (err: any) {
         alert(err.message || 'Erreur.');
@@ -315,7 +315,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     } else {
       // Activer/Désactiver pour toutes les villes
       try {
-        await Promise.all(cities.map((c) => api.batchToggleNeighborhoods(c.id, activeState)));
+        await Promise.all(cities.map((c) => api.batchToggleNeighborhoods(String(c.id), activeState)));
         onRefresh();
       } catch (err: any) {
         alert(err.message || 'Erreur.');
@@ -327,7 +327,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     if (!currentCity?.id || selectedCityFilter === 'all') return;
     if (!confirm(`Voulez-vous vraiment vider tous les quartiers de ${currentCity.name} ?`)) return;
     try {
-      await api.clearCityNeighborhoods(currentCity.id);
+      await api.clearCityNeighborhoods(String(currentCity.id));
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Erreur.');
@@ -338,7 +338,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     if (!currentCity?.id) return;
     try {
       setIsLoadingOfficial(true);
-      await api.seedCityNeighborhoods(currentCity.id);
+      await api.seedCityNeighborhoods(String(currentCity.id));
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Erreur.');

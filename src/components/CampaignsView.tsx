@@ -250,12 +250,12 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         cityId: c.cityId,
         triggerType: 'manual',
         sampleLimit: c.sampleLimit,
-        triggeredByUserId: user?.id,
+        triggeredByUserId: user?.id ? String(user.id) : undefined,
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe'
       });
       if (res?.campaign) {
-        onSelectCampaign(res.campaign.id);
+        onSelectCampaign(String(res.campaign.id));
         onNavigate('pricing');
       }
     } catch (err: any) {
@@ -452,7 +452,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           )}
           <button
             onClick={() => {
-              onSelectCampaign(c.id);
+              onSelectCampaign(String(c.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-[#1F4F4A] text-white rounded-lg hover:bg-[#183F3B] transition cursor-pointer shadow-xs"
@@ -462,7 +462,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           </button>
           {isAdminOrResponsable && (
             <button
-              onClick={() => handleDelete(c.id)}
+              onClick={() => handleDelete(String(c.id))}
               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
               title="Supprimer la campagne"
             >

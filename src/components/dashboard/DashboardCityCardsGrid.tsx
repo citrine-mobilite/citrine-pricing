@@ -54,7 +54,7 @@ export const DashboardCityCardsGrid: React.FC<DashboardCityCardsGridProps> = ({
 
             <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
               <button
-                onClick={() => onNavigateToNeighborhoods(city.id)}
+                onClick={() => onNavigateToNeighborhoods(String(city.id))}
                 className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition"
               >
                 <Compass className="w-3.5 h-3.5 text-slate-500" />

@@ -325,7 +325,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         const collectedCanonicalTrips: any[] = [];
 
         const chunkMeta = {
-          cityId: currentCity.id,
+          cityId: String(currentCity.id),
           cityName: currentCity.name,
           currency: currentCity.currency,
           scopeMode: options.scopeMode,

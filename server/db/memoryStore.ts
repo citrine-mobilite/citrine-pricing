@@ -3,9 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { User, City, Neighborhood, PricingCampaign, TripResult, ActivePricingSession, CanonicalTrip } from '../types.js';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, safeFirestoreRead, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from './firestore.js';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from './firestore.js';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
+import { getNextSequence } from './counters.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
 const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
@@ -24,44 +25,13 @@ export function saveNeighborhoodsDiskBackup() {
 export function saveLocalCampaignsDiskBackup() {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    // Conserver les 25 dernières campagnes
-    const capped = [...memoryCampaigns]
-      .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime())
-      .slice(0, 25);
-    fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(capped, null, 2), 'utf8');
+    fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(memoryCampaigns, null, 2), 'utf8');
   } catch (e: any) {
     console.warn('[Disk Backup] Warning writing campaigns to disk:', e.message);
   }
 }
 
 const USERS_FILE = path.resolve(DATA_DIR, 'users.json');
-const CITIES_FILE = path.resolve(DATA_DIR, 'cities.json');
-
-export function saveCitiesDiskBackup() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(CITIES_FILE, JSON.stringify(cities, null, 2), 'utf8');
-    console.log(`[Disk Backup] ${cities.length} villes sauvegardées dans cities.json`);
-  } catch (e: any) {
-    console.warn('[Disk Backup] Warning writing cities to disk:', e.message);
-  }
-}
-
-export function loadCitiesDiskBackup(): boolean {
-  try {
-    if (fs.existsSync(CITIES_FILE)) {
-      const raw = fs.readFileSync(CITIES_FILE, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) {
-        cities = data;
-        return true;
-      }
-    }
-  } catch (e: any) {
-    console.warn('[Disk Backup] Warning reading cities from disk:', e.message);
-  }
-  return false;
-}
 
 export function saveUsersDiskBackup() {
   try {
@@ -140,18 +110,6 @@ export function loadCampaignTripsDiskBackup(campaignId: string): TripResult[] | 
       const data = JSON.parse(raw);
       if (Array.isArray(data) && data.length > 0) {
         memoryCampaignTrips[campaignId] = data;
-        
-        // Charger simultanément le format canonique en RAM s'il existe
-        const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-        if (fs.existsSync(canonPath)) {
-          try {
-            const rawCanon = fs.readFileSync(canonPath, 'utf8');
-            const canonData = JSON.parse(rawCanon);
-            if (Array.isArray(canonData) && canonData.length > 0) {
-              memoryCampaignCanonicalTrips[campaignId] = canonData;
-            }
-          } catch {}
-        }
         return data;
       }
     }
@@ -196,12 +154,12 @@ export function loadLocalCampaignsDiskBackup() {
         memoryCampaigns = data;
         console.log(`[Disk Backup] ${data.length} campagnes restaurées depuis le stockage local persistant.`);
         
-        // Conserver les 25 campagnes les plus récentes
+        // Trier par date décroissante pour identifier les plus récentes
         const sorted = [...data].sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime());
-        memoryCampaigns = sorted.slice(0, 25);
         
-        // Pré-charger les trajets existants en RAM pour les 25 campagnes les plus récentes
-        for (const camp of memoryCampaigns) {
+        // Pré-charger les trajets existants en RAM uniquement pour les 100 campagnes les plus récentes pour économiser la RAM
+        const limitToPreload = sorted.slice(0, 100);
+        for (const camp of limitToPreload) {
           if (camp?.id) {
             loadCampaignTripsDiskBackup(camp.id);
           }
@@ -278,7 +236,7 @@ export function loadLocalCampaignsDiskBackup() {
             }
           }
         }
-        console.log(`[Memory Shield] Trajets des ${memoryCampaigns.length} campagnes les plus récentes pré-chargés en RAM et statistiques d'arrondissements enrichies.`);
+        console.log(`[Memory Shield] Trajets des ${limitToPreload.length} campagnes les plus récentes pré-chargés en RAM et statistiques d'arrondissements enrichies.`);
       }
     }
   } catch (e: any) {
@@ -286,22 +244,96 @@ export function loadLocalCampaignsDiskBackup() {
   }
 }
 
+// Hachage sécurisé bcrypt avec salt pour le compte administrateur citrinemobilite@gmail.com
 export const CITRINE_ADMIN_PASSWORD = 'Citrine2026!';
+const CITRINE_ADMIN_HASH = bcrypt.hashSync(CITRINE_ADMIN_PASSWORD, 10);
+const DEFAULT_PASSWORD_HASH = CITRINE_ADMIN_HASH;
 
-// États réactifs en RAM chargés dynamiquement depuis les fichiers de persistance
-export let users: User[] = [];
-export let cities: City[] = [];
+export const defaultUsers: User[] = [
+  {
+    id: 1,
+    uuid: 'usr_citrine_admin',
+    name: 'Admin Citrine',
+    email: 'citrinemobilite@gmail.com',
+    role: 'admin',
+    active: true,
+    passwordHash: CITRINE_ADMIN_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 2,
+    uuid: 'usr_landry',
+    name: 'Landry Moutongo',
+    email: 'landrymoutongo97@gmail.com',
+    role: 'admin',
+    active: true,
+    passwordHash: CITRINE_ADMIN_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 3,
+    uuid: 'usr_doleres',
+    name: 'Doleres',
+    email: 'doleres@citrine-pricing.com',
+    role: 'responsable',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 4,
+    uuid: 'usr_marc',
+    name: 'Marc',
+    email: 'employe@citrine-pricing.cm',
+    role: 'employe',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  }
+];
+
+// Reactive state cache for users loaded from database (initialisé avec les comptes par défaut)
+export let users: User[] = defaultUsers.map(u => ({ ...u }));
+
+export let cities: City[] = [
+  {
+    id: 1,
+    uuid: 'city_douala',
+    name: 'Douala',
+    country: 'Cameroun',
+    currency: 'XAF',
+    currencySymbol: 'FCFA',
+    center: { lat: 4.0511, lng: 9.7679 },
+    active: true,
+    autoSchedule: {
+      enabled: false,
+      slots: ['08:00', '13:00', '18:00'],
+      lastRunAt: undefined
+    }
+  },
+  {
+    id: 2,
+    uuid: 'city_yaounde',
+    name: 'Yaoundé',
+    country: 'Cameroun',
+    currency: 'XAF',
+    currencySymbol: 'FCFA',
+    center: { lat: 3.8480, lng: 11.5021 },
+    active: true,
+    autoSchedule: {
+      enabled: false,
+      slots: ['08:00', '18:00'],
+      lastRunAt: undefined
+    }
+  }
+];
+
 export let neighborhoods: Neighborhood[] = (defaultNeighborhoods as unknown as Neighborhood[]) || [];
 
 export let memoryCampaigns: PricingCampaign[] = [];
 export const memoryCampaignTrips: Record<string, TripResult[]> = {};
 export const memoryCampaignCanonicalTrips: Record<string, CanonicalTrip[]> = {};
 export let historyRecords: any[] = [];
-
-// Restauration immédiate en RAM dès le chargement du module depuis le stockage persistant
-loadLocalCampaignsDiskBackup();
-loadCitiesDiskBackup();
-loadUsersDiskBackup();
 
 // Session active UNIQUEMENT pendant l'exécution en temps réel
 export const activePricingSessions = new Map<string, ActivePricingSession>();
@@ -316,10 +348,6 @@ export function setCities(newCities: City[]) {
 
 export function setNeighborhoods(newNeighborhoods: Neighborhood[]) {
   neighborhoods = newNeighborhoods;
-}
-
-export function setMemoryCampaigns(newCamps: PricingCampaign[]) {
-  memoryCampaigns = newCamps;
 }
 
 export function setHistoryRecords(newRecords: any[]) {
@@ -346,7 +374,8 @@ export async function recordHistory(record: {
   metadata?: Record<string, any>;
 }) {
   const item = {
-    id: randomUUID(),
+    id: getNextSequence('history'),
+    uuid: randomUUID(),
     timestamp: new Date().toISOString(),
     status: 'success',
     ...record
@@ -364,41 +393,56 @@ export async function deleteHistoryForCampaign(campaignId: string) {
   );
 }
 
-let hasSyncedOnce = false;
-
 /**
- * Synchronisation initiale ultra-économe (0 lecture superflue)
- * - Villes et quartiers servis 100% depuis le cache local (0 lecture Firestore)
- * - Au maximum 10 campagnes lues si la mémoire est vide (max 10 lectures O(1))
+ * Synchronisation bidirectionnelle initiale avec Firestore
  */
 export async function syncFromFirestore() {
-  if (hasSyncedOnce) return;
-  hasSyncedOnce = true;
-
-  // 1. Restaurer d'abord tout depuis les disques locaux
   loadLocalCampaignsDiskBackup();
   loadUsersDiskBackup();
-
-  // 2. Si les 10 campagnes et les utilisateurs sont déjà en mémoire, AUCUN APPEL FIRESTORE !
-  if (memoryCampaigns.length > 0 && users.length > 0) {
-    console.log(`[Store Shield] Données déjà en cache local (${cities.length} villes, ${neighborhoods.length} quartiers, ${memoryCampaigns.length} campagnes, ${users.length} users). 0 lecture Firestore consommée.`);
-    return;
-  }
-
   if (!db || isFirestoreQuotaExceeded()) return;
-
   try {
-    // 3. Uniquement si memoryCampaigns est vide, charger les 25 dernières campagnes
-    if (memoryCampaigns.length === 0) {
-      const q = query(collection(db, 'campaigns'), orderBy('startedAt', 'desc'), limit(25));
-      const snap = await safeFirestoreRead('syncInitial25Campaigns', () => getDocs(q), 25);
-      if (snap && !snap.empty) {
-        memoryCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
-        saveLocalCampaignsDiskBackup();
-        console.log(`[Store Shield] Synchronisé ${memoryCampaigns.length} dernières campagnes depuis Firestore.`);
+    const [usersRes, citiesRes, nbsRes] = await Promise.allSettled([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'cities')),
+      getDocs(collection(db, 'neighborhoods'))
+    ]);
+
+    for (const res of [usersRes, citiesRes, nbsRes]) {
+      if (res.status === 'rejected' && isQuotaExceededError(res.reason)) {
+        flagFirestoreQuotaExceeded(res.reason);
+        return;
       }
     }
+
+    if (usersRes.status === 'fulfilled' && !usersRes.value.empty) {
+      users = usersRes.value.docs.map(d => ({ id: d.id, ...d.data() } as User));
+    } else if (usersRes.status === 'fulfilled' && usersRes.value.empty) {
+      // Seed initial admin in Firestore
+      for (const u of users) {
+        await safeFirestoreWrite('seedUser', () => setDoc(doc(db!, 'users', u.id), cleanFirestoreDoc(u)));
+      }
+    }
+
+    if (citiesRes.status === 'fulfilled' && !citiesRes.value.empty) {
+      cities = citiesRes.value.docs.map(d => ({ id: d.id, ...d.data() } as City));
+    } else if (citiesRes.status === 'fulfilled' && citiesRes.value.empty) {
+      // Seed default cities
+      for (const c of cities) {
+        await safeFirestoreWrite('seedCity', () => setDoc(doc(db!, 'cities', c.id), cleanFirestoreDoc(c)));
+      }
+    }
+
+    if (nbsRes.status === 'fulfilled' && !nbsRes.value.empty) {
+      neighborhoods = nbsRes.value.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
+    } else if (nbsRes.status === 'fulfilled' && nbsRes.value.empty) {
+      // Seed default neighborhoods
+      for (const nb of neighborhoods) {
+        await safeFirestoreWrite('seedNb', () => setDoc(doc(db!, 'neighborhoods', nb.id), cleanFirestoreDoc(nb)));
+      }
+    }
+
+    console.log(`[Firestore Sync] ${users.length} users, ${cities.length} villes, ${neighborhoods.length} quartiers synchronisés.`);
   } catch (err: any) {
-    console.warn('[Firestore Sync Notice]:', err.message);
+    console.warn('[Firestore Sync Error]:', err.message);
   }
 }

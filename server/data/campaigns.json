@@ -1,6 +1,6 @@
 [
   {
-    "id": 10,
+    "id": 25,
     "logs": [
       {
         "level": "info",
@@ -95,7 +95,7 @@
     "uuid": "46946caf-04e3-4416-b6b0-44f024b3cbae"
   },
   {
-    "id": 9,
+    "id": 24,
     "failedPairs": 0,
     "tripMasterStats": {
       "minPrice": 0,
@@ -190,7 +190,7 @@
     "uuid": "7d4f76a7-8a8a-470d-b7ca-8f4724655033"
   },
   {
-    "id": 8,
+    "id": 23,
     "scopeMode": "global",
     "cityId": "city_douala",
     "currency": "XAF",
@@ -285,7 +285,7 @@
     "uuid": "28cf2208-b4af-44d9-9239-b7937439122a"
   },
   {
-    "id": 7,
+    "id": 22,
     "failedPairs": 0,
     "startedAt": "2026-10-07T16:17:39.101Z",
     "isTestSample": false,
@@ -380,7 +380,7 @@
     "uuid": "b0d3b00d-47cd-48bb-9cda-be2f9cc5a864"
   },
   {
-    "id": 6,
+    "id": 21,
     "avgDistanceKm": 5.92,
     "avgPricePerKm": 246,
     "cityId": "city_douala",
@@ -475,7 +475,7 @@
     "uuid": "711b9fb8-0f96-44c9-aaf4-2b2c6ee5d7a2"
   },
   {
-    "id": 5,
+    "id": 20,
     "avgPrice": 1421,
     "durationSeconds": 503,
     "heroStats": {
@@ -572,7 +572,7 @@
     "uuid": "9578040f-b496-47d1-93d9-4cdfe0f65ff7"
   },
   {
-    "id": 4,
+    "id": 19,
     "triggerType": "manual",
     "triggeredByUserId": "usr_citrine_admin",
     "logs": [
@@ -667,7 +667,7 @@
     "uuid": "fa9c8f0d-0e44-43a1-a468-a0549068a03d"
   },
   {
-    "id": 3,
+    "id": 18,
     "triggeredByUserRole": "admin",
     "heroStats": {
       "avgClosestDriverDistanceKm": 0,
@@ -764,7 +764,7 @@
     "uuid": "6620756b-9fbe-4d1b-98c5-97395082f94f"
   },
   {
-    "id": 2,
+    "id": 17,
     "failedPairs": 0,
     "completedPairs": 1385,
     "triggerType": "manual",
@@ -859,7 +859,7 @@
     "uuid": "8532ee29-eb85-4afb-b00d-7813f3cca98f"
   },
   {
-    "id": 1,
+    "id": 16,
     "cityId": "city_douala",
     "tripMasterStats": {
       "avgPrice": 2138,
@@ -948,5 +948,1368 @@
       }
     },
     "uuid": "fa05d14c-c5be-4f67-bbda-1cb9dc6a455c"
+  },
+  {
+    "id": 15,
+    "totalBatches": 144,
+    "deltaStats": {
+      "yangoCheaperCount": 45,
+      "heroCheaperCount": 1388,
+      "equalCount": 2,
+      "avgDeltaFcfa": 909
+    },
+    "workersCount": 1,
+    "finishedAt": "2026-10-05T16:18:44.359Z",
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "cityId": "city_douala",
+    "cityName": "Douala",
+    "completedAt": "2026-10-05T16:18:44.359Z",
+    "startedAt": "2026-10-05T16:10:31.774Z",
+    "totalPairs": 1435,
+    "completedPairs": 1435,
+    "avgPricePerKm": 482,
+    "completedBatches": 144,
+    "avgDistanceKm": 3.85,
+    "avgPrice": 1854,
+    "durationSeconds": 493,
+    "logs": [
+      {
+        "timestamp": "2026-10-05T16:10:31.774Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala."
+      }
+    ],
+    "status": "completed",
+    "totalPossiblePairs": 1435,
+    "isTestSample": false,
+    "triggerType": "manual",
+    "currency": "XAF",
+    "tripMasterStats": {
+      "avgPrice": 2138,
+      "maxPrice": 0,
+      "minPrice": 0,
+      "count": 1424
+    },
+    "failedPairs": 0,
+    "canonicalTripsCount": 1435,
+    "heroStats": {
+      "maxPrice": 0,
+      "avgDriversCount": 0,
+      "count": 1433,
+      "avgPrice": 945,
+      "minPrice": 0,
+      "avgClosestDriverDistanceKm": 0
+    },
+    "triggeredByUserId": "usr_citrine_admin",
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1743,
+        "heroAvgPrice": 888,
+        "tripMasterAvgPrice": 2010,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1632,
+        "heroAvgPrice": 832,
+        "tripMasterAvgPrice": 1881,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1947,
+        "heroAvgPrice": 992,
+        "tripMasterAvgPrice": 2245,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 2132,
+        "heroAvgPrice": 1087,
+        "tripMasterAvgPrice": 2459,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1984,
+        "heroAvgPrice": 1011,
+        "tripMasterAvgPrice": 2288,
+        "count": 287
+      }
+    },
+    "uuid": "8ca431ae-6939-4939-81d9-d2627d759f23"
+  },
+  {
+    "id": 14,
+    "totalBatches": 144,
+    "workersCount": 1,
+    "triggeredByUserId": "usr_citrine_admin",
+    "completedPairs": 1435,
+    "logs": [
+      {
+        "timestamp": "2026-10-05T14:56:35.766Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala."
+      }
+    ],
+    "heroStats": {
+      "maxPrice": 0,
+      "count": 1435,
+      "avgClosestDriverDistanceKm": 0,
+      "avgPrice": 944,
+      "minPrice": 0,
+      "avgDriversCount": 0
+    },
+    "completedBatches": 144,
+    "canonicalTripsCount": 1435,
+    "currency": "XAF",
+    "avgDistanceKm": 3.85,
+    "failedPairs": 0,
+    "avgPricePerKm": 372,
+    "triggerType": "manual",
+    "status": "completed",
+    "completedAt": "2026-10-05T15:04:39.602Z",
+    "totalPairs": 1435,
+    "startedAt": "2026-10-05T14:56:35.766Z",
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "totalPossiblePairs": 1435,
+    "finishedAt": "2026-10-05T15:04:39.602Z",
+    "cityName": "Douala",
+    "isTestSample": false,
+    "deltaStats": {
+      "heroCheaperCount": 1345,
+      "equalCount": 0,
+      "yangoCheaperCount": 90,
+      "avgDeltaFcfa": 492
+    },
+    "durationSeconds": 484,
+    "avgPrice": 1432,
+    "cityId": "city_douala",
+    "tripMasterStats": {
+      "avgPrice": 2137,
+      "maxPrice": 0,
+      "minPrice": 0,
+      "count": 1421
+    },
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1346,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2009,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1260,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1881,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1504,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2244,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1647,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2458,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1532,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2287,
+        "count": 287
+      }
+    },
+    "uuid": "35bdd6d5-95f0-4c3e-a6e3-b541d0ea5e03"
+  },
+  {
+    "id": 13,
+    "avgDistanceKm": 3.85,
+    "totalPossiblePairs": 1435,
+    "tripMasterStats": {
+      "minPrice": 0,
+      "count": 1425,
+      "maxPrice": 0,
+      "avgPrice": 2136
+    },
+    "avgPricePerKm": 464,
+    "canonicalTripsCount": 1435,
+    "startedAt": "2026-10-05T12:04:51.263Z",
+    "currency": "XAF",
+    "durationSeconds": 497,
+    "workersCount": 1,
+    "cityId": "city_douala",
+    "completedAt": "2026-10-05T12:13:08.204Z",
+    "totalBatches": 144,
+    "completedBatches": 144,
+    "deltaStats": {
+      "equalCount": 0,
+      "yangoCheaperCount": 16,
+      "avgDeltaFcfa": 843,
+      "heroCheaperCount": 1419
+    },
+    "avgPrice": 1787,
+    "triggerType": "manual",
+    "triggeredByUserId": "usr_citrine_admin",
+    "failedPairs": 0,
+    "finishedAt": "2026-10-05T12:13:08.204Z",
+    "totalPairs": 1435,
+    "completedPairs": 1435,
+    "cityName": "Douala",
+    "isTestSample": false,
+    "status": "completed",
+    "logs": [
+      {
+        "timestamp": "2026-10-05T12:04:51.263Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala."
+      }
+    ],
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "heroStats": {
+      "minPrice": 0,
+      "avgPrice": 944,
+      "count": 1435,
+      "avgDriversCount": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "maxPrice": 0
+    },
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1680,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2008,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1573,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1880,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1876,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2243,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 2055,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2456,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1912,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2286,
+        "count": 287
+      }
+    },
+    "uuid": "1bcae956-558c-4c10-9897-7f860eb5d5f1"
+  },
+  {
+    "id": 12,
+    "finishedAt": "2026-10-05T10:22:38.763Z",
+    "completedAt": "2026-10-05T10:22:38.763Z",
+    "status": "completed",
+    "totalPairs": 1435,
+    "totalBatches": 144,
+    "deltaStats": {
+      "equalCount": 0,
+      "avgDeltaFcfa": 662,
+      "yangoCheaperCount": 97,
+      "heroCheaperCount": 1338
+    },
+    "triggeredByUserId": "usr_citrine_admin",
+    "completedBatches": 144,
+    "workersCount": 1,
+    "avgPrice": 1601,
+    "totalPossiblePairs": 1435,
+    "canonicalTripsCount": 1435,
+    "cityName": "Douala",
+    "startedAt": "2026-10-05T10:14:44.694Z",
+    "isTestSample": false,
+    "currency": "XAF",
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "tripMasterStats": {
+      "minPrice": 0,
+      "maxPrice": 0,
+      "count": 1427,
+      "avgPrice": 2136
+    },
+    "cityId": "city_douala",
+    "heroStats": {
+      "avgPrice": 944,
+      "avgClosestDriverDistanceKm": 0,
+      "minPrice": 0,
+      "avgDriversCount": 0,
+      "maxPrice": 0,
+      "count": 1435
+    },
+    "avgDistanceKm": 3.85,
+    "avgPricePerKm": 416,
+    "logs": [
+      {
+        "level": "info",
+        "timestamp": "2026-10-05T10:14:44.695Z",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala."
+      }
+    ],
+    "durationSeconds": 474,
+    "completedPairs": 1435,
+    "triggerType": "manual",
+    "failedPairs": 0,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1505,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2008,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1409,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1880,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1681,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2243,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1841,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2456,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1713,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2286,
+        "count": 287
+      }
+    },
+    "uuid": "6a561b21-b4c7-4144-a805-9093a668d147"
+  },
+  {
+    "id": 11,
+    "completedBatches": 144,
+    "completedPairs": 1435,
+    "avgPrice": 1498,
+    "avgDistanceKm": 3.85,
+    "cityId": "city_douala",
+    "avgPricePerKm": 389,
+    "workersCount": 1,
+    "triggeredByUserId": "usr_citrine_admin",
+    "totalBatches": 144,
+    "failedPairs": 0,
+    "cityName": "Douala",
+    "totalPossiblePairs": 1435,
+    "canonicalTripsCount": 1435,
+    "startedAt": "2026-10-04T07:17:29.339Z",
+    "logs": [
+      {
+        "timestamp": "2026-10-04T07:17:29.339Z",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala.",
+        "level": "info"
+      }
+    ],
+    "triggerType": "manual",
+    "completedAt": "2026-10-04T07:26:28.965Z",
+    "status": "completed",
+    "currency": "XAF",
+    "heroStats": {
+      "avgClosestDriverDistanceKm": 0,
+      "maxPrice": 0,
+      "avgPrice": 944,
+      "minPrice": 0,
+      "count": 1435,
+      "avgDriversCount": 0
+    },
+    "tripMasterStats": {
+      "count": 1423,
+      "maxPrice": 0,
+      "avgPrice": 2134,
+      "minPrice": 0
+    },
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "deltaStats": {
+      "heroCheaperCount": 1432,
+      "yangoCheaperCount": 3,
+      "equalCount": 0,
+      "avgDeltaFcfa": 554
+    },
+    "finishedAt": "2026-10-04T07:26:28.965Z",
+    "totalPairs": 1435,
+    "isTestSample": false,
+    "durationSeconds": 540,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1408,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2006,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1318,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1878,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1573,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2241,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1723,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2454,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1603,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2283,
+        "count": 287
+      }
+    },
+    "uuid": "8b72fbfd-021a-4c15-957f-eedfb69f0846"
+  },
+  {
+    "id": 10,
+    "totalPairs": 1435,
+    "cityName": "Douala",
+    "finishedAt": "2026-10-02T20:32:58.625Z",
+    "isTestSample": false,
+    "completedAt": "2026-10-02T20:32:58.625Z",
+    "canonicalTripsCount": 1435,
+    "status": "completed",
+    "deltaStats": {
+      "yangoCheaperCount": 96,
+      "equalCount": 0,
+      "avgDeltaFcfa": 540,
+      "heroCheaperCount": 1339
+    },
+    "avgPrice": 1479,
+    "startedAt": "2026-10-02T20:22:28.611Z",
+    "logs": [
+      {
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala.",
+        "level": "info",
+        "timestamp": "2026-10-02T20:22:28.611Z"
+      }
+    ],
+    "avgDistanceKm": 3.85,
+    "heroStats": {
+      "count": 1435,
+      "avgPrice": 944,
+      "minPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "maxPrice": 0,
+      "avgDriversCount": 0
+    },
+    "cityId": "city_douala",
+    "tripMasterStats": {
+      "avgPrice": 2138,
+      "count": 1419,
+      "maxPrice": 0,
+      "minPrice": 0
+    },
+    "completedPairs": 1435,
+    "avgPricePerKm": 384,
+    "workersCount": 1,
+    "totalBatches": 144,
+    "failedPairs": 0,
+    "completedBatches": 144,
+    "durationSeconds": 630,
+    "triggerType": "manual",
+    "totalPossiblePairs": 1435,
+    "triggeredByUserId": "usr_citrine_admin",
+    "currency": "XAF",
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1390,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2010,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1302,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1881,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1553,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2245,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1701,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2459,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1583,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2288,
+        "count": 287
+      }
+    },
+    "uuid": "f6425c41-5c0f-4312-b701-c622cae1c13c"
+  },
+  {
+    "id": 9,
+    "cityName": "Douala",
+    "failedPairs": 0,
+    "totalBatches": 144,
+    "status": "completed",
+    "triggerType": "manual",
+    "workersCount": 1,
+    "durationSeconds": 1381,
+    "logs": [
+      {
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala.",
+        "level": "info",
+        "timestamp": "2026-10-02T09:16:53.628Z"
+      }
+    ],
+    "startedAt": "2026-10-02T09:16:53.628Z",
+    "avgPrice": 1638,
+    "finishedAt": "2026-10-02T09:39:55.099Z",
+    "tripMasterStats": {
+      "minPrice": 0,
+      "avgPrice": 2151,
+      "count": 1427,
+      "maxPrice": 0
+    },
+    "totalPairs": 1435,
+    "totalPossiblePairs": 1435,
+    "canonicalTripsCount": 1455,
+    "deltaStats": {
+      "heroCheaperCount": 1346,
+      "yangoCheaperCount": 109,
+      "avgDeltaFcfa": 692,
+      "equalCount": 0
+    },
+    "triggeredByUserId": "usr_citrine_admin",
+    "heroStats": {
+      "avgClosestDriverDistanceKm": 0,
+      "minPrice": 0,
+      "avgDriversCount": 0,
+      "count": 1455,
+      "avgPrice": 949,
+      "maxPrice": 0
+    },
+    "completedPairs": 1455,
+    "isTestSample": false,
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "completedBatches": 144,
+    "cityId": "city_douala",
+    "avgDistanceKm": 3.88,
+    "completedAt": "2026-10-02T09:39:55.099Z",
+    "currency": "XAF",
+    "avgPricePerKm": 422,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1540,
+        "heroAvgPrice": 892,
+        "tripMasterAvgPrice": 2022,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1441,
+        "heroAvgPrice": 835,
+        "tripMasterAvgPrice": 1893,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1720,
+        "heroAvgPrice": 996,
+        "tripMasterAvgPrice": 2259,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1884,
+        "heroAvgPrice": 1091,
+        "tripMasterAvgPrice": 2474,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1753,
+        "heroAvgPrice": 1015,
+        "tripMasterAvgPrice": 2302,
+        "count": 287
+      }
+    },
+    "uuid": "9eaa1276-d339-48cc-9f5b-768b5d93d814"
+  },
+  {
+    "id": 8,
+    "tripMasterStats": {
+      "minPrice": 0,
+      "avgPrice": 0,
+      "count": 0,
+      "maxPrice": 0
+    },
+    "triggeredByUserId": "usr_citrine_admin",
+    "completedAt": "2026-10-02T06:26:37.282Z",
+    "totalBatches": 144,
+    "heroStats": {
+      "maxPrice": 0,
+      "minPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "count": 1433,
+      "avgDriversCount": 0,
+      "avgPrice": 944
+    },
+    "workersCount": 1,
+    "currency": "XAF",
+    "avgPricePerKm": 405,
+    "durationSeconds": 509,
+    "avgDistanceKm": 3.85,
+    "deltaStats": {
+      "avgDeltaFcfa": 613,
+      "heroCheaperCount": 1414,
+      "equalCount": 0,
+      "yangoCheaperCount": 21
+    },
+    "status": "completed",
+    "totalPairs": 1435,
+    "completedPairs": 1435,
+    "finishedAt": "2026-10-02T06:26:37.282Z",
+    "canonicalTripsCount": 1435,
+    "isTestSample": false,
+    "totalPossiblePairs": 1435,
+    "completedBatches": 144,
+    "cityName": "Douala",
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "cityId": "city_douala",
+    "logs": [
+      {
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala.",
+        "level": "info",
+        "timestamp": "2026-10-02T06:18:08.485Z"
+      }
+    ],
+    "triggerType": "manual",
+    "avgPrice": 1558,
+    "failedPairs": 0,
+    "startedAt": "2026-10-02T06:18:08.485Z",
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1465,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 1904,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1371,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1782,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1636,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2126,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1792,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2329,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1667,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2167,
+        "count": 287
+      }
+    },
+    "uuid": "62ab28c7-9de3-4520-b7b5-4ecdf0d7c76a"
+  },
+  {
+    "id": 7,
+    "avgPricePerKm": 342,
+    "cityName": "Douala",
+    "avgDistanceKm": 3.87,
+    "status": "completed",
+    "isTestSample": false,
+    "avgPrice": 1325,
+    "heroStats": {
+      "avgDriversCount": 0,
+      "maxPrice": 0,
+      "minPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "avgPrice": 948,
+      "count": 1415
+    },
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "completedAt": "2026-10-01T20:32:01.472Z",
+    "failedPairs": 0,
+    "triggerType": "manual",
+    "startedAt": "2026-10-01T20:23:37.500Z",
+    "canonicalTripsCount": 1415,
+    "totalPossiblePairs": 1435,
+    "completedPairs": 1415,
+    "completedBatches": 144,
+    "tripMasterStats": {
+      "maxPrice": 0,
+      "avgPrice": 0,
+      "count": 0,
+      "minPrice": 0
+    },
+    "deltaStats": {
+      "avgDeltaFcfa": 384,
+      "equalCount": 0,
+      "yangoCheaperCount": 104,
+      "heroCheaperCount": 1311
+    },
+    "cityId": "city_douala",
+    "triggeredByUserId": "usr_citrine_admin",
+    "finishedAt": "2026-10-01T20:32:01.472Z",
+    "currency": "XAF",
+    "workersCount": 1,
+    "durationSeconds": 504,
+    "totalPairs": 1435,
+    "totalBatches": 144,
+    "logs": [
+      {
+        "timestamp": "2026-10-01T20:23:37.500Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala."
+      }
+    ],
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1246,
+        "heroAvgPrice": 891,
+        "tripMasterAvgPrice": 1620,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1166,
+        "heroAvgPrice": 834,
+        "tripMasterAvgPrice": 1516,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1391,
+        "heroAvgPrice": 995,
+        "tripMasterAvgPrice": 1809,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1524,
+        "heroAvgPrice": 1090,
+        "tripMasterAvgPrice": 1981,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1418,
+        "heroAvgPrice": 1014,
+        "tripMasterAvgPrice": 1844,
+        "count": 287
+      }
+    },
+    "uuid": "414e4573-00eb-41dc-9a17-6fbdc22776e7"
+  },
+  {
+    "id": 6,
+    "durationSeconds": 730,
+    "triggeredByUserId": "usr_citrine_admin",
+    "totalPossiblePairs": 1435,
+    "startedAt": "2026-10-01T15:09:12.436Z",
+    "completedPairs": 1435,
+    "status": "completed",
+    "avgPrice": 1548,
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "totalPairs": 1435,
+    "tripMasterStats": {
+      "avgPrice": 2139,
+      "maxPrice": 0,
+      "count": 1424,
+      "minPrice": 0
+    },
+    "finishedAt": "2026-10-01T15:21:22.385Z",
+    "completedAt": "2026-10-01T15:21:22.385Z",
+    "workersCount": 1,
+    "cityName": "Douala",
+    "deltaStats": {
+      "avgDeltaFcfa": 605,
+      "heroCheaperCount": 1378,
+      "equalCount": 0,
+      "yangoCheaperCount": 57
+    },
+    "totalBatches": 144,
+    "cityId": "city_douala",
+    "currency": "XAF",
+    "failedPairs": 0,
+    "avgDistanceKm": 3.85,
+    "triggerType": "manual",
+    "avgPricePerKm": 402,
+    "logs": [
+      {
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala.",
+        "timestamp": "2026-10-01T15:09:12.436Z",
+        "level": "info"
+      }
+    ],
+    "completedBatches": 144,
+    "isTestSample": false,
+    "heroStats": {
+      "avgDriversCount": 0,
+      "maxPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "avgPrice": 944,
+      "count": 1433,
+      "minPrice": 0
+    },
+    "canonicalTripsCount": 1435,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1455,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2011,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1362,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1882,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1625,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2246,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1780,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2460,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1656,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2289,
+        "count": 287
+      }
+    },
+    "uuid": "9af08e4a-732d-4ae4-ab84-21fc11ef6352"
+  },
+  {
+    "id": 5,
+    "completedPairs": 1435,
+    "completedBatches": 144,
+    "cityName": "Douala",
+    "startedAt": "2026-10-01T13:02:46.083Z",
+    "isTestSample": false,
+    "logs": [
+      {
+        "level": "info",
+        "timestamp": "2026-10-01T13:02:46.083Z",
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala."
+      }
+    ],
+    "triggerType": "manual",
+    "failedPairs": 0,
+    "cityId": "city_douala",
+    "avgPrice": 1332,
+    "canonicalTripsCount": 1435,
+    "workersCount": 1,
+    "totalPairs": 1435,
+    "finishedAt": "2026-10-01T13:10:56.532Z",
+    "totalBatches": 144,
+    "avgDistanceKm": 3.85,
+    "triggeredByUserId": "usr_citrine_admin",
+    "tripMasterStats": {
+      "avgPrice": 2130,
+      "count": 1422,
+      "maxPrice": 0,
+      "minPrice": 0
+    },
+    "completedAt": "2026-10-01T13:10:56.532Z",
+    "avgPricePerKm": 346,
+    "deltaStats": {
+      "avgDeltaFcfa": 395,
+      "heroCheaperCount": 1317,
+      "yangoCheaperCount": 118,
+      "equalCount": 0
+    },
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "status": "completed",
+    "totalPossiblePairs": 1435,
+    "currency": "XAF",
+    "heroStats": {
+      "maxPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "count": 1435,
+      "avgPrice": 944,
+      "avgDriversCount": 0,
+      "minPrice": 0
+    },
+    "durationSeconds": 490,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1252,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2002,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1172,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1874,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1399,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2237,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1532,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2450,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1425,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2279,
+        "count": 287
+      }
+    },
+    "uuid": "ba8b11e8-a81e-4b0a-8ea9-796170efa807"
+  },
+  {
+    "id": 4,
+    "finishedAt": "2026-10-01T10:09:10.496Z",
+    "currency": "XAF",
+    "workersCount": 1,
+    "heroStats": {
+      "avgPrice": 588,
+      "minPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "avgDriversCount": 0,
+      "count": 420,
+      "maxPrice": 0
+    },
+    "totalBatches": 42,
+    "totalPairs": 420,
+    "deltaStats": {
+      "heroCheaperCount": 330,
+      "yangoCheaperCount": 90,
+      "avgDeltaFcfa": 210,
+      "equalCount": 0
+    },
+    "cityId": "city_douala",
+    "durationSeconds": 154,
+    "failedPairs": 0,
+    "canonicalTripsCount": 420,
+    "triggerType": "manual",
+    "completedBatches": 42,
+    "tripMasterStats": {
+      "count": 1,
+      "minPrice": 0,
+      "maxPrice": 0,
+      "avgPrice": 1000
+    },
+    "completedPairs": 420,
+    "totalPossiblePairs": 420,
+    "status": "completed",
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "completedAt": "2026-10-01T10:09:10.496Z",
+    "isTestSample": false,
+    "avgPrice": 784,
+    "avgPricePerKm": 453,
+    "logs": [
+      {
+        "level": "info",
+        "message": "Démarrage de la campagne (420 trajets) pour Douala.",
+        "timestamp": "2026-10-01T10:06:36.312Z"
+      }
+    ],
+    "startedAt": "2026-10-01T10:06:36.312Z",
+    "avgDistanceKm": 1.73,
+    "triggeredByUserId": "usr_citrine_admin",
+    "cityName": "Douala",
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 737,
+        "heroAvgPrice": 553,
+        "tripMasterAvgPrice": 940,
+        "count": 84
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 690,
+        "heroAvgPrice": 517,
+        "tripMasterAvgPrice": 880,
+        "count": 84
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 823,
+        "heroAvgPrice": 617,
+        "tripMasterAvgPrice": 1050,
+        "count": 84
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 902,
+        "heroAvgPrice": 676,
+        "tripMasterAvgPrice": 1150,
+        "count": 84
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 839,
+        "heroAvgPrice": 629,
+        "tripMasterAvgPrice": 1070,
+        "count": 84
+      }
+    },
+    "uuid": "be724349-eb6c-4e0f-9361-81f0f08aee92"
+  },
+  {
+    "id": 3,
+    "canonicalTripsCount": 1435,
+    "triggerType": "manual",
+    "heroStats": {
+      "minPrice": 0,
+      "avgPrice": 944,
+      "avgClosestDriverDistanceKm": 0,
+      "avgDriversCount": 0,
+      "count": 1435,
+      "maxPrice": 0
+    },
+    "status": "completed",
+    "failedPairs": 0,
+    "isTestSample": false,
+    "currency": "XAF",
+    "completedPairs": 1435,
+    "avgPricePerKm": 375,
+    "startedAt": "2026-10-01T09:51:02.823Z",
+    "totalPossiblePairs": 1435,
+    "cityName": "Douala",
+    "completedBatches": 144,
+    "avgDistanceKm": 3.85,
+    "durationSeconds": 492,
+    "triggeredByUserId": "usr_citrine_admin",
+    "completedAt": "2026-10-01T09:59:14.789Z",
+    "logs": [
+      {
+        "message": "Démarrage de la campagne (1435 trajets) pour Douala.",
+        "timestamp": "2026-10-01T09:51:02.823Z",
+        "level": "info"
+      }
+    ],
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "deltaStats": {
+      "avgDeltaFcfa": 504,
+      "heroCheaperCount": 1325,
+      "equalCount": 0,
+      "yangoCheaperCount": 110
+    },
+    "avgPrice": 1442,
+    "workersCount": 1,
+    "totalPairs": 1435,
+    "tripMasterStats": {
+      "maxPrice": 0,
+      "avgPrice": 2139,
+      "count": 1421,
+      "minPrice": 0
+    },
+    "cityId": "city_douala",
+    "totalBatches": 144,
+    "finishedAt": "2026-10-01T09:59:14.789Z",
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1355,
+        "heroAvgPrice": 887,
+        "tripMasterAvgPrice": 2011,
+        "count": 287
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1269,
+        "heroAvgPrice": 831,
+        "tripMasterAvgPrice": 1882,
+        "count": 287
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1514,
+        "heroAvgPrice": 991,
+        "tripMasterAvgPrice": 2246,
+        "count": 287
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1658,
+        "heroAvgPrice": 1086,
+        "tripMasterAvgPrice": 2460,
+        "count": 287
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1543,
+        "heroAvgPrice": 1010,
+        "tripMasterAvgPrice": 2289,
+        "count": 287
+      }
+    },
+    "uuid": "cdb6e000-b16f-4129-bf40-b2cef7898051"
+  },
+  {
+    "id": 2,
+    "finishedAt": "2026-10-01T08:52:32.554Z",
+    "canonicalTripsCount": 300,
+    "totalPairs": 300,
+    "cityName": "Douala",
+    "isTestSample": false,
+    "deltaStats": {
+      "heroCheaperCount": 286,
+      "equalCount": 0,
+      "avgDeltaFcfa": 410,
+      "yangoCheaperCount": 14
+    },
+    "completedAt": "2026-10-01T08:52:32.554Z",
+    "completedPairs": 300,
+    "cityId": "city_douala",
+    "avgPrice": 1710,
+    "logs": [
+      {
+        "level": "info",
+        "message": "Démarrage de la campagne (300 trajets) pour Douala.",
+        "timestamp": "2026-10-01T08:50:57.543Z"
+      }
+    ],
+    "completedBatches": 30,
+    "heroStats": {
+      "count": 300,
+      "maxPrice": 0,
+      "avgClosestDriverDistanceKm": 0,
+      "minPrice": 0,
+      "avgPrice": 1302,
+      "avgDriversCount": 0
+    },
+    "durationSeconds": 95,
+    "totalPossiblePairs": 300,
+    "workersCount": 1,
+    "startedAt": "2026-10-01T08:50:57.543Z",
+    "totalBatches": 30,
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "tripMasterStats": {
+      "count": 291,
+      "minPrice": 0,
+      "maxPrice": 0,
+      "avgPrice": 2846
+    },
+    "failedPairs": 0,
+    "triggerType": "manual",
+    "triggeredByUserId": "usr_admin_01",
+    "currency": "XAF",
+    "status": "completed",
+    "avgDistanceKm": 6.04,
+    "avgPricePerKm": 283,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1607,
+        "heroAvgPrice": 1224,
+        "tripMasterAvgPrice": 2675,
+        "count": 60
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1505,
+        "heroAvgPrice": 1146,
+        "tripMasterAvgPrice": 2504,
+        "count": 60
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1796,
+        "heroAvgPrice": 1367,
+        "tripMasterAvgPrice": 2988,
+        "count": 60
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1966,
+        "heroAvgPrice": 1497,
+        "tripMasterAvgPrice": 3273,
+        "count": 60
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1830,
+        "heroAvgPrice": 1393,
+        "tripMasterAvgPrice": 3045,
+        "count": 60
+      }
+    },
+    "uuid": "93d92669-14ec-4148-9c39-910674a90e1e"
+  },
+  {
+    "id": 1,
+    "cityId": "city_douala",
+    "finishedAt": "2026-10-01T07:44:53.617Z",
+    "totalBatches": 147,
+    "workersCount": 1,
+    "totalPairs": 1470,
+    "triggeredByUserId": "usr_citrine_admin",
+    "deltaStats": {
+      "yangoCheaperCount": 235,
+      "avgDeltaFcfa": 321,
+      "equalCount": 0,
+      "heroCheaperCount": 1235
+    },
+    "triggeredByUserName": "Citrine Mobilité (Super Admin)",
+    "completedAt": "2026-10-01T07:44:53.617Z",
+    "completedBatches": 147,
+    "currency": "XAF",
+    "logs": [
+      {
+        "timestamp": "2026-10-01T07:36:21.924Z",
+        "message": "Démarrage de la campagne (1470 trajets) pour Douala.",
+        "level": "info"
+      }
+    ],
+    "startedAt": "2026-10-01T07:36:21.924Z",
+    "durationSeconds": 512,
+    "cityName": "Douala",
+    "avgPricePerKm": 337,
+    "heroStats": {
+      "minPrice": 0,
+      "avgPrice": 902,
+      "avgClosestDriverDistanceKm": 0,
+      "avgDriversCount": 0,
+      "maxPrice": 0
+    },
+    "failedPairs": 0,
+    "isTestSample": false,
+    "status": "completed",
+    "totalPossiblePairs": 1470,
+    "triggerType": "manual",
+    "avgDistanceKm": 3.59,
+    "tripMasterStats": {
+      "avgPrice": 2222,
+      "maxPrice": 0,
+      "minPrice": 0
+    },
+    "avgPrice": 1211,
+    "completedPairs": 1470,
+    "canonicalTripsCount": 1470,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1138,
+        "heroAvgPrice": 848,
+        "tripMasterAvgPrice": 2089,
+        "count": 294
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1066,
+        "heroAvgPrice": 794,
+        "tripMasterAvgPrice": 1955,
+        "count": 294
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1272,
+        "heroAvgPrice": 947,
+        "tripMasterAvgPrice": 2333,
+        "count": 294
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1393,
+        "heroAvgPrice": 1037,
+        "tripMasterAvgPrice": 2555,
+        "count": 294
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1296,
+        "heroAvgPrice": 965,
+        "tripMasterAvgPrice": 2378,
+        "count": 294
+      }
+    },
+    "uuid": "e0aa90a3-bffa-4789-aff1-346f88648d70"
   }
 ]

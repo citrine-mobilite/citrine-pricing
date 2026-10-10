@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, ChevronDown, Check, X } from 'lucide-react';
 
 export interface SearchableOption {
-  value: string;
+  value: string | number;
   label: string;
   sublabel?: string;
   disabled?: boolean;
@@ -11,8 +11,8 @@ export interface SearchableOption {
 
 interface SearchableSelectProps {
   options: SearchableOption[];
-  value: string;
-  onChange: (value: string) => void;
+  value: string | number;
+  onChange: (value: any) => void;
   placeholder?: string;
   searchPlaceholder?: string;
   className?: string;
@@ -37,7 +37,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   // Selected option object
   const selectedOption = useMemo(() => {
-    return options.find((o) => o.value === value) || null;
+    return options.find((o) => String(o.value) === String(value)) || null;
   }, [options, value]);
 
   // Filter options based on search query

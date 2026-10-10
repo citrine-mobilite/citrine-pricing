@@ -9,14 +9,16 @@ interface SystemCounters {
   cities: number;
   neighborhoods: number;
   trips: number;
+  history: number;
 }
 
 let cachedCounters: SystemCounters = {
-  campaigns: 10,
+  campaigns: 25,
   users: 4,
   cities: 2,
   neighborhoods: 267,
-  trips: 20000
+  trips: 20000,
+  history: 10
 };
 
 function loadCounters(): SystemCounters {
@@ -25,11 +27,12 @@ function loadCounters(): SystemCounters {
       const raw = fs.readFileSync(COUNTERS_FILE, 'utf8');
       const data = JSON.parse(raw);
       cachedCounters = {
-        campaigns: Number(data.campaigns) || 10,
+        campaigns: Number(data.campaigns) || 25,
         users: Number(data.users) || 4,
         cities: Number(data.cities) || 2,
         neighborhoods: Number(data.neighborhoods) || 267,
-        trips: Number(data.trips) || 20000
+        trips: Number(data.trips) || 20000,
+        history: Number(data.history) || 10
       };
     }
   } catch (e: any) {

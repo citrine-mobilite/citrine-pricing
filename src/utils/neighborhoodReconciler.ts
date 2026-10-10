@@ -3,7 +3,7 @@ import { Neighborhood } from '../types';
 
 export interface ReconcileItem {
   status: 'update' | 'create' | 'ignored_douala_6' | 'invalid';
-  targetId?: string;
+  targetId?: string | number;
   cityName: string;
   ville?: string;
   departement?: string;
@@ -116,7 +116,7 @@ function parseCoordinate(val: any): number | null {
 function findBestMatch(
   cleanExcelName: string,
   existingList: Neighborhood[],
-  alreadyMatchedIds: Set<string>
+  alreadyMatchedIds: Set<string | number>
 ): { neighborhood: Neighborhood; score: number } | null {
   let bestMatch: Neighborhood | null = null;
   let bestScore = 0;
@@ -211,7 +211,7 @@ export async function parseNeighborhoodReconcileFile(
       (n) => n.cityId === cityId || (n.cityName && n.cityName.toLowerCase() === detectedCityName.toLowerCase())
     );
 
-    const alreadyMatchedIds = new Set<string>();
+    const alreadyMatchedIds = new Set<string | number>();
     const items: ReconcileItem[] = [];
 
     let toUpdateCount = 0;

@@ -146,8 +146,10 @@ export function generateBenchmarkPairs(
     list.push(nb);
   }
 
-  const getPairKey = (id1: string, id2: string): string => {
-    return id1 < id2 ? `${id1}---${id2}` : `${id2}---${id1}`;
+  const getPairKey = (id1: string | number, id2: string | number): string => {
+    const s1 = String(id1);
+    const s2 = String(id2);
+    return s1 < s2 ? `${s1}---${s2}` : `${s2}---${s1}`;
   };
 
   // 2. Traiter chaque ville de manière 100% indépendante
@@ -157,14 +159,15 @@ export function generateBenchmarkPairs(
 
     // Suivi des quotas dans cette ville
     const quotaTracker = new Map<string, Map<string, number>>();
-    const getQuotaCount = (nbId: string, targetKey: string): number => {
-      return quotaTracker.get(nbId)?.get(targetKey) || 0;
+    const getQuotaCount = (nbId: string | number, targetKey: string): number => {
+      return quotaTracker.get(String(nbId))?.get(targetKey) || 0;
     };
-    const incrementQuota = (nbId: string, targetKey: string) => {
-      let map = quotaTracker.get(nbId);
+    const incrementQuota = (nbId: string | number, targetKey: string) => {
+      const sId = String(nbId);
+      let map = quotaTracker.get(sId);
       if (!map) {
         map = new Map<string, number>();
-        quotaTracker.set(nbId, map);
+        quotaTracker.set(sId, map);
       }
       map.set(targetKey, (map.get(targetKey) || 0) + 1);
     };
