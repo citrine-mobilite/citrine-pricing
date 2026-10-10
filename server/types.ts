@@ -7,11 +7,19 @@ export interface Neighborhood {
   id: string;
   cityId: string;
   name: string;
+  ville?: string;
+  departement?: string;
+  arrondissement?: string;
+  fullAddress?: string;
   lat: number;
   lng: number;
   active: boolean;
-  zoneType?: 'commercial' | 'residential' | 'airport' | 'popular' | 'center';
+  status?: string;
+  zone?: string;
+  zoneType?: 'commercial' | 'residential' | 'airport' | 'popular' | 'center' | string;
+  district?: string;
   createdAt?: string;
+  updatedAt?: string;
   orderIndex?: number;
 }
 

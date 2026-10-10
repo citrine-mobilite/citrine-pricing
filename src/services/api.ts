@@ -238,6 +238,26 @@ export const api = {
     return res.json();
   },
 
+  async reconcileNeighborhoodsBatch(
+    cityId: string,
+    items: any[]
+  ): Promise<{ success: boolean; updatedCount: number; createdCount: number; ignoredCount: number; message: string }> {
+    const res = await fetch(`${BASE_URL}/neighborhoods/reconcile-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cityId, items })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de la rectification des quartiers.');
+    }
+    // Invalider le cache local pour recharger les nouveaux quartiers
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('citrine_nbs_cache'))
+      .forEach(k => localStorage.removeItem(k));
+    return res.json();
+  },
+
   // Campaigns (avec cache local 7 jours - conserve les anciennes et fusionne les nouvelles)
   async getCampaigns(cityId?: string): Promise<PricingCampaign[]> {
     const CACHE_KEY = `citrine_campaigns_v7_${cityId || 'all'}`;

@@ -20,55 +20,71 @@ export function cleanNeighborhoodBaseName(name: string | null | undefined): stri
 }
 
 /**
- * Détecte l'arrondissement officiel d'un quartier (pour Douala, Yaoundé et autres villes)
+ * Détecte l'arrondissement officiel d'un quartier directement depuis la propriété arrondissement
+ * (ou district / fullAddress / nom en repli si absent).
  */
-export function detectArrondissement(n: { name: string; district?: string; cityId?: string }): string {
+export function detectArrondissement(n: { name: string; district?: string; cityId?: string; arrondissement?: string; fullAddress?: string }): string {
+  // 1. Priorité absolue : le champ arrondissement explicite du quartier
+  if (n.arrondissement && n.arrondissement.trim()) {
+    const rawArr = n.arrondissement.trim();
+    const upper = rawArr.toUpperCase();
+    if (upper.includes('1ER') || upper.includes(' 1') || upper.endsWith('1')) {
+      if (upper.includes('YAOUND')) return 'Yaoundé 1er';
+      return 'Douala 1er';
+    }
+    if (upper.includes('2E') || upper.includes(' 2') || upper.endsWith('2')) {
+      if (upper.includes('YAOUND')) return 'Yaoundé 2e';
+      return 'Douala 2e';
+    }
+    if (upper.includes('3E') || upper.includes(' 3') || upper.endsWith('3')) {
+      if (upper.includes('YAOUND')) return 'Yaoundé 3e';
+      return 'Douala 3e';
+    }
+    if (upper.includes('4E') || upper.includes(' 4') || upper.endsWith('4')) {
+      if (upper.includes('YAOUND')) return 'Yaoundé 4e';
+      return 'Douala 4e';
+    }
+    if (upper.includes('5E') || upper.includes(' 5') || upper.endsWith('5')) {
+      if (upper.includes('YAOUND')) return 'Yaoundé 5e';
+      return 'Douala 5e';
+    }
+    if (upper.includes('6E') || upper.includes(' 6') || upper.endsWith('6')) return 'Yaoundé 6e';
+    if (upper.includes('7E') || upper.includes(' 7') || upper.endsWith('7')) return 'Yaoundé 7e';
+    return rawArr;
+  }
+
   if (n.district && n.district.trim()) {
     return n.district.trim();
   }
 
-  const upper = (n.name || '').toUpperCase();
+  // Repli résiduel si non renseigné
+  const upper = `${n.fullAddress || ''} ${n.name || ''}`.toUpperCase();
   const isYaounde = n.cityId === 'city_yaounde' || upper.includes('YAOUNDÉ') || upper.includes('YAOUNDE');
 
   if (isYaounde) {
-    if (upper.includes('YAOUNDÉ 1') || upper.includes('YAOUNDE 1') || upper.includes('BASTOS') || upper.includes('CENTRE') || upper.includes('NSIMALEN')) {
-      return 'Yaoundé 1er';
-    }
-    if (upper.includes('YAOUNDÉ 2') || upper.includes('YAOUNDE 2') || upper.includes('TSINGA') || upper.includes('MOKOLO')) {
-      return 'Yaoundé 2e';
-    }
-    if (upper.includes('YAOUNDÉ 3') || upper.includes('YAOUNDE 3') || upper.includes('BIYEM')) {
-      return 'Yaoundé 3e';
-    }
-    if (upper.includes('YAOUNDÉ 4') || upper.includes('YAOUNDE 4') || upper.includes('MVAN') || upper.includes('ODZA')) {
-      return 'Yaoundé 4e';
-    }
-    if (upper.includes('YAOUNDÉ 5') || upper.includes('YAOUNDE 5') || upper.includes('OMNISPORTS') || upper.includes('ESSOS') || upper.includes('MFANDENA')) {
-      return 'Yaoundé 5e';
-    }
-    if (upper.includes('YAOUNDÉ 6') || upper.includes('YAOUNDE 6') || upper.includes('MENDONG')) {
-      return 'Yaoundé 6e';
-    }
-    if (upper.includes('YAOUNDÉ 7') || upper.includes('YAOUNDE 7') || upper.includes('NKOLBISSON')) {
-      return 'Yaoundé 7e';
-    }
+    if (upper.includes('1ER') || upper.includes('1')) return 'Yaoundé 1er';
+    if (upper.includes('2E') || upper.includes('2')) return 'Yaoundé 2e';
+    if (upper.includes('3E') || upper.includes('3')) return 'Yaoundé 3e';
+    if (upper.includes('4E') || upper.includes('4')) return 'Yaoundé 4e';
+    if (upper.includes('5E') || upper.includes('5')) return 'Yaoundé 5e';
+    if (upper.includes('6E') || upper.includes('6')) return 'Yaoundé 6e';
+    if (upper.includes('7E') || upper.includes('7')) return 'Yaoundé 7e';
     return 'Yaoundé 1er';
   }
 
-  // Douala & général
-  if (upper.includes('DOUALA 1ER') || upper.includes('DOUALA 1') || upper.includes('AKWA') || upper.includes('BONANJO') || upper.includes('BONAPRISO') || upper.includes('DEIDO') || upper.includes('BALI')) {
+  if (upper.includes('1ER') || upper.includes('DOUALA 1') || upper.includes('AKWA') || upper.includes('BONANJO') || upper.includes('BONAPRISO') || upper.includes('DEIDO') || upper.includes('BALI')) {
     return 'Douala 1er';
   }
-  if (upper.includes('DOUALA 2E') || upper.includes('DOUALA 2') || upper.includes('NEW BELL') || upper.includes('NSSAM')) {
+  if (upper.includes('2E') || upper.includes('DOUALA 2') || upper.includes('NEW BELL')) {
     return 'Douala 2e';
   }
-  if (upper.includes('DOUALA 3E') || upper.includes('DOUALA 3') || upper.includes('BEPANDA') || upper.includes('BÉPANDA') || upper.includes('NDOGBONG') || upper.includes('LOGBESSOU') || upper.includes('NYALLA')) {
+  if (upper.includes('3E') || upper.includes('DOUALA 3') || upper.includes('BEPANDA') || upper.includes('NDOGPASS') || upper.includes('NYALLA')) {
     return 'Douala 3e';
   }
-  if (upper.includes('DOUALA 4E') || upper.includes('BONABÉRI') || upper.includes('BONABERI') || upper.includes('DOUALA 4')) {
+  if (upper.includes('4E') || upper.includes('DOUALA 4') || upper.includes('BONABÉRI') || upper.includes('BONABERI')) {
     return 'Douala 4e';
   }
-  if (upper.includes('DOUALA 5E') || upper.includes('DOUALA 5') || upper.includes('MAKEPE') || upper.includes('MAKÉPÉ') || upper.includes('BONAMOUS SADI') || upper.includes('BONAMOUSSADI') || upper.includes('KOTTO') || upper.includes('LOGPOM')) {
+  if (upper.includes('5E') || upper.includes('DOUALA 5') || upper.includes('MAKEPE') || upper.includes('BONAMOUS') || upper.includes('KOTTO') || upper.includes('LOGPOM')) {
     return 'Douala 5e';
   }
 
@@ -156,7 +172,7 @@ export function generateBenchmarkPairs(
 
     const origin = activeNbs[i];
     const originArr = detectArrondissement(origin);
-    const originBaseName = cleanNeighborhoodBaseName(origin.name);
+    const originName = (origin.name || '').trim().toLowerCase();
 
     if (isDouala && originArr !== 'Autre') {
       const targetArrs = (ALLOWED_ARRONDISSEMENT_TARGETS as Record<string, string[]>)[originArr] || ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e'];
@@ -171,7 +187,7 @@ export function generateBenchmarkPairs(
         for (const dest of activeNbs) {
           if (dest.id === origin.id) continue;
           if (origin.cityId && dest.cityId && origin.cityId !== dest.cityId) continue;
-          if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
+          if ((dest.name || '').trim().toLowerCase() === originName) continue;
 
           const destArr = detectArrondissement(dest);
           if (destArr !== targetArr) continue;
@@ -214,7 +230,7 @@ export function generateBenchmarkPairs(
       for (const dest of activeNbs) {
         if (dest.id === origin.id) continue;
         if (origin.cityId && dest.cityId && origin.cityId !== dest.cityId) continue;
-        if (cleanNeighborhoodBaseName(dest.name) === originBaseName) continue;
+        if ((dest.name || '').trim().toLowerCase() === originName) continue;
 
         const pairKey = getPairKey(origin.id, dest.id);
         if (seenPairKeys.has(pairKey)) continue;

@@ -174,11 +174,11 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
 
           {activeCampaign && Boolean(activeCampaign.yangoShortageCount && activeCampaign.yangoShortageCount > 0) && (
             <span
-              className="hidden md:inline-flex items-center gap-1 bg-purple-100 text-purple-950 border border-purple-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
+              className="inline-flex items-center gap-1 bg-purple-100 text-purple-950 border border-purple-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
               title="Trajets où aucun chauffeur VTC Yango n'était disponible (pénurie de véhicules)"
             >
               <AlertTriangle className="w-3 h-3 text-purple-700" />
-              <span>{activeCampaign.yangoShortageCount} pénurie(s) de véhicules</span>
+              <span>{activeCampaign.yangoShortageCount} pénurie(s)</span>
             </span>
           )}
 

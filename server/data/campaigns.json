@@ -1,5 +1,35 @@
 [
   {
+    "id": "0a221a99-b890-4a2e-90ef-994a9da67c68",
+    "cityId": "city_douala",
+    "cityName": "Douala",
+    "currency": "XAF",
+    "triggerType": "manual",
+    "triggeredByUserId": "usr_citrine_admin",
+    "triggeredByUserName": "Admin Citrine",
+    "triggeredByUserRole": "admin",
+    "status": "in_progress",
+    "totalPairs": 528,
+    "completedPairs": 360,
+    "failedPairs": 0,
+    "startedAt": "2026-10-09T23:22:51.884Z",
+    "isTestSample": false,
+    "totalPossiblePairs": 528,
+    "scopeMode": "global",
+    "hasJamsCount": 260,
+    "logs": [
+      {
+        "timestamp": "2026-10-09T23:22:51.884Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (528 trajets) par Admin Citrine (admin) pour Douala."
+      }
+    ],
+    "totalBatches": 53,
+    "workersCount": 1,
+    "completedBatches": 36,
+    "durationSeconds": 100
+  },
+  {
     "id": "46946caf-04e3-4416-b6b0-44f024b3cbae",
     "logs": [
       {

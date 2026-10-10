@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
-import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced } from '../db/memoryStore.js';
+import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced, saveNeighborhoodsDiskBackup } from '../db/memoryStore.js';
 import { City, Neighborhood } from '../types.js';
 
 const router = Router();
@@ -169,7 +169,7 @@ router.get('/api/neighborhoods', async (req: Request, res: Response) => {
 });
 
 router.post('/api/neighborhoods', async (req: Request, res: Response) => {
-  const { cityId, name, lat, lng, zoneType, active } = req.body;
+  const { cityId, name, lat, lng, zoneType, zone, active, status, fullAddress, arrondissement, ville, departement } = req.body;
   if (!cityId || !name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: 'cityId, nom, latitude et longitude sont obligatoires.' });
   }
@@ -179,18 +179,27 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Ville parente introuvable.' });
   }
 
+  const isActive = active !== undefined ? Boolean(active) : (status ? status.toLowerCase() !== 'inactif' : true);
+
   const newNb: Neighborhood = {
     id: `nb_${randomUUID()}`,
     cityId,
     name: name.trim(),
+    ville: ville ? String(ville).trim() : city.name,
+    departement: departement ? String(departement).trim() : 'Wouri',
+    arrondissement: arrondissement ? String(arrondissement).trim() : undefined,
+    fullAddress: fullAddress ? String(fullAddress).trim() : `${name.trim()}, ${arrondissement || city.name}`,
     lat: Number(lat),
     lng: Number(lng),
-    active: active !== undefined ? Boolean(active) : true,
-    zoneType: zoneType || 'commercial',
+    active: isActive,
+    status: status ? String(status).trim() : (isActive ? 'actif' : 'inactif'),
+    zone: zone ? String(zone).trim() : (zoneType || 'commercial'),
+    zoneType: (zone || zoneType) || 'commercial',
     createdAt: new Date().toISOString()
   };
 
   neighborhoods.push(newNb);
+  saveNeighborhoodsDiskBackup();
   await safeFirestoreWrite('createNb', () => setDoc(doc(db!, 'neighborhoods', newNb.id), cleanFirestoreDoc(newNb)));
 
   return res.status(201).json({ ...newNb, cityName: city.name });
@@ -203,13 +212,22 @@ router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Quartier introuvable.' });
   }
 
-  const { name, lat, lng, zoneType, active } = req.body;
+  const { name, lat, lng, zoneType, zone, active, status, fullAddress, arrondissement, ville, departement, cityId } = req.body;
   if (name !== undefined) nb.name = name.trim();
   if (lat !== undefined) nb.lat = Number(lat);
   if (lng !== undefined) nb.lng = Number(lng);
+  if (zone !== undefined) nb.zone = String(zone).trim();
   if (zoneType !== undefined) nb.zoneType = zoneType;
   if (active !== undefined) nb.active = Boolean(active);
+  if (status !== undefined) nb.status = String(status).trim();
+  if (fullAddress !== undefined) nb.fullAddress = String(fullAddress).trim();
+  if (arrondissement !== undefined) nb.arrondissement = String(arrondissement).trim();
+  if (ville !== undefined) nb.ville = String(ville).trim();
+  if (departement !== undefined) nb.departement = String(departement).trim();
+  if (cityId !== undefined) nb.cityId = String(cityId).trim();
+  nb.updatedAt = new Date().toISOString();
 
+  saveNeighborhoodsDiskBackup();
   await safeFirestoreWrite('updateNb', () => setDoc(doc(db!, 'neighborhoods', id), cleanFirestoreDoc(nb), { merge: true }));
   return res.json(nb);
 });
@@ -330,6 +348,113 @@ router.post('/api/neighborhoods/import-batch', async (req: Request, res: Respons
     success: true,
     count: createdNeighborhoods.length,
     message: `${createdNeighborhoods.length} quartiers importés avec succès.`
+  });
+});
+
+router.post('/api/neighborhoods/reconcile-batch', async (req: Request, res: Response) => {
+  const { cityId, items } = req.body;
+  if (!cityId || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'cityId et une liste non-vide de rectifications sont requis.' });
+  }
+
+  const city = cities.find(c => c.id === cityId);
+  if (!city) {
+    return res.status(404).json({ error: 'Ville introuvable.' });
+  }
+
+  let updatedCount = 0;
+  let createdCount = 0;
+  let ignoredCount = 0;
+  const modifiedDocs: Neighborhood[] = [];
+
+  for (const item of items) {
+    // 1. Protection stricte contre Douala 6ème (exclu à la demande de l'utilisateur)
+    const isDla6 = item.status === 'ignored_douala_6' ||
+      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.arrondissement || '') ||
+      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.fullAddress || '') ||
+      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.name || '');
+
+    if (isDla6) {
+      ignoredCount++;
+      continue;
+    }
+
+    if (item.status === 'update' && item.targetId) {
+      const existing = neighborhoods.find(n => n.id === item.targetId);
+      if (existing) {
+        existing.name = String(item.name).trim();
+        existing.fullAddress = String(item.fullAddress || '').trim();
+        if (item.ville) existing.ville = String(item.ville).trim();
+        if (item.departement) existing.departement = String(item.departement).trim();
+        if (item.arrondissement) existing.arrondissement = String(item.arrondissement).trim();
+        if (item.zone) existing.zone = String(item.zone).trim();
+        if (item.zoneType) existing.zoneType = item.zoneType;
+        if (item.itemStatus) existing.status = String(item.itemStatus).trim();
+        if (item.active !== undefined) existing.active = Boolean(item.active);
+        existing.lat = Number(item.lat);
+        existing.lng = Number(item.lng);
+        existing.updatedAt = new Date().toISOString();
+        updatedCount++;
+        modifiedDocs.push(existing);
+      }
+    } else if (item.status === 'create') {
+      const newNb: Neighborhood = {
+        id: `nb_dla_${randomUUID()}`,
+        cityId,
+        name: String(item.name).trim(),
+        ville: item.ville ? String(item.ville).trim() : city.name,
+        departement: item.departement ? String(item.departement).trim() : 'Wouri',
+        arrondissement: item.arrondissement ? String(item.arrondissement).trim() : undefined,
+        fullAddress: String(item.fullAddress || '').trim(),
+        lat: Number(item.lat),
+        lng: Number(item.lng),
+        active: item.active !== undefined ? Boolean(item.active) : true,
+        status: item.itemStatus ? String(item.itemStatus).trim() : (item.active === false ? 'inactif' : 'actif'),
+        zone: item.zone ? String(item.zone).trim() : 'commercial',
+        zoneType: item.zoneType || 'commercial',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      neighborhoods.push(newNb);
+      createdCount++;
+      modifiedDocs.push(newNb);
+    }
+  }
+
+  // Persistance immédiate sur le disque dans defaultNeighborhoods.json
+  saveNeighborhoodsDiskBackup();
+
+  // Persistance dans Firestore en arrière-plan sans bloquer
+  if (modifiedDocs.length > 0 && db && !isFirestoreQuotaExceeded()) {
+    safeFirestoreWrite('reconcileBatchNeighborhoods', async () => {
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < modifiedDocs.length; i += BATCH_SIZE) {
+        const chunk = modifiedDocs.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db!);
+        for (const nb of chunk) {
+          const cleaned = cleanFirestoreDoc({ ...nb, cityName: city.name });
+          batch.set(doc(db!, 'neighborhoods', nb.id), cleaned, { merge: true });
+        }
+        await batch.commit();
+      }
+    }).catch(e => console.warn('[Firestore] Reconcile batch save notice:', e?.message));
+  }
+
+  await recordHistory({
+    action: 'reconcile_neighborhoods',
+    eventType: 'neighborhoods',
+    title: 'Rectification des coordonnées et quartiers via Excel',
+    description: `${updatedCount} quartiers rectifiés, ${createdCount} nouveaux créés, ${ignoredCount} ignorés (Douala 6ème) pour ${city.name}.`,
+    status: 'success'
+  });
+
+  return res.json({
+    success: true,
+    updatedCount,
+    createdCount,
+    ignoredCount,
+    totalProcessed: updatedCount + createdCount,
+    message: `${updatedCount} quartier(s) rectifié(s) et ${createdCount} nouveau(x) quartier(s) créé(s) avec succès.`
   });
 });
 

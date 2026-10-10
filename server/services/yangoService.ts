@@ -371,7 +371,20 @@ export async function callYangoRoutestats(
 
     serviceLevels.forEach((sl: any) => {
       const clsName = (sl.class || sl.tariff_class || sl.name || '').toLowerCase();
-      const isUnavailable = Boolean(sl.tariff_unavailable || sl.tariff_unavailable?.code === 'no_free_cars_nearby');
+      // Pénurie (véhicules indisponibles ou tarif non disponible)
+      // 1. sl.tariff_unavailable explicite (boolean true ou objet avec code 'no_free_cars_nearby')
+      // 2. sl.paid_options?.alert_properties signalant explicitement "pas assez de véhicules disponibles"
+      // 3. sl.status === 'unavailable' ou sl.is_hidden === true
+      const hasShortageAlert = Boolean(
+        sl.paid_options?.alert_properties?.description?.toLowerCase()?.includes('pas assez de véhicules') ||
+        sl.paid_options?.alert_properties?.label?.toLowerCase()?.includes('véhicules')
+      );
+      const isUnavailable = Boolean(
+        sl.tariff_unavailable || 
+        sl.tariff_unavailable?.code === 'no_free_cars_nearby' ||
+        sl.status === 'unavailable' ||
+        hasShortageAlert
+      );
 
       if (isUnavailable) {
         unavailableClasses.push(clsName);
@@ -414,12 +427,15 @@ export async function callYangoRoutestats(
     const realDurationMin = extractYangoDuration(json, durationMin);
 
     const chosenPrice = priceEconom || priceConfort || priceMoto || 0;
+
+    // Détection réelle des embouteillages / heure de pointe (jams) :
+    // 1. json.jams explicite fourni par Yango
+    // 2. Ou indicateur de trafic / surcoût de congestion
+    // Attention: l'alerte "pas assez de véhicules" relève de la PÉNURIE et non d'un embouteillage routier.
     const hasJams = Boolean(
       json.jams === true ||
-      serviceLevels.some((sl: any) =>
-        (typeof sl.paid_options?.value === 'number' && sl.paid_options.value > 1) ||
-        Boolean(sl.paid_options?.alert_properties)
-      )
+      json.traffic_jams === true ||
+      json.traffic?.jams === true
     );
 
     return {

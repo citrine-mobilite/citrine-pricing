@@ -313,13 +313,13 @@ export const TripResultsView: React.FC<TripResultsViewProps> = ({
         data={normalizedTrips}
         isLoading={isLoading}
         rowClassName={(t) => {
+          if (t.yangoUnavailable) {
+            // Priorité absolue : quand il y a pénurie, c'est violet
+            return 'bg-purple-50/70 hover:bg-purple-100/70 text-slate-900 font-medium transition-colors';
+          }
           if (!t.jams) {
             // Quand jams est false, c'est jaune (fluide)
             return 'bg-amber-50/70 hover:bg-amber-100/60 text-slate-900 font-medium transition-colors';
-          }
-          if (t.yangoUnavailable) {
-            // Quand jams est true mais pénurie, c'est violet
-            return 'bg-purple-50/60 hover:bg-purple-100/60 text-slate-900 font-medium transition-colors';
           }
           // Quand jams est true, c'est normal (blanc)
           return 'hover:bg-slate-50/60 transition-colors';

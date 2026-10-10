@@ -35,11 +35,16 @@ export interface Neighborhood {
   id: string;
   cityId: string;
   cityName?: string;
+  ville?: string;
+  departement?: string;
+  arrondissement?: string;
   name: string;
+  zone?: string;
+  zoneType?: 'commercial' | 'residential' | 'airport' | 'popular' | 'center' | string;
+  status?: 'actif' | 'inactif' | boolean | string;
+  active: boolean;
   lat: number;
   lng: number;
-  active: boolean;
-  zoneType?: 'commercial' | 'residential' | 'airport' | 'popular' | 'center';
   fullAddress?: string;
   district?: string;
   createdAt?: string;

@@ -135,6 +135,7 @@ export async function loginWithGoogle(): Promise<User> {
     // Auto-grant admin to project owner emails
     if (
       fbUser.email === 'citrinemobilite@gmail.com' ||
+      fbUser.email === 'landrymoutongo97@gmail.com' ||
       fbUser.email === 'landrymouns@gmail.com' ||
       fbUser.email === 'admin@vtc-pricing.internal'
     ) {

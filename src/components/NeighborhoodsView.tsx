@@ -42,23 +42,38 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const filteredNeighborhoods = useMemo(() => {
     return cityNeighborhoods.filter((nb) => {
       if (selectedArrondissement === 'all') return true;
-      return nb.name.toLowerCase().includes(selectedArrondissement.toLowerCase());
+      const target = selectedArrondissement.toLowerCase().trim();
+      const inArr = (nb.arrondissement || '').toLowerCase().includes(target);
+      const inName = (nb.name || '').toLowerCase().includes(target);
+      const inAddress = (nb.fullAddress || '').toLowerCase().includes(target);
+      return inArr || inName || inAddress;
     });
   }, [cityNeighborhoods, selectedArrondissement]);
 
   // Add / Edit Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [newNbName, setNewNbName] = useState('');
+  const [newNbVille, setNewNbVille] = useState(currentCity?.name || 'Douala');
+  const [newNbDepartement, setNewNbDepartement] = useState('Wouri');
+  const [newNbArrondissement, setNewNbArrondissement] = useState('Douala 1er');
+  const [newNbFullAddress, setNewNbFullAddress] = useState('');
   const [newNbLat, setNewNbLat] = useState('4.0531');
   const [newNbLng, setNewNbLng] = useState('9.7028');
   const [newNbZone, setNewNbZone] = useState('commercial');
+  const [newNbStatus, setNewNbStatus] = useState('actif');
+  const [newNbActive, setNewNbActive] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [editingNb, setEditingNb] = useState<Neighborhood | null>(null);
   const [editNbName, setEditNbName] = useState('');
+  const [editNbVille, setEditNbVille] = useState('');
+  const [editNbDepartement, setEditNbDepartement] = useState('');
+  const [editNbArrondissement, setEditNbArrondissement] = useState('');
+  const [editNbFullAddress, setEditNbFullAddress] = useState('');
   const [editNbLat, setEditNbLat] = useState('4.0531');
   const [editNbLng, setEditNbLng] = useState('9.7028');
   const [editNbZone, setEditNbZone] = useState('commercial');
+  const [editNbStatus, setEditNbStatus] = useState('actif');
   const [editNbActive, setEditNbActive] = useState(true);
   const [editNbCityId, setEditNbCityId] = useState(currentCity?.id || 'city_douala');
   const [editError, setEditError] = useState<string | null>(null);
@@ -70,9 +85,14 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const openEditModal = (nb: Neighborhood) => {
     setEditingNb(nb);
     setEditNbName(nb.name);
+    setEditNbVille(nb.ville || nb.cityName || currentCity?.name || 'Douala');
+    setEditNbDepartement(nb.departement || 'Wouri');
+    setEditNbArrondissement(nb.arrondissement || '');
+    setEditNbFullAddress(nb.fullAddress || `${nb.name}, ${nb.arrondissement || ''}`);
     setEditNbLat(nb.lat.toString());
     setEditNbLng(nb.lng.toString());
-    setEditNbZone(nb.zoneType || 'commercial');
+    setEditNbZone(nb.zone || nb.zoneType || 'commercial');
+    setEditNbStatus(typeof nb.status === 'string' ? nb.status : (nb.active !== false ? 'actif' : 'inactif'));
     setEditNbActive(nb.active ?? true);
     setEditNbCityId(nb.cityId || currentCity?.id || 'city_douala');
     setEditError(null);
@@ -86,9 +106,15 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     try {
       await api.updateNeighborhood(editingNb.id, {
         name: editNbName.trim(),
+        ville: editNbVille.trim() || currentCity?.name || 'Douala',
+        departement: editNbDepartement.trim() || 'Wouri',
+        arrondissement: editNbArrondissement.trim(),
+        fullAddress: editNbFullAddress.trim() || `${editNbName.trim()}, ${editNbArrondissement.trim()}`,
         lat: parseFloat(editNbLat) || editingNb.lat,
         lng: parseFloat(editNbLng) || editingNb.lng,
+        zone: editNbZone,
         zoneType: editNbZone as any,
+        status: editNbStatus,
         active: editNbActive,
         cityId: editNbCityId
       });
@@ -109,13 +135,20 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
       await api.createNeighborhood({
         cityId: currentCity?.id || 'city_douala',
         name: newNbName.trim(),
+        ville: newNbVille.trim() || currentCity?.name || 'Douala',
+        departement: newNbDepartement.trim() || 'Wouri',
+        arrondissement: newNbArrondissement.trim(),
+        fullAddress: newNbFullAddress.trim() || `${newNbName.trim()}, ${newNbArrondissement.trim()}`,
         lat: parseFloat(newNbLat),
         lng: parseFloat(newNbLng),
+        zone: newNbZone,
         zoneType: newNbZone as any,
-        active: true
+        status: newNbStatus,
+        active: newNbActive
       });
       setShowAddModal(false);
       setNewNbName('');
+      setNewNbFullAddress('');
       onRefresh();
     } catch (err: any) {
       alert(err.message || "Erreur lors de l'ajout.");
@@ -221,12 +254,24 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         onClose={() => setShowAddModal(false)}
         name={newNbName}
         onNameChange={setNewNbName}
+        ville={newNbVille}
+        onVilleChange={setNewNbVille}
+        departement={newNbDepartement}
+        onDepartementChange={setNewNbDepartement}
+        arrondissement={newNbArrondissement}
+        onArrondissementChange={setNewNbArrondissement}
+        fullAddress={newNbFullAddress}
+        onFullAddressChange={setNewNbFullAddress}
         lat={newNbLat}
         onLatChange={setNewNbLat}
         lng={newNbLng}
         onLngChange={setNewNbLng}
         zone={newNbZone}
         onZoneChange={setNewNbZone}
+        status={newNbStatus}
+        onStatusChange={setNewNbStatus}
+        active={newNbActive}
+        onActiveChange={setNewNbActive}
         cityId={currentCity?.id || 'city_douala'}
         cities={cities}
         isSubmitting={isSubmitting}
@@ -241,12 +286,22 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         neighborhood={editingNb}
         name={editNbName}
         onNameChange={setEditNbName}
+        ville={editNbVille}
+        onVilleChange={setEditNbVille}
+        departement={editNbDepartement}
+        onDepartementChange={setEditNbDepartement}
+        arrondissement={editNbArrondissement}
+        onArrondissementChange={setEditNbArrondissement}
+        fullAddress={editNbFullAddress}
+        onFullAddressChange={setEditNbFullAddress}
         lat={editNbLat}
         onLatChange={setEditNbLat}
         lng={editNbLng}
         onLngChange={setEditNbLng}
         zone={editNbZone}
         onZoneChange={setEditNbZone}
+        status={editNbStatus}
+        onStatusChange={setEditNbStatus}
         active={editNbActive}
         onActiveChange={setEditNbActive}
         cityId={editNbCityId}
@@ -263,6 +318,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         onClose={() => setShowImportModal(false)}
         cities={cities}
         currentCityId={currentCity?.id || cities[0]?.id || ''}
+        existingNeighborhoods={neighborhoods}
         onSuccess={onRefresh}
       />
     </div>

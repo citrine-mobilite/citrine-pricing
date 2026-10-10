@@ -10,6 +10,16 @@ import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'jso
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
 const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
+const NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/db/defaultNeighborhoods.json');
+
+export function saveNeighborhoodsDiskBackup() {
+  try {
+    fs.writeFileSync(NEIGHBORHOODS_FILE, JSON.stringify(neighborhoods, null, 2), 'utf8');
+    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans defaultNeighborhoods.json`);
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing neighborhoods to disk:', e.message);
+  }
+}
 
 export function saveLocalCampaignsDiskBackup() {
   try {
@@ -106,11 +116,52 @@ export function loadLocalCampaignsDiskBackup() {
   }
 }
 
-// Hachage sécurisé bcrypt avec salt pour l'administrateur
-const DEFAULT_PASSWORD_HASH = bcrypt.hashSync('c!tr!n$@2026', 10);
+// Hachage sécurisé bcrypt avec salt pour le compte administrateur citrinemobilite@gmail.com
+export const CITRINE_ADMIN_PASSWORD = 'Citrine2026!';
+const CITRINE_ADMIN_HASH = bcrypt.hashSync(CITRINE_ADMIN_PASSWORD, 10);
+const DEFAULT_PASSWORD_HASH = CITRINE_ADMIN_HASH;
 
-// Reactive state cache for users loaded from database
-export let users: User[] = [];
+export const defaultUsers: User[] = [
+  {
+    id: 'usr_citrine_admin',
+    name: 'Admin Citrine',
+    email: 'citrinemobilite@gmail.com',
+    role: 'admin',
+    active: true,
+    passwordHash: CITRINE_ADMIN_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_landry',
+    name: 'Landry Moutongo',
+    email: 'landrymoutongo97@gmail.com',
+    role: 'admin',
+    active: true,
+    passwordHash: CITRINE_ADMIN_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_doleres',
+    name: 'Doleres',
+    email: 'doleres@citrine-pricing.com',
+    role: 'responsable',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_marc',
+    name: 'Marc',
+    email: 'employe@citrine-pricing.cm',
+    role: 'employe',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  }
+];
+
+// Reactive state cache for users loaded from database (initialisé avec les comptes par défaut)
+export let users: User[] = defaultUsers.map(u => ({ ...u }));
 
 export let cities: City[] = [
   {

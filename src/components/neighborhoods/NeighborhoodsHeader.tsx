@@ -123,13 +123,14 @@ export const NeighborhoodsHeader: React.FC<NeighborhoodsHeaderProps> = ({
           <span className="hidden sm:inline">Vider</span>
         </button>
 
-        {/* Excel Import */}
+        {/* Excel Import / Rectifier */}
         <button
           onClick={onOpenImportModal}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-sm"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-sm"
+          title="Importer ou rectifier les coordonnées et quartiers depuis Excel"
         >
           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Importer Excel</span>
+          <span>Rectifier / Importer Excel</span>
         </button>
 
         {/* Add single */}

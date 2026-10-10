@@ -675,8 +675,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         activeCampaignId={activeCampaignId}
         totalTripsCount={trips.length}
         filteredTripsCount={filteredTrips.length}
-        hasJamsInCampaign={Boolean(displayedCampaign?.hasJamsCount && displayedCampaign.hasJamsCount > 0)}
-        hasShortageInCampaign={Boolean(displayedCampaign?.yangoShortageCount && displayedCampaign.yangoShortageCount > 0)}
+        hasJamsInCampaign={Boolean((displayedCampaign?.hasJamsCount && displayedCampaign.hasJamsCount > 0) || trips.some(t => t.jams))}
+        hasShortageInCampaign={Boolean((displayedCampaign?.yangoShortageCount && displayedCampaign.yangoShortageCount > 0) || trips.some(t => t.yangoUnavailable))}
         onResetFilters={handleResetTripFilters}
         onOpenRecommendations={() => setIsRecommendationsOpen(true)}
       />
