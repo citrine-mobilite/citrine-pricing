@@ -39,7 +39,10 @@ if (typeof window !== 'undefined') {
       lower.includes('resource_exhausted') ||
       lower.includes('quota limit exceeded') ||
       lower.includes('resource-exhausted') ||
-      lower.includes('free daily write units')
+      lower.includes('free daily write units') ||
+      lower.includes('free daily read units') ||
+      lower.includes('free tier database') ||
+      lower.includes('daily read units per project')
     ) {
       triggerQuotaExceededNotice();
     }

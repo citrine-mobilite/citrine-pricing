@@ -9,6 +9,7 @@ import {
   initCanonicalCampaignResults,
   deleteCanonicalCampaign,
   isFirestoreQuotaExceeded,
+  isFirestoreWriteQuotaExceeded,
   isQuotaExceededError,
   flagFirestoreQuotaExceeded
 } from '../db/firestore.js';
@@ -495,7 +496,7 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
   activePricingSessions.clear();
   saveLocalCampaignsDiskBackup();
 
-  if (db) {
+  if (db && !isFirestoreQuotaExceeded() && !isFirestoreWriteQuotaExceeded()) {
     try {
       const snap = await getDocs(collection(db, 'campaigns'));
       if (!snap.empty) {
@@ -510,7 +511,9 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
         await batch.commit();
       }
     } catch (e: any) {
-      console.warn('[Firestore] Delete all campaigns error:', e.message);
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      }
     }
   }
 
@@ -535,14 +538,12 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   campaignSessions.delete(id);
   saveLocalCampaignsDiskBackup();
 
-  // Nettoyage Firestore asynchrone non-bloquant
-  if (db) {
-    Promise.allSettled([
-      deleteCanonicalCampaign(id),
-      deleteHistoryForCampaign(id)
-    ]).catch(e => console.warn('[Firestore] Background delete error:', e));
-  } else {
-    deleteHistoryForCampaign(id).catch(() => {});
+  // Nettoyage de l'historique en mémoire locale
+  deleteHistoryForCampaign(id).catch(() => {});
+
+  // Nettoyage Firestore asynchrone non-bloquant si les écritures sont permises
+  if (db && !isFirestoreWriteQuotaExceeded()) {
+    deleteCanonicalCampaign(id).catch(() => {});
   }
 
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });

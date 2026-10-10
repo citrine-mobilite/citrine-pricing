@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite } from '../db/firestore.js';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
   users,
+  memoryCampaigns,
   historyRecords,
   setHistoryRecords,
   activePricingSessions,
@@ -170,35 +171,12 @@ router.post('/api/cron/trigger-scheduled', async (_req: Request, res: Response) 
 });
 
 // History (Servi depuis la RAM en priorité - 0 lecture Firestore)
-router.get('/api/history', async (req: Request, res: Response) => {
-  const forceRefresh = req.query.forceRefresh === 'true';
-  if (db && (historyRecords.length === 0 || forceRefresh)) {
-    try {
-      const snap = await getDocs(collection(db, 'history'));
-      if (!snap.empty) {
-        const records: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setHistoryRecords(records);
-      }
-    } catch (e: any) {
-      console.warn('[Firestore] get history error:', e.message);
-    }
-  }
+router.get('/api/history', async (_req: Request, res: Response) => {
   return res.json(historyRecords);
 });
 
 router.delete('/api/history', async (_req: Request, res: Response) => {
   setHistoryRecords([]);
-  if (db) {
-    try {
-      const snap = await getDocs(collection(db, 'history'));
-      for (const d of snap.docs) {
-        await safeFirestoreWrite('deleteHistDoc', () => deleteDoc(d.ref));
-      }
-    } catch (e: any) {
-      console.warn('[Firestore] clear history error:', e.message);
-    }
-  }
   return res.json({ success: true, message: 'Tout l’historique a été vidé avec succès.' });
 });
 
@@ -206,27 +184,21 @@ router.delete('/api/history/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const filtered = historyRecords.filter(h => h.id !== id);
   setHistoryRecords(filtered);
-  await safeFirestoreWrite('deleteHistory', () => deleteDoc(doc(db!, 'history', id)));
   return res.json({ success: true, message: 'Entrée d’historique supprimée.' });
 });
 
 // System Status
 router.get('/api/system/status', async (_req: Request, res: Response) => {
-  let dbCampaignsCount = 0;
-  if (db) {
-    try {
-      const snap = await getDocs(collection(db, 'campaigns'));
-      dbCampaignsCount = snap.size;
-    } catch {}
-  }
+  const isQuota = isFirestoreQuotaExceeded();
   return res.json({
     status: 'ok',
-    storageMode: 'firestore_canonical_optimized',
+    storageMode: isQuota ? 'hybrid_local_disk' : 'firestore_canonical_optimized',
     activeCampaigns: activePricingSessions.size,
-    totalCampaigns: dbCampaignsCount + activePricingSessions.size,
+    totalCampaigns: memoryCampaigns.length + activePricingSessions.size,
     totalNeighborhoods: neighborhoods.length,
     totalCities: cities.length,
-    maxFirestorePayload: '< 1 MB (Chunked < 400 KB)'
+    maxFirestorePayload: '< 1 MB (Chunked < 400 KB)',
+    isQuotaExceeded: isQuota
   });
 });
 

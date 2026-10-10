@@ -96,14 +96,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     if (!currentCity?.active) return [];
     const map = new Map<string, { name: string; cityName: string; count: number }>();
 
-    // Arrondissements de référence pour la ville active
-    const standardArrs = currentCity.id === 'city_yaounde'
-      ? ['Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e']
-      : ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e'];
-
-    standardArrs.forEach((arr) => {
-      map.set(arr, { name: arr, cityName: currentCity.name, count: 0 });
-    });
+    // Détection 100% dynamique des arrondissements et zones de la ville active (évolutif pour toute ville)
 
     // Quartiers actifs de la ville courante uniquement
     cityActiveNeighborhoods.forEach((nb) => {

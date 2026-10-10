@@ -35,7 +35,8 @@ export const NeighborhoodExcelImportModal: React.FC<NeighborhoodExcelImportModal
   existingNeighborhoods,
   onSuccess
 }) => {
-  const [importCityId, setImportCityId] = useState(currentCityId || 'city_douala');
+  const [importCityId, setImportCityId] = useState(currentCityId || cities[0]?.id || '');
+  const selectedCity = cities.find((c) => c.id === importCityId) || cities[0];
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
@@ -403,9 +404,9 @@ export const NeighborhoodExcelImportModal: React.FC<NeighborhoodExcelImportModal
 
                           {/* Ville / Dept / Arrondissement */}
                           <td className="py-2.5 px-3 whitespace-nowrap">
-                            <div className="font-semibold text-slate-800">{item.arrondissement || item.cityName || 'Douala'}</div>
+                            <div className="font-semibold text-slate-800">{item.arrondissement || item.cityName || selectedCity?.name || '—'}</div>
                             <div className="text-[10px] text-slate-400">
-                              {item.departement ? `${item.departement} • ` : ''}{item.ville || item.cityName || 'Douala'}
+                              {item.departement ? `${item.departement} • ` : ''}{item.ville || item.cityName || selectedCity?.name || '—'}
                             </div>
                           </td>
 

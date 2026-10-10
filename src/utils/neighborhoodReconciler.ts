@@ -203,9 +203,12 @@ export async function parseNeighborhoodReconcileFile(
       };
     }
 
-    // Filtrer les quartiers existants de la ville concernée (ex: Douala)
+    // Filtrer les quartiers existants de la ville concernée de façon dynamique
+    const detectedCityName = existingNeighborhoods.find((n) => n.cityId === cityId)?.cityName || existingNeighborhoods.find((n) => n.cityId === cityId)?.ville || cityId.replace(/^city_/, '').replace(/_/g, ' ') || 'Ville';
+    const detectedDepartement = existingNeighborhoods.find((n) => n.cityId === cityId)?.departement || '';
+
     const cityExisting = existingNeighborhoods.filter(
-      (n) => n.cityId === cityId || (cityId === 'city_douala' && (n.cityName?.toLowerCase().includes('douala') || !n.cityId))
+      (n) => n.cityId === cityId || (n.cityName && n.cityName.toLowerCase() === detectedCityName.toLowerCase())
     );
 
     const alreadyMatchedIds = new Set<string>();
@@ -253,9 +256,9 @@ export async function parseNeighborhoodReconcileFile(
         ignoredDouala6Count++;
         items.push({
           status: 'ignored_douala_6',
-          cityName: rawVille || 'Douala',
-          ville: rawVille || 'Douala',
-          departement: rawDepartement || 'Wouri',
+          cityName: rawVille || detectedCityName,
+          ville: rawVille || detectedCityName,
+          departement: rawDepartement || detectedDepartement,
           arrondissement: rawArrondissement || 'DOUALA 6EME',
           name: rawQuartier,
           zone: rawZone || 'commercial',
@@ -278,9 +281,9 @@ export async function parseNeighborhoodReconcileFile(
         invalidCount++;
         items.push({
           status: 'invalid',
-          cityName: rawVille || 'Douala',
-          ville: rawVille || 'Douala',
-          departement: rawDepartement || '',
+          cityName: rawVille || detectedCityName,
+          ville: rawVille || detectedCityName,
+          departement: rawDepartement || detectedDepartement,
           arrondissement: rawArrondissement,
           name: rawQuartier,
           zone: rawZone || '',
@@ -295,7 +298,7 @@ export async function parseNeighborhoodReconcileFile(
       }
 
       const cleanExcelName = normalizeString(rawQuartier);
-      const fullAddress = rawAdresse || `${rawQuartier}, ${rawArrondissement || 'DOUALA'}, ${rawDepartement || 'LITTORAL'}, CAMEROUN`;
+      const fullAddress = rawAdresse || `${rawQuartier}${rawArrondissement ? ', ' + rawArrondissement : ''}`;
 
       // 3. Recherche du meilleur quartier existant à mettre à jour
       const matchResult = findBestMatch(cleanExcelName, cityExisting, alreadyMatchedIds);
@@ -309,9 +312,9 @@ export async function parseNeighborhoodReconcileFile(
         items.push({
           status: 'update',
           targetId: existing.id,
-          cityName: rawVille || existing.cityName || 'Douala',
-          ville: rawVille || existing.ville || existing.cityName || 'Douala',
-          departement: rawDepartement || existing.departement || 'Wouri',
+          cityName: rawVille || existing.cityName || detectedCityName,
+          ville: rawVille || existing.ville || existing.cityName || detectedCityName,
+          departement: rawDepartement || existing.departement || detectedDepartement,
           arrondissement: rawArrondissement || existing.arrondissement || '',
           name: rawQuartier, // Nouveau nom propre et court (ex: "Bali")
           oldName: existing.name, // Ancien nom long
@@ -333,9 +336,9 @@ export async function parseNeighborhoodReconcileFile(
 
         items.push({
           status: 'create',
-          cityName: rawVille || 'Douala',
-          ville: rawVille || 'Douala',
-          departement: rawDepartement || 'Wouri',
+          cityName: rawVille || detectedCityName,
+          ville: rawVille || detectedCityName,
+          departement: rawDepartement || detectedDepartement,
           arrondissement: rawArrondissement,
           name: rawQuartier,
           fullAddress,

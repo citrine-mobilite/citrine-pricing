@@ -14,7 +14,7 @@ export interface Neighborhood {
   lat: number;
   lng: number;
   active: boolean;
-  status?: string;
+  status?: 'actif' | 'inactif' | boolean | string;
   zone?: string;
   zoneType?: 'commercial' | 'residential' | 'airport' | 'popular' | 'center' | string;
   district?: string;
@@ -263,10 +263,17 @@ export interface PricingCampaign {
   totalPossiblePairs?: number;
   comment?: string; // Commentaire libre sur la campagne (ex: météo, pluie, contexte de circulation, etc.)
   comments?: string; // Alias
-  scopeMode?: 'city' | 'intra' | 'inter';
+  scopeMode?: 'city' | 'intra' | 'inter' | 'global';
   arrondissement?: string;
   originArrondissement?: string;
   destArrondissement?: string;
+  arrondissementStats?: Record<string, {
+    arrondissement: string;
+    avgPrice: number;
+    heroAvgPrice?: number;
+    tripMasterAvgPrice?: number;
+    count: number;
+  }>;
   hasJamsCount?: number; // Nombre de trajets avec jams: true
   yangoShortageCount?: number; // Nombre de trajets avec pénurie de chauffeurs Yango
   batchSize?: number;

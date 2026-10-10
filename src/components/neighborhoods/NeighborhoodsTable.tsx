@@ -23,10 +23,10 @@ export const NeighborhoodsTable: React.FC<NeighborhoodsTableProps> = ({
       key: 'ville',
       label: 'Ville',
       sortable: true,
-      exportValue: (nb) => nb.ville || nb.cityName || cityName || 'Douala',
+      exportValue: (nb) => nb.ville || nb.cityName || cityName || '—',
       render: (nb) => (
         <span className="font-medium text-slate-800 text-xs">
-          {nb.ville || nb.cityName || cityName || 'Douala'}
+          {nb.ville || nb.cityName || cityName || '—'}
         </span>
       )
     },
@@ -34,10 +34,10 @@ export const NeighborhoodsTable: React.FC<NeighborhoodsTableProps> = ({
       key: 'departement',
       label: 'Département',
       sortable: true,
-      exportValue: (nb) => nb.departement || 'Wouri',
+      exportValue: (nb) => nb.departement || '—',
       render: (nb) => (
         <span className="text-slate-600 text-xs">
-          {nb.departement || 'Wouri'}
+          {nb.departement || '—'}
         </span>
       )
     },
@@ -103,7 +103,7 @@ export const NeighborhoodsTable: React.FC<NeighborhoodsTableProps> = ({
       key: 'status',
       label: 'Statut',
       sortable: true,
-      exportValue: (nb) => nb.status || (nb.active ? 'Actif' : 'Inactif'),
+      exportValue: (nb) => (typeof nb.status === 'string' ? nb.status : (nb.active ? 'Actif' : 'Inactif')),
       render: (nb) => (
         <button
           onClick={() => onToggleActive(nb)}
@@ -112,7 +112,7 @@ export const NeighborhoodsTable: React.FC<NeighborhoodsTableProps> = ({
           }`}
           title="Cliquer pour basculer Actif / Inactif"
         >
-          <span>{nb.status || (nb.active ? 'Actif' : 'Inactif')}</span>
+          <span>{typeof nb.status === 'string' ? nb.status : (nb.active ? 'Actif' : 'Inactif')}</span>
         </button>
       )
     },

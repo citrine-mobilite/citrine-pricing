@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { PricingCampaign, City } from '../types';
+import { PricingCampaign, City, Neighborhood } from '../types';
 import { SearchableSelect, SearchableOption } from './SearchableSelect';
+import { detectArrondissement } from '../utils/routeMatrix';
 import {
   TrendingUp,
   TrendingDown,
@@ -13,13 +14,15 @@ import {
   RotateCcw,
   MapPin,
   Building2,
-  Zap
+  Zap,
+  Info
 } from 'lucide-react';
 import Highcharts from 'highcharts';
 
 interface TemporalComparisonViewProps {
   campaigns: PricingCampaign[];
   cities?: City[];
+  neighborhoods?: Neighborhood[];
   onSelectCampaign?: (campaignId: string) => void;
 }
 
@@ -49,7 +52,8 @@ const VEHICLE_CLASSES: VehicleClassConfig[] = [
 
 export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
   campaigns,
-  cities = []
+  cities = [],
+  neighborhoods = []
 }) => {
   const [selectedClass, setSelectedClass] = useState<VehicleClassKey>('eco');
   const [mode, setMode] = useState<ComparisonMode>('campaign_pair');
@@ -61,30 +65,83 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
   const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
   const [jamsFilter, setJamsFilter] = useState<'all' | 'with_jams' | 'without_jams'>('all');
 
+  // Extraction 100% dynamique et exhaustive des arrondissements
   const availableArrondissements = useMemo(() => {
     const set = new Set<string>();
-    campaigns.forEach(c => {
-      if (c.arrondissement) set.add(c.arrondissement);
-    });
-    ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e', 'Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e'].forEach(a => set.add(a));
-    return Array.from(set).sort();
-  }, [campaigns]);
 
-  // Campagnes filtrées pour l'évolution temporelle
+    // 1. Scanner les quartiers (filtrés par ville si une ville spécifique est sélectionnée)
+    const nbsToScan = (cityFilter !== 'all' && neighborhoods.length > 0)
+      ? neighborhoods.filter(n => n.cityId === cityFilter)
+      : neighborhoods;
+
+    nbsToScan.forEach(nb => {
+      const arr = detectArrondissement(nb);
+      if (arr && arr.trim() && arr !== 'Centre / Général') {
+        set.add(arr.trim());
+      } else if (nb.arrondissement && nb.arrondissement.trim()) {
+        set.add(nb.arrondissement.trim());
+      }
+    });
+
+    // 2. Scanner les campagnes pour repérer tout arrondissement nommé ou ventilé
+    campaigns.forEach(c => {
+      if (cityFilter !== 'all' && c.cityId !== cityFilter) return;
+      if (c.arrondissement && c.arrondissement.trim()) set.add(c.arrondissement.trim());
+      if (c.originArrondissement && c.originArrondissement.trim()) set.add(c.originArrondissement.trim());
+      if (c.destArrondissement && c.destArrondissement.trim()) set.add(c.destArrondissement.trim());
+      if (c.arrondissementStats) {
+        Object.keys(c.arrondissementStats).forEach(arr => {
+          if (arr && arr.trim()) set.add(arr.trim());
+        });
+      }
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+  }, [campaigns, neighborhoods, cityFilter]);
+
+  // Campagnes filtrées pour l'évolution temporelle avec filtrage par arrondissement non-bloquant
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter((c) => {
+      // 1. Filtre Ville
       if (cityFilter !== 'all' && c.cityId !== cityFilter) return false;
 
       const isSample = Boolean(c.isTestSample || (c.sampleLimit && c.sampleLimit <= 50) || (c.totalPairs && c.totalPairs <= 50));
       const isIntra = Boolean(c.scopeMode === 'intra' || c.arrondissement);
+      const isInter = Boolean(c.scopeMode === 'inter' || (c.originArrondissement && c.destArrondissement));
 
+      // 2. Filtre Périmètre / Type de relevé
       if (scopeFilter === 'test_sample' && !isSample) return false;
-      if (scopeFilter === 'city_wide' && (isSample || isIntra)) return false;
-      if (scopeFilter === 'arrondissement') {
-        if (!isIntra) return false;
-        if (arrondissementFilter !== 'all' && c.arrondissement !== arrondissementFilter) return false;
+      if (scopeFilter === 'city_wide' && (isSample || isIntra || isInter)) return false;
+      if (scopeFilter === 'arrondissement' && !isIntra && !isInter && arrondissementFilter === 'all') {
+        // Si l'utilisateur clique sur "Relevés par arrondissement" sans choisir un arrondissement précis,
+        // on ne garde que les relevés ciblant spécifiquement un arrondissement
+        return false;
       }
 
+      // 3. Filtre par Arrondissement sélectionné (infaillible et intelligent)
+      if (arrondissementFilter !== 'all') {
+        const targetArr = arrondissementFilter.toLowerCase().trim();
+        const cArr = (c.arrondissement || '').toLowerCase().trim();
+        const oArr = (c.originArrondissement || '').toLowerCase().trim();
+        const dArr = (c.destArrondissement || '').toLowerCase().trim();
+
+        const matchesExplicitArr = cArr === targetArr || oArr === targetArr || dArr === targetArr;
+        const hasArrStats = Boolean(
+          c.arrondissementStats &&
+          Object.keys(c.arrondissementStats).some(k => k.toLowerCase().trim() === targetArr)
+        );
+        const isGlobalCityCampaign = Boolean(
+          c.scopeMode === 'global' || c.scopeMode === 'city' || (!c.scopeMode && !c.arrondissement)
+        );
+
+        // Une campagne est retenue si elle cible cet arrondissement, possède des stats pour cet arrondissement,
+        // ou est un relevé global de la ville (qui couvre mathématiquement cet arrondissement)
+        if (!matchesExplicitArr && !hasArrStats && !isGlobalCityCampaign) {
+          return false;
+        }
+      }
+
+      // 4. Filtre Trafic
       if (jamsFilter === 'with_jams') {
         if (!c.hasJamsCount || c.hasJamsCount <= 0) return false;
       } else if (jamsFilter === 'without_jams') {
@@ -122,9 +179,30 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
     }
   }, [sorted]);
 
-  // Helper to extract class price for a campaign
+  // Helper to extract class price for a campaign (avec prise en compte des statistiques par arrondissement)
   const getClassPrice = (c: PricingCampaign, op: 'yango' | 'hero' | 'tripmaster', cls: VehicleClassKey): number => {
     if (!c) return 0;
+
+    // Si un arrondissement précis est sélectionné et que la campagne possède des données ventilées :
+    if (arrondissementFilter !== 'all' && c.arrondissementStats) {
+      const targetKey = Object.keys(c.arrondissementStats).find(
+        k => k.toLowerCase().trim() === arrondissementFilter.toLowerCase().trim()
+      );
+      if (targetKey && c.arrondissementStats[targetKey]) {
+        const arrData = c.arrondissementStats[targetKey];
+        if (cls === 'eco') {
+          if (op === 'yango') return arrData.avgPrice || c.avgPrice || 0;
+          if (op === 'hero') return arrData.heroAvgPrice || c.heroStats?.avgPrice || 0;
+          return arrData.tripMasterAvgPrice || c.tripMasterStats?.avgPrice || 0;
+        }
+        if (cls === 'confort') {
+          if (op === 'yango') return arrData.avgPrice ? Math.round(arrData.avgPrice * 1.35) : 0;
+          if (op === 'hero') return arrData.heroAvgPrice ? Math.round(arrData.heroAvgPrice * 1.35) : 0;
+          return arrData.tripMasterAvgPrice ? Math.round(arrData.tripMasterAvgPrice * 1.35) : 0;
+        }
+      }
+    }
+
     const basePrice = c.avgPrice || 0;
     const heroBase = c.heroStats?.avgPrice || 0;
     const tmBase = c.tripMasterStats?.avgPrice || 0;
@@ -698,7 +776,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 text-xs">
-          {/* Ville */}
+          {/* 1. Ville */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
               <Building2 className="w-3 h-3 text-[#1F4F4A]" />
@@ -706,7 +784,10 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             </label>
             <select
               value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
+              onChange={(e) => {
+                setCityFilter(e.target.value);
+                setArrondissementFilter('all');
+              }}
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
             >
               <option value="all">Toutes les villes</option>
@@ -716,91 +797,106 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             </select>
           </div>
 
-          {/* Périmètre */}
+          {/* 2. Arrondissement (Toujours accessible et dynamique) */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-[#1F4F4A]" />
+              <MapPin className="w-3 h-3 text-teal-700" />
+              <span>Arrondissement</span>
+            </label>
+            <select
+              value={arrondissementFilter}
+              onChange={(e) => setArrondissementFilter(e.target.value)}
+              className={`w-full rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
+                arrondissementFilter !== 'all'
+                  ? 'bg-teal-50 border border-teal-300 text-teal-900 font-semibold'
+                  : 'bg-slate-50 border border-slate-200 text-slate-700'
+              }`}
+            >
+              <option value="all">Tous les arrondissements ({availableArrondissements.length})</option>
+              {availableArrondissements.map((arr) => (
+                <option key={arr} value={arr}>{arr}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Périmètre / Type de relevé */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+              <Filter className="w-3 h-3 text-[#1F4F4A]" />
               <span>Périmètre</span>
             </label>
             <select
               value={scopeFilter}
-              onChange={(e) => {
-                setScopeFilter(e.target.value as any);
-                if (e.target.value !== 'arrondissement') setArrondissementFilter('all');
-              }}
+              onChange={(e) => setScopeFilter(e.target.value as any)}
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
             >
               <option value="all">Tous les périmètres</option>
-              <option value="city_wide">Ville entière</option>
-              <option value="arrondissement">Par Arrondissement</option>
-              <option value="test_sample">Échantillons test (&le; 50)</option>
+              <option value="city_wide">Relevés complets (Ville entière)</option>
+              <option value="arrondissement">Relevés ciblés par arrondissement</option>
+              <option value="test_sample">Échantillons tests (&le; 50 trajets)</option>
             </select>
           </div>
 
-          {/* Arrondissement Spécifique si sélectionné */}
-          {scopeFilter === 'arrondissement' ? (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-teal-600" />
-                <span>Arrondissement</span>
-              </label>
-              <select
-                value={arrondissementFilter}
-                onChange={(e) => setArrondissementFilter(e.target.value)}
-                className="w-full bg-teal-50 border border-teal-300 text-teal-900 rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
-              >
-                <option value="all">Tous les arrondissements</option>
-                {availableArrondissements.map((arr) => (
-                  <option key={arr} value={arr}>{arr}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
-                <Zap className="w-3 h-3 text-amber-500" />
-                <span>Trafic / Heures de pointe</span>
-              </label>
-              <select
-                value={jamsFilter}
-                onChange={(e) => setJamsFilter(e.target.value as any)}
-                className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
-                  jamsFilter === 'with_jams'
-                    ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                }`}
-              >
-                <option value="all">Tous (Pointe & Fluide)</option>
-                <option value="with_jams">🚗 Heure de pointe</option>
-                <option value="without_jams">🟢 Fluide uniquement</option>
-              </select>
-            </div>
-          )}
-
-          {/* 4e colonne si scopeFilter === 'arrondissement' */}
-          {scopeFilter === 'arrondissement' && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
-                <Zap className="w-3 h-3 text-amber-500" />
-                <span>Heure de pointe</span>
-              </label>
-              <select
-                value={jamsFilter}
-                onChange={(e) => setJamsFilter(e.target.value as any)}
-                className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
-                  jamsFilter === 'with_jams'
-                    ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                }`}
-              >
-                <option value="all">Tous (Pointe & Fluide)</option>
-                <option value="with_jams">🚗 Heure de pointe</option>
-                <option value="without_jams">🟢 Fluide uniquement</option>
-              </select>
-            </div>
-          )}
+          {/* 4. Trafic / Heures de pointe */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-500" />
+              <span>Trafic / Heures de pointe</span>
+            </label>
+            <select
+              value={jamsFilter}
+              onChange={(e) => setJamsFilter(e.target.value as any)}
+              className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
+                jamsFilter === 'with_jams'
+                  ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              <option value="all">Tous (Pointe & Fluide)</option>
+              <option value="with_jams">🚗 Heure de pointe uniquement</option>
+              <option value="without_jams">🟢 Fluide uniquement</option>
+            </select>
+          </div>
         </div>
+
+        {/* Indicateur explicatif si un arrondissement précis est sélectionné */}
+        {arrondissementFilter !== 'all' && (
+          <div className="flex items-center gap-2 bg-teal-50/70 border border-teal-200/80 rounded-lg px-3 py-1.5 text-xs text-teal-900">
+            <Info className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+            <span>
+              Filtrage actif sur <b>{arrondissementFilter}</b> : les moyennes et courbes de prix affichent les tarifs spécifiques de cet arrondissement (relevés dédiés ou trajets ventilés de la ville).
+            </span>
+          </div>
+        )}
       </div>
+
+      {/* Fallback si aucun relevé ne correspond aux filtres combinés */}
+      {filteredCampaigns.length === 0 && (
+        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-6 text-center space-y-3">
+          <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+            <Filter className="w-5 h-5" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800">
+            Aucun relevé de pricing ne correspond aux filtres sélectionnés
+          </h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto">
+            {arrondissementFilter !== 'all' ? `Aucune campagne trouvée pour « ${arrondissementFilter} » avec ces critères. ` : ''}
+            Réinitialisez les filtres pour visualiser l'ensemble des courbes d'évolution disponibles.
+          </p>
+          <button
+            onClick={() => {
+              setCityFilter('all');
+              setArrondissementFilter('all');
+              setScopeFilter('all');
+              setJamsFilter('all');
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#1F4F4A] hover:bg-[#183f3b] text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Réinitialiser les filtres</span>
+          </button>
+        </div>
+      )}
 
       {/* Header and Controls */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs space-y-3">
@@ -1101,9 +1197,21 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
 
         {/* Highcharts Render Container */}
         <div className="p-3 sm:p-5">
-          {comparison && comparison.relevantCampaigns.length === 0 ? (
-            <div className="py-16 text-center text-xs text-slate-400">
-              Aucun relevé disponible pour afficher le graphique sur cette période.
+          {!comparison || comparison.relevantCampaigns.length === 0 ? (
+            <div className="py-16 text-center text-xs text-slate-400 space-y-2">
+              <p>Aucun relevé disponible pour afficher le graphique sur cette période.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCityFilter('all');
+                  setArrondissementFilter('all');
+                  setScopeFilter('all');
+                  setJamsFilter('all');
+                }}
+                className="text-[11px] font-semibold text-[#1F4F4A] hover:underline cursor-pointer"
+              >
+                Réinitialiser les filtres
+              </button>
             </div>
           ) : (
             <div ref={chartContainerRef} className="w-full min-h-[320px]" />

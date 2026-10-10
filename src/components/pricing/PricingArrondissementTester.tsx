@@ -35,8 +35,8 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
     }));
   }, [arrondissementOptions, arrondissements, cityName]);
 
-  const defaultFirst = effectiveOptions[0]?.name || 'Douala 1er';
-  const defaultSecond = effectiveOptions[2]?.name || effectiveOptions[1]?.name || 'Douala 3e';
+  const defaultFirst = effectiveOptions[0]?.name || '';
+  const defaultSecond = effectiveOptions[1]?.name || effectiveOptions[0]?.name || '';
 
   const [selectedArr, setSelectedArr] = useState<string>(defaultFirst);
   const [originArr, setOriginArr] = useState<string>(defaultFirst);

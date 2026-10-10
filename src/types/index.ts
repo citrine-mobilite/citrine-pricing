@@ -145,10 +145,17 @@ export interface PricingCampaign {
   isTestSample?: boolean;
   comment?: string; // Commentaire sur la campagne (météo, trafic, etc.)
   comments?: string;
-  scopeMode?: 'city' | 'intra' | 'inter';
+  scopeMode?: 'city' | 'intra' | 'inter' | 'global';
   arrondissement?: string;
   originArrondissement?: string;
   destArrondissement?: string;
+  arrondissementStats?: Record<string, {
+    arrondissement: string;
+    avgPrice: number;
+    heroAvgPrice?: number;
+    tripMasterAvgPrice?: number;
+    count: number;
+  }>;
   hasJamsCount?: number;
   yangoShortageCount?: number; // Nombre de trajets avec pénurie de chauffeurs Yango
   batchSize?: number;

@@ -244,6 +244,7 @@ function AppContent() {
                   <TemporalComparisonView
                     campaigns={campaigns}
                     cities={enrichedCities}
+                    neighborhoods={neighborhoods}
                     onSelectCampaign={handleSelectCampaign}
                   />
                 )}

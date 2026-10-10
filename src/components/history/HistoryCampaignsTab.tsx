@@ -34,9 +34,8 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   const availableArrondissements = useMemo(() => {
     const set = new Set<string>();
     campaigns.forEach(c => {
-      if (c.arrondissement) set.add(c.arrondissement);
+      if (c.arrondissement && c.arrondissement.trim()) set.add(c.arrondissement.trim());
     });
-    ['Douala 1er', 'Douala 2e', 'Douala 3e', 'Douala 4e', 'Douala 5e', 'Yaoundé 1er', 'Yaoundé 2e', 'Yaoundé 3e', 'Yaoundé 4e', 'Yaoundé 5e', 'Yaoundé 6e', 'Yaoundé 7e'].forEach(a => set.add(a));
     return Array.from(set).sort();
   }, [campaigns]);
 

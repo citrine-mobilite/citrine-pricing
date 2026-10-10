@@ -24,11 +24,20 @@ try {
   setLogLevel('silent');
 } catch {}
 
-// Filtrer les déconnexions normales de flux inactifs ('Disconnecting idle stream') de console.error
+// Filtrer les déconnexions normales de flux et erreurs de quota Firestore de console.error
 const origConsoleError = console.error;
 console.error = (...args: any[]) => {
-  const msg = String(args[0] || '');
-  if (msg.includes('Disconnecting idle stream') || msg.includes('Timed out waiting for new targets')) {
+  const msg = args.map(a => String(a?.message || a || '')).join(' ');
+  if (
+    msg.includes('Disconnecting idle stream') ||
+    msg.includes('Timed out waiting for new targets') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('Free daily read units') ||
+    msg.includes('Free daily write units') ||
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('deleting related history for campaign')
+  ) {
     return;
   }
   origConsoleError.apply(console, args);
@@ -71,17 +80,53 @@ try {
 
 export { db };
 
-let firestoreReadQuotaExceededUntil = 0;
-let firestoreWriteQuotaExceededUntil = 0;
+const DATA_DIR = path.resolve(process.cwd(), 'server/data');
+const QUOTA_STATE_FILE = path.resolve(DATA_DIR, 'quota_state.json');
+
+function loadPersistentQuotaState(): { readUntil: number; writeUntil: number } {
+  try {
+    if (fs.existsSync(QUOTA_STATE_FILE)) {
+      const raw = fs.readFileSync(QUOTA_STATE_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      const now = Date.now();
+      return {
+        readUntil: typeof data.readUntil === 'number' && data.readUntil > now ? data.readUntil : 0,
+        writeUntil: typeof data.writeUntil === 'number' && data.writeUntil > now ? data.writeUntil : 0
+      };
+    }
+  } catch {}
+  return { readUntil: 0, writeUntil: 0 };
+}
+
+function savePersistentQuotaState(readUntil: number, writeUntil: number) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(QUOTA_STATE_FILE, JSON.stringify({
+      readUntil,
+      writeUntil,
+      updatedAt: new Date().toISOString()
+    }, null, 2), 'utf8');
+  } catch {}
+}
+
+const initialQuota = loadPersistentQuotaState();
+let firestoreReadQuotaExceededUntil = initialQuota.readUntil;
+let firestoreWriteQuotaExceededUntil = initialQuota.writeUntil;
 let warnedQuotaExceeded = false;
 
 export function isQuotaExceededError(err: any): boolean {
-  const msg = String(err?.message || err || '');
-  return msg.includes('Quota limit exceeded') ||
-         msg.includes('RESOURCE_EXHAUSTED') ||
-         msg.includes('Quota exceeded') ||
-         msg.includes('Free daily read units') ||
-         msg.includes('Free daily write units');
+  if (!err) return false;
+  const msg = String(err?.message || err?.details || err?.code || err || '').toLowerCase();
+  return msg.includes('quota limit exceeded') ||
+         msg.includes('resource_exhausted') ||
+         msg.includes('resource-exhausted') ||
+         msg.includes('quota exceeded') ||
+         msg.includes('free daily read units') ||
+         msg.includes('free daily write units') ||
+         msg.includes('free tier database') ||
+         msg.includes('quota metric') ||
+         err?.code === 'resource-exhausted' ||
+         err?.code === 8;
 }
 
 export function isWriteQuotaError(err: any): boolean {
@@ -102,16 +147,18 @@ export function isFirestoreQuotaExceeded(): boolean {
 }
 
 export function flagFirestoreReadQuotaExceeded(err?: any) {
-  firestoreReadQuotaExceededUntil = Date.now() + 15 * 60 * 1000; // 15 min cooldown
+  // Cooldown de 24 heures pour le quota journalier Free Tier Google Cloud Firestore
+  firestoreReadQuotaExceededUntil = Date.now() + 24 * 60 * 60 * 1000;
+  savePersistentQuotaState(firestoreReadQuotaExceededUntil, firestoreWriteQuotaExceededUntil);
   if (!warnedQuotaExceeded) {
     warnedQuotaExceeded = true;
     console.warn('[Firestore Read Shield] Quota journalier de lecture atteint (Free Tier). Bascule transparente en lecture locale RAM + Disque. Les écritures Firestore continuent.');
-    setTimeout(() => { warnedQuotaExceeded = false; }, 15 * 60 * 1000);
   }
 }
 
 export function flagFirestoreWriteQuotaExceeded(err?: any) {
-  firestoreWriteQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+  firestoreWriteQuotaExceededUntil = Date.now() + 24 * 60 * 60 * 1000;
+  savePersistentQuotaState(firestoreReadQuotaExceededUntil, firestoreWriteQuotaExceededUntil);
   console.warn('[Firestore Write Shield] Quota journalier d\'écriture atteint. Bascule en sauvegarde locale persistante (RAM + Disque).');
 }
 
@@ -409,24 +456,38 @@ export async function deleteCanonicalCampaign(campaignId: string): Promise<void>
   if (!db) return;
 
   await safeFirestoreWrite('deleteCanonicalCampaign', async () => {
-    // 1. Supprimer le document principal de campagne
+    // 1. Supprimer le document principal de campagne (écritures directes O(1) sans AUCUNE lecture)
     await deleteDoc(doc(db!, 'campaigns', campaignId)).catch(() => {});
     // 2. Supprimer le document de résultats consolidé
     await deleteDoc(doc(db!, 'campaign_results', campaignId)).catch(() => {});
     
-    // 3. Rechercher et supprimer en un seul batch tous les lots et partitions existants
-    try {
-      const q = query(collection(db!, 'campaign_results'), where('campaignId', '==', campaignId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const batch = writeBatch(db!);
-        snap.docs.forEach((d) => {
-          batch.delete(d.ref);
-        });
-        await batch.commit();
+    // 3. Supprimer les partitions prévisibles (deleteDoc ne consomme aucune unité de lecture Firestore)
+    for (let p = 2; p <= 10; p++) {
+      deleteDoc(doc(db!, 'campaign_results', `${campaignId}_part${p}`)).catch(() => {});
+    }
+
+    // 4. Supprimer les lots prévisibles
+    for (let lot = 0; lot <= 30; lot++) {
+      deleteDoc(doc(db!, 'campaign_results', `${campaignId}_lot_${lot}`)).catch(() => {});
+    }
+
+    // 5. Uniquement si la lecture est permise et non plafonnée, faire un nettoyage de sécurité complémentaire
+    if (!isFirestoreReadQuotaExceeded()) {
+      try {
+        const q = query(collection(db!, 'campaign_results'), where('campaignId', '==', campaignId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const batch = writeBatch(db!);
+          snap.docs.forEach((d) => {
+            batch.delete(d.ref);
+          });
+          await batch.commit();
+        }
+      } catch (e: any) {
+        if (isQuotaExceededError(e)) {
+          flagFirestoreQuotaExceeded(e);
+        }
       }
-    } catch {
-      // Ignore if no batches found
     }
   });
 }

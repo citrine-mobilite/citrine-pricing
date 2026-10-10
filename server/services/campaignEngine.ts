@@ -31,7 +31,7 @@ import {
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
 import { callTripMasterStats } from './tripMasterService.js';
-import { generateBenchmarkPairs } from '../../src/utils/routeMatrix.js';
+import { generateBenchmarkPairs, detectArrondissement } from '../../src/utils/routeMatrix.js';
 
 export function cleanNeighborhoodName(name: string | null | undefined): string {
   if (!name) return '—';
@@ -582,6 +582,47 @@ export async function finalizeCampaignExecution(
     equalCount,
     avgDeltaFcfa: completed > 0 ? Math.round(totalDelta / completed) : 0
   };
+
+  // Répartition statistique dynamique par arrondissement (pour filtres analytiques instantanés)
+  const arrMap: Record<string, { sumY: number; countY: number; sumH: number; countH: number; sumT: number; countT: number; count: number }> = {};
+  const nbMap = new Map<string, string>();
+  for (const nb of neighborhoods) {
+    if (nb.name) {
+      nbMap.set(nb.name.toLowerCase().trim(), detectArrondissement(nb));
+    }
+  }
+
+  for (const t of canonicalTrips) {
+    const oArr = nbMap.get((t.origin || '').toLowerCase().trim());
+    const dArr = nbMap.get((t.destination || '').toLowerCase().trim());
+    const targets = new Set<string>();
+    if (oArr) targets.add(oArr);
+    if (dArr) targets.add(dArr);
+
+    for (const arr of targets) {
+      if (!arrMap[arr]) {
+        arrMap[arr] = { sumY: 0, countY: 0, sumH: 0, countH: 0, sumT: 0, countT: 0, count: 0 };
+      }
+      arrMap[arr].count++;
+      const y = t.prices?.yango?.eco;
+      const h = t.prices?.heroCab?.eco;
+      const tm = t.prices?.tripMaster?.eco;
+      if (y && y > 0) { arrMap[arr].sumY += y; arrMap[arr].countY++; }
+      if (h && h > 0) { arrMap[arr].sumH += h; arrMap[arr].countH++; }
+      if (tm && tm > 0) { arrMap[arr].sumT += tm; arrMap[arr].countT++; }
+    }
+  }
+
+  campaign.arrondissementStats = {};
+  for (const [arrName, d] of Object.entries(arrMap)) {
+    campaign.arrondissementStats[arrName] = {
+      arrondissement: arrName,
+      avgPrice: d.countY > 0 ? Math.round(d.sumY / d.countY) : 0,
+      heroAvgPrice: d.countH > 0 ? Math.round(d.sumH / d.countH) : 0,
+      tripMasterAvgPrice: d.countT > 0 ? Math.round(d.sumT / d.countT) : 0,
+      count: d.count
+    };
+  }
 
   campaign.canonicalTripsCount = canonicalTrips.length;
 

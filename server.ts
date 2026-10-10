@@ -2,23 +2,24 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-
 import http from 'http';
+import app from './server/app.js';
 
-import authRoutes from './server/routes/authRoutes.js';
-import cityRoutes from './server/routes/cityRoutes.js';
-import campaignRoutes from './server/routes/campaignRoutes.js';
-import settingsRoutes from './server/routes/settingsRoutes.js';
-import { syncFromFirestore } from './server/db/memoryStore.js';
-
-dotenv.config();
-
-// Filtrer les logs bruyants [vite] ou WebSocket au niveau du serveur Node.js
+// Filtrer les logs bruyants [vite], WebSocket ou erreurs de quota Firestore au niveau du serveur Node.js
 const origConsoleError = console.error;
 console.error = (...args: any[]) => {
   const msg = args.map(a => String(a?.message || a || '')).join(' ');
-  if (msg.includes('[vite]') || msg.includes('WebSocket') || msg.includes('websocket')) {
+  if (
+    msg.includes('[vite]') ||
+    msg.includes('WebSocket') ||
+    msg.includes('websocket') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('Free daily read units') ||
+    msg.includes('Free daily write units') ||
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('deleting related history for campaign')
+  ) {
     return;
   }
   origConsoleError.apply(console, args);
@@ -27,29 +28,7 @@ console.error = (...args: any[]) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-
-// Middleware CORS et parsing JSON
-app.use(express.json({ limit: '10mb' }));
-app.use((_req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (_req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-// Enregistrement des sous-modules d'API
-app.use(authRoutes);
-app.use(cityRoutes);
-app.use(campaignRoutes);
-app.use(settingsRoutes);
-
-// Synchronisation initiale Firestore en arrière-plan
-syncFromFirestore().catch(e => console.warn('[Firestore] Sync warning:', e.message));
 
 // Servir Vite en Développement ou dist en Production
 async function startServer() {

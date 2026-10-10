@@ -192,7 +192,7 @@ export const NeighborhoodModal: React.FC<NeighborhoodModalProps> = ({
                   type="text"
                   value={arrondissement}
                   onChange={(e) => onArrondissementChange(e.target.value)}
-                  placeholder="Ex: Douala 1er, Douala 5e"
+                  placeholder="Ex: 1er, 2e, Centre, District Nord..."
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#3D8B85] focus:bg-white transition"
                 />
               </div>
