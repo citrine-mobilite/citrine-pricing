@@ -4,7 +4,20 @@ import { PricingCampaign } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { DataTable, Column } from './DataTable';
-import { ArrowRight, RotateCw, Trash2, Clock, MessageSquare, Play, Zap, Filter, RotateCcw, Building2, MapPin } from 'lucide-react';
+import {
+  ArrowRight,
+  RotateCw,
+  Trash2,
+  Clock,
+  MessageSquare,
+  Play,
+  Zap,
+  Filter,
+  RotateCcw,
+  Building2,
+  MapPin,
+  Award
+} from 'lucide-react';
 import { computeCampaignDuration, getCampaignPeakHourInfo, matchesTimeSlotFilter, TimeSlotFilter } from '../utils/durationUtils';
 
 interface CampaignsViewProps {
@@ -79,6 +92,67 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
     timeSlotFilter !== 'all' ||
     statusFilter !== 'all';
 
+  // Synthèse tarifaire et trafic pour les 4 cartes (filtrable dynamiquement)
+  const filteredPricingSummary = useMemo(() => {
+    const completedCamps = filteredCampaigns.filter(c => c.status === 'completed');
+    let sumYango = 0, countYango = 0;
+    let sumHero = 0, countHero = 0;
+    let sumTm = 0, countTm = 0;
+    let heroWinsTotal = 0, yangoWinsTotal = 0, comparableTripsTotal = 0;
+    let peakCampaignsCount = 0;
+    let jamsTotalCount = 0;
+    let shortageTotalCount = 0;
+
+    for (const c of filteredCampaigns) {
+      const peakInfo = getCampaignPeakHourInfo(c);
+      if (peakInfo.isPeakHour) peakCampaignsCount++;
+      jamsTotalCount += peakInfo.jamsCount;
+      shortageTotalCount += peakInfo.shortageCount;
+    }
+
+    for (const c of completedCamps) {
+      let yPrice = c.avgPrice || c.classStats?.econom?.avgPrice || 0;
+      let hPrice = c.heroStats?.avgPrice || c.classesStats?.hero?.avgPrice || 0;
+      let tmPrice = c.tripMasterStats?.avgPrice || 0;
+
+      if (arrondissementFilter !== 'all' && c.arrondissementStats) {
+        const key = Object.keys(c.arrondissementStats).find(
+          k => k.toLowerCase().trim() === arrondissementFilter.toLowerCase().trim()
+        );
+        if (key && c.arrondissementStats[key]) {
+          yPrice = c.arrondissementStats[key].avgPrice || yPrice;
+          hPrice = c.arrondissementStats[key].heroAvgPrice || hPrice;
+          tmPrice = c.arrondissementStats[key].tripMasterAvgPrice || tmPrice;
+        }
+      }
+
+      if (yPrice > 0) { sumYango += yPrice; countYango++; }
+      if (hPrice > 0) { sumHero += hPrice; countHero++; }
+      if (tmPrice > 0) { sumTm += tmPrice; countTm++; }
+
+      if (c.deltaStats) {
+        heroWinsTotal += c.deltaStats.heroCheaperCount || 0;
+        yangoWinsTotal += c.deltaStats.yangoCheaperCount || 0;
+        comparableTripsTotal += (c.deltaStats.heroCheaperCount || 0) + (c.deltaStats.yangoCheaperCount || 0) + (c.deltaStats.equalCount || 0);
+      } else if (hPrice > 0 && yPrice > 0) {
+        const pairs = c.completedPairs || 1;
+        comparableTripsTotal += pairs;
+        if (hPrice < yPrice) heroWinsTotal += pairs;
+        else if (yPrice < hPrice) yangoWinsTotal += pairs;
+      }
+    }
+
+    return {
+      avgYango: countYango > 0 ? Math.round(sumYango / countYango) : 0,
+      avgHero: countHero > 0 ? Math.round(sumHero / countHero) : 0,
+      avgTm: countTm > 0 ? Math.round(sumTm / countTm) : 0,
+      heroWinRate: comparableTripsTotal > 0 ? Math.round((heroWinsTotal / comparableTripsTotal) * 100) : 0,
+      peakCampaignsCount,
+      jamsTotalCount,
+      shortageTotalCount
+    };
+  }, [filteredCampaigns, arrondissementFilter]);
+
   const handleEditComment = async (c: PricingCampaign) => {
     const peak = getCampaignPeakHourInfo(c);
     const currentSlot = c.timeSlotOverride || 'auto';
@@ -150,14 +224,22 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
-      confirmButtonText: 'Supprimer'
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Supprimer',
+      cancelButtonText: 'Annuler'
     });
     if (res.isConfirmed) {
       try {
         await api.deleteCampaign(id);
         onRefresh();
+        Swal.fire({
+          icon: 'success',
+          title: 'Campagne supprimée',
+          timer: 1300,
+          showConfirmButton: false
+        });
       } catch (err: any) {
-        Swal.fire('Erreur', err?.message || 'Erreur.', 'error');
+        Swal.fire('Erreur', err?.message || 'Erreur lors de la suppression.', 'error');
       }
     }
   };
@@ -275,28 +357,28 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
     {
       key: 'duration',
       label: 'Durée',
-      sortable: false,
+      sortable: true,
       render: (c) => (
-        <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
-          <Clock className="w-3 h-3 text-[#1F4F4A]" />
+        <div className="flex items-center gap-1 text-xs text-slate-500 font-medium font-mono">
+          <Clock className="w-3 h-3 text-slate-400" />
           <span>{computeCampaignDuration(c)}</span>
-        </span>
+        </div>
       )
     },
     {
-      key: 'completedPairs',
-      label: 'Trajets',
+      key: 'totalPairs',
+      label: 'Paires Trajets',
       sortable: true,
       align: 'right',
       render: (c) => (
-        <span className="font-mono text-xs">
+        <span className="font-mono text-xs font-semibold text-slate-700">
           {(c.completedPairs || 0).toLocaleString('fr-FR')} / {(c.totalPairs || 0).toLocaleString('fr-FR')}
         </span>
       )
     },
     {
       key: 'avgPrice',
-      label: 'Prix Moyen Yango',
+      label: 'Moyenne (Éco)',
       sortable: true,
       align: 'right',
       render: (c) => (
@@ -394,8 +476,9 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200/90 p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header & Filtres */}
+      <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-5 shadow-2xs space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <span>Campagnes de Pricing</span>
@@ -407,7 +490,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
               Historique, heures de pointe, commentaires et état d'exécution de toutes les campagnes.
             </p>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
             {isFiltered && (
               <button
                 onClick={() => {
@@ -432,7 +515,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           </div>
         </div>
 
-        {/* Barre de filtres */}
+        {/* Barre de filtres responsive */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-slate-100 text-xs">
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
@@ -445,7 +528,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
                 setCityFilter(e.target.value);
                 setArrondissementFilter('all');
               }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
             >
               <option value="all">Toutes les villes</option>
               {availableCities.map(([id, name]) => (
@@ -462,7 +545,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
             <select
               value={arrondissementFilter}
               onChange={(e) => setArrondissementFilter(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
             >
               <option value="all">Tous les arrondissements</option>
               {availableArrondissements.map(a => (
@@ -479,7 +562,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
             <select
               value={timeSlotFilter}
               onChange={(e) => setTimeSlotFilter(e.target.value as TimeSlotFilter)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
             >
               <option value="all">Tous les créneaux (24h/24)</option>
               <option value="any_peak">🔥 Toutes Heures de Pointe (Matin, Midi, Soir)</option>
@@ -502,7 +585,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
             >
               <option value="all">Tous les statuts</option>
               <option value="completed">Succès / Terminées</option>
@@ -513,6 +596,97 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         </div>
       </div>
 
+      {/* 4 Cartes de Synthèse Tarifaire & Trafic (100% Responsives) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Hero Cab */}
+        <div className="bg-white rounded-xl border border-teal-200/90 p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition flex flex-col justify-between gap-2.5 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-teal-700 truncate" title="Moyenne Hero Cab">
+              Moyenne Hero Cab {arrondissementFilter !== 'all' ? `(${arrondissementFilter})` : isFiltered ? '(Filtrée)' : ''}
+            </span>
+            {filteredPricingSummary.heroWinRate > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                <Award className="w-3 h-3 text-emerald-600" />
+                <span>{filteredPricingSummary.heroWinRate}% victoires</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-lg sm:text-xl font-extrabold font-mono text-[#1F4F4A] tracking-tight">
+              {filteredPricingSummary.avgHero > 0 ? `${filteredPricingSummary.avgHero.toLocaleString('fr-FR')} FCFA` : '—'}
+            </span>
+            <span className="text-[10px] font-medium text-slate-400">Tarif moyen</span>
+          </div>
+        </div>
+
+        {/* 2. Yango */}
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition flex flex-col justify-between gap-2.5 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate" title="Moyenne Yango">
+              Moyenne Yango {arrondissementFilter !== 'all' ? `(${arrondissementFilter})` : isFiltered ? '(Filtrée)' : ''}
+            </span>
+            {filteredPricingSummary.avgHero > 0 && filteredPricingSummary.avgYango > 0 && (
+              <span className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                filteredPricingSummary.avgHero < filteredPricingSummary.avgYango
+                  ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/80'
+                  : 'text-rose-600 bg-rose-50 border border-rose-200/80'
+              }`}>
+                {filteredPricingSummary.avgHero < filteredPricingSummary.avgYango
+                  ? `Hero -${(filteredPricingSummary.avgYango - filteredPricingSummary.avgHero).toLocaleString('fr-FR')} F`
+                  : `Yango -${(filteredPricingSummary.avgHero - filteredPricingSummary.avgYango).toLocaleString('fr-FR')} F`}
+              </span>
+            )}
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-lg sm:text-xl font-extrabold font-mono text-slate-900 tracking-tight">
+              {filteredPricingSummary.avgYango > 0 ? `${filteredPricingSummary.avgYango.toLocaleString('fr-FR')} FCFA` : '—'}
+            </span>
+            <span className="text-[10px] font-medium text-slate-400">Tarif moyen</span>
+          </div>
+        </div>
+
+        {/* 3. Trip Master */}
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition flex flex-col justify-between gap-2.5 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate" title="Moyenne Trip Master">
+              Moyenne Trip Master
+            </span>
+            <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200/60 px-1.5 py-0.5 rounded shrink-0">
+              Gamme Éco
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-lg sm:text-xl font-extrabold font-mono text-purple-800 tracking-tight">
+              {filteredPricingSummary.avgTm > 0 ? `${filteredPricingSummary.avgTm.toLocaleString('fr-FR')} FCFA` : '—'}
+            </span>
+            <span className="text-[10px] font-medium text-slate-400">Tarif moyen</span>
+          </div>
+        </div>
+
+        {/* 4. Heures de Pointe & Trafic */}
+        <div className="bg-white rounded-xl border border-amber-200/90 p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition flex flex-col justify-between gap-2.5 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate" title="Heures de Pointe & Trafic">
+              Heures de Pointe & Trafic
+            </span>
+            <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">
+              {filteredPricingSummary.peakCampaignsCount} relevé(s)
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+              <span>⚡ {filteredPricingSummary.jamsTotalCount.toLocaleString('fr-FR')} embouteillage(s)</span>
+            </span>
+            {filteredPricingSummary.shortageTotalCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-900 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+                <span>⚠️ {filteredPricingSummary.shortageTotalCount.toLocaleString('fr-FR')} pénurie(s)</span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tableau des Campagnes */}
       <DataTable
         columns={columns}
         data={filteredCampaigns}
@@ -523,4 +697,3 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
     </div>
   );
 };
-
