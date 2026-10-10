@@ -7,7 +7,8 @@ import {
   renderCellPrice,
   getYangoPrice,
   getHeroPrice,
-  getTripMasterPrice
+  getTripMasterPrice,
+  getTripSurgeInfo
 } from './pricingUtils';
 
 interface PricingResultsTableProps {
@@ -96,20 +97,26 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       label: 'Dist.',
       sortable: true,
       align: 'right',
-      render: (t) => (
-        <div className="flex flex-col items-end gap-0.5">
-          <span className="font-mono text-slate-800 text-xs font-semibold">{t.distanceKm} km</span>
-          {t.jams && (
-            <span
-              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
-              title="Heure de pointe détectée par Yango"
-            >
-              🚗 Heure de pointe
-            </span>
-          )}
-        </div>
-      ),
-      exportValue: (t) => `${t.distanceKm} km${t.jams ? ' (Heure de pointe)' : ''}`
+      render: (t) => {
+        const surge = getTripSurgeInfo(t);
+        return (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="font-mono text-slate-800 text-xs font-semibold">{t.distanceKm} km</span>
+            {surge.isSurge && (
+              <span
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
+                title={`Forte demande / Majoration Yango constatée (+${surge.surgePct}% vs tarif de référence)`}
+              >
+                🔥 Majoré +{surge.surgePct}%
+              </span>
+            )}
+          </div>
+        );
+      },
+      exportValue: (t) => {
+        const surge = getTripSurgeInfo(t);
+        return `${t.distanceKm} km${surge.isSurge ? ` (Majoré +${surge.surgePct}%)` : ''}`;
+      }
     },
     {
       key: 'yango_eco',
@@ -310,15 +317,16 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                 const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
                 const isHeroCheaper = hEco && yEco ? hEco < yEco : false;
                 const isYangoCheaper = hEco && yEco ? yEco < hEco : false;
+                const surge = getTripSurgeInfo(t);
 
                 return (
                   <div
                     key={t.id}
                     className={`rounded-xl border p-3.5 shadow-2xs space-y-2.5 transition ${
-                      !t.jams
-                        ? 'bg-amber-50/95 border-amber-300 ring-1 ring-amber-300/60'
-                        : t.yangoUnavailable
+                      t.yangoUnavailable
                         ? 'bg-purple-50/90 border-purple-300 ring-1 ring-purple-300/60'
+                        : surge.isSurge
+                        ? 'bg-amber-50/60 border-amber-200'
                         : 'bg-white border-slate-200/90'
                     }`}
                   >
@@ -338,9 +346,9 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                               <span>~{t.durationMinutes} min</span>
                             </>
                           )}
-                          {t.jams && (
+                          {surge.isSurge && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-950 border border-amber-400">
-                              🚗 Heure de pointe
+                              🔥 Majoré +{surge.surgePct}%
                             </span>
                           )}
                           {t.yangoUnavailable && (
@@ -456,14 +464,12 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
           hasGroupedHeaders
           rowClassName={(t) => {
             if (t.yangoUnavailable) {
-              // Priorité absolue : quand il y a pénurie, c'est violet
               return 'bg-purple-50/70 hover:bg-purple-100/70 text-slate-900 font-medium transition-colors';
             }
-            if (!t.jams) {
-              // Quand jams est false, c'est jaune (fluide)
-              return 'bg-amber-50/70 hover:bg-amber-100/60 text-slate-900 font-medium transition-colors';
+            const surge = getTripSurgeInfo(t);
+            if (surge.isSurge) {
+              return 'bg-amber-50/40 hover:bg-amber-100/50 text-slate-900 transition-colors';
             }
-            // Quand jams est true, c'est normal (blanc)
             return 'hover:bg-slate-50/60 transition-colors';
           }}
           pageSizeOptions={[10, 25, 50, 100, 250, 500, 1000, 999999]}

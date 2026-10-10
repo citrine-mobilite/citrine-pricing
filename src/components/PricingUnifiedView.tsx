@@ -10,7 +10,8 @@ import {
   computePricingStats,
   getYangoPrice,
   getHeroPrice,
-  cleanNeighborhoodName
+  cleanNeighborhoodName,
+  getTripSurgeInfo
 } from './pricing/pricingUtils';
 import { usePricingCampaign } from './pricing/usePricingState';
 import { PricingHeader } from './pricing/PricingHeader';
@@ -140,6 +141,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [startFilter, setStartFilter] = useState('');
   const [endFilter, setEndFilter] = useState('');
+  const [arrondissementFilter, setArrondissementFilter] = useState('all');
   const [jamsFilter, setJamsFilter] = useState<TripJamsFilter>('all');
   const [advantageFilter, setAdvantageFilter] = useState<TripAdvantageFilter>('all');
   const [distanceFilter, setDistanceFilter] = useState<TripDistanceFilter>('all');
@@ -148,6 +150,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   const handleResetTripFilters = () => {
     setStartFilter('');
     setEndFilter('');
+    setArrondissementFilter('all');
     setJamsFilter('all');
     setAdvantageFilter('all');
     setDistanceFilter('all');
@@ -284,6 +287,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     originArrondissement?: string;
     destArrondissement?: string;
     sampleLimit?: number | 'all';
+    comment?: string;
+    timeSlotOverride?: string;
   }) => {
     cancelRequestedRef.current = false;
     const abortCtrl = new AbortController();
@@ -302,7 +307,9 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         scopeMode: options.scopeMode,
         arrondissement: options.arrondissement,
         originArrondissement: options.originArrondissement,
-        destArrondissement: options.destArrondissement
+        destArrondissement: options.destArrondissement,
+        comment: options.comment,
+        timeSlotOverride: options.timeSlotOverride && options.timeSlotOverride !== 'auto' ? options.timeSlotOverride : undefined
       });
 
       if (result?.campaign) {
@@ -423,22 +430,53 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
   const handleLaunch = async (overrideLimit: number | 'all') => {
     const isSample = overrideLimit === 25;
+    const nowTimeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const confirm = await Swal.fire({
       title: isSample ? 'Lancer un test rapide ?' : 'Lancer la tarification complète ?',
-      text: isSample
-        ? 'Un échantillon de 25 trajets va être calculé pour cette ville.'
-        : `L'ensemble des trajets (${totalCombinations}) va être calculé.`,
+      html: `
+        <div style="text-align: left; font-size: 12px; color: #334155;">
+          <p style="margin-bottom: 12px; color: #475569;">
+            ${isSample ? 'Un échantillon de 25 trajets va être calculé pour cette ville.' : `L'ensemble des trajets (${totalCombinations}) va être calculé.`}
+          </p>
+          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #334155;">
+            1. Créneau horaire du relevé :
+          </label>
+          <select id="swal-launch-slot" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 10px; font-size: 12px; background: #f8fafc;">
+            <option value="auto" selected>⏱️ Automatique selon l'heure actuelle (${nowTimeStr})</option>
+            <option value="morning_peak">🌅 Pointe Matin (06h00 – 10h00)</option>
+            <option value="off_peak_morning">🟢 Creuse Matinée (10h00 – 12h00)</option>
+            <option value="midday_peak">☀️ Pointe Midi (12h00 – 14h30)</option>
+            <option value="off_peak_afternoon">🌤️ Creuse Après-midi (14h30 – 16h30)</option>
+            <option value="evening_peak">🌆 Pointe Soir (16h30 – 20h30)</option>
+            <option value="night">🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
+          </select>
+          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #334155;">
+            2. Commentaire / Contexte (optionnel) :
+          </label>
+          <input id="swal-launch-comment" type="text" placeholder="Ex: Forte pluie, embouteillages Akwa, jour férié..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
+        </div>
+      `,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Oui, lancer',
       cancelButtonText: 'Annuler',
-      confirmButtonColor: '#1F4F4A'
+      confirmButtonColor: '#1F4F4A',
+      preConfirm: () => {
+        const slotEl = document.getElementById('swal-launch-slot') as HTMLSelectElement | null;
+        const commentEl = document.getElementById('swal-launch-comment') as HTMLInputElement | null;
+        return {
+          timeSlotOverride: slotEl ? slotEl.value : 'auto',
+          comment: commentEl && commentEl.value.trim() ? commentEl.value.trim() : undefined
+        };
+      }
     });
     if (!confirm.isConfirmed) return;
 
     handleLaunchWithOptions({
       scopeMode: 'global',
-      sampleLimit: overrideLimit
+      sampleLimit: overrideLimit,
+      comment: confirm.value?.comment,
+      timeSlotOverride: confirm.value?.timeSlotOverride
     });
   };
 
@@ -506,19 +544,40 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     [cityActiveNeighborhoods]
   );
 
+  const neighborhoodArrMap = useMemo(() => {
+    const map = new Map<string, string>();
+    cityActiveNeighborhoods.forEach((n) => {
+      const arr = detectArrondissement(n);
+      map.set(cleanNeighborhoodName(n.name), arr);
+      map.set(n.name, arr);
+    });
+    return map;
+  }, [cityActiveNeighborhoods]);
+
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
-      // 1. Quartier départ
       const orig = cleanNeighborhoodName(t.origin || t.startNeighborhoodName);
+      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
+
+      // 0. Arrondissement (départ ou arrivée)
+      if (arrondissementFilter && arrondissementFilter !== 'all') {
+        const origArr = neighborhoodArrMap.get(orig) || '';
+        const destArr = neighborhoodArrMap.get(dest) || '';
+        if (origArr !== arrondissementFilter && destArr !== arrondissementFilter) {
+          return false;
+        }
+      }
+
+      // 1. Quartier départ
       if (startFilter && orig !== startFilter && !orig?.includes(startFilter)) return false;
 
       // 2. Quartier arrivée
-      const dest = cleanNeighborhoodName(t.destination || t.endNeighborhoodName);
       if (endFilter && dest !== endFilter && !dest?.includes(endFilter)) return false;
 
-      // 3. Trafic / Heures de pointe (jams)
-      if (jamsFilter === 'with_jams' && !t.jams) return false;
-      if (jamsFilter === 'without_jams' && t.jams) return false;
+      // 3. Trafic / Majoration déterministe sur le trajet
+      const surge = getTripSurgeInfo(t);
+      if (jamsFilter === 'with_jams' && !surge.isSurge) return false;
+      if (jamsFilter === 'without_jams' && surge.isSurge) return false;
 
       // 4. Compétitivité tarifaire
       const yEco = getYangoPrice(t, 'econom');
@@ -543,7 +602,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
       return true;
     });
-  }, [trips, startFilter, endFilter, jamsFilter, advantageFilter, distanceFilter, shortageFilter]);
+  }, [trips, arrondissementFilter, neighborhoodArrMap, startFilter, endFilter, jamsFilter, advantageFilter, distanceFilter, shortageFilter]);
 
   const { campaignNeighborhoods, matrixData } = useMemo(() => {
     const set = new Set<string>();
@@ -569,6 +628,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   }, [trips, neighborhoodNames]);
 
   const isTripFiltered =
+    (arrondissementFilter && arrondissementFilter !== 'all') ||
     Boolean(startFilter) ||
     Boolean(endFilter) ||
     jamsFilter !== 'all' ||
@@ -622,19 +682,21 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           cityName={currentCity.name}
           arrondissementOptions={arrondissementOptions}
           isRunning={displayedCampaign?.status === 'in_progress'}
-          onLaunchIntra={(arr, limit) => {
+          onLaunchIntra={(arr, limit, comment) => {
             handleLaunchWithOptions({
               scopeMode: 'intra',
               arrondissement: arr,
-              sampleLimit: limit
+              sampleLimit: limit,
+              comment
             });
           }}
-          onLaunchInter={(originArr, destArr, limit) => {
+          onLaunchInter={(originArr, destArr, limit, comment) => {
             handleLaunchWithOptions({
               scopeMode: 'inter',
               originArrondissement: originArr,
               destArrondissement: destArr,
-              sampleLimit: limit
+              sampleLimit: limit,
+              comment
             });
           }}
         />
@@ -649,10 +711,11 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         />
       )}
 
-      <PricingMetricsCards stats={stats} currencySymbol={currentCity.currencySymbol || 'FCFA'} />
-
       <PricingResultsFilterBar
         neighborhoodNames={neighborhoodNames}
+        arrondissements={arrondissementOptions.map(o => o.name)}
+        arrondissementFilter={arrondissementFilter}
+        onArrondissementFilterChange={setArrondissementFilter}
         startFilter={startFilter}
         onStartFilterChange={setStartFilter}
         endFilter={endFilter}
@@ -668,10 +731,18 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         activeCampaignId={activeCampaignId}
         totalTripsCount={trips.length}
         filteredTripsCount={filteredTrips.length}
-        hasJamsInCampaign={Boolean((displayedCampaign?.hasJamsCount && displayedCampaign.hasJamsCount > 0) || trips.some(t => t.jams))}
+        hasJamsInCampaign={trips.some(t => getTripSurgeInfo(t).isSurge)}
         hasShortageInCampaign={Boolean((displayedCampaign?.yangoShortageCount && displayedCampaign.yangoShortageCount > 0) || trips.some(t => t.yangoUnavailable))}
         onResetFilters={handleResetTripFilters}
         onOpenRecommendations={() => setIsRecommendationsOpen(true)}
+      />
+
+      <PricingMetricsCards
+        stats={stats}
+        currencySymbol={currentCity.currencySymbol || 'FCFA'}
+        isFiltered={isTripFiltered}
+        totalUnfilteredTrips={trips.length}
+        onResetFilters={handleResetTripFilters}
       />
 
       <PricingResultsTable
@@ -690,7 +761,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       <PricingRecommendationModal
         isOpen={isRecommendationsOpen}
         onClose={() => setIsRecommendationsOpen(false)}
-        trips={trips}
+        trips={isTripFiltered ? filteredTrips : trips}
         cityName={currentCity.name}
       />
     </div>

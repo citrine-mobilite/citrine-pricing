@@ -337,6 +337,7 @@ export const api = {
     originArrondissement?: string;
     destArrondissement?: string;
     comment?: string;
+    timeSlotOverride?: string;
   }): Promise<{ message: string; campaign: PricingCampaign; totalChunks: number; totalPairs: number }> {
     const res = await fetch(`${BASE_URL}/campaigns/start`, {
       method: 'POST',
@@ -429,17 +430,41 @@ export const api = {
     return res.json();
   },
 
-  async updateCampaignComment(id: string, comment: string): Promise<PricingCampaign> {
+  async updateCampaignComment(id: string, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
     const res = await fetch(`${BASE_URL}/campaigns/${id}/comment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comment })
+      body: JSON.stringify({ comment, timeSlotOverride })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la mise à jour du commentaire.');
     }
     const data = await res.json();
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('citrine_campaigns_')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.data)) {
+              parsed.data = parsed.data.map((c: any) =>
+                c.id === id
+                  ? {
+                      ...c,
+                      comment,
+                      comments: comment,
+                      timeSlotOverride: timeSlotOverride === 'auto' ? undefined : (timeSlotOverride ?? c.timeSlotOverride)
+                    }
+                  : c
+              );
+              localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          }
+        }
+      }
+    } catch {}
     return data.campaign;
   },
 

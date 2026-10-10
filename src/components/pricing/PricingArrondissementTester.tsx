@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Navigation, ArrowRight, Play, Info } from 'lucide-react';
+import { Navigation, ArrowRight, Play, Info, MessageSquare } from 'lucide-react';
 import { ArrondissementSelect2, ArrondissementInfo } from './ArrondissementSelect2';
 
 interface PricingArrondissementTesterProps {
@@ -8,8 +8,8 @@ interface PricingArrondissementTesterProps {
   arrondissements?: string[];
   arrondissementOptions: ArrondissementInfo[];
   isRunning: boolean;
-  onLaunchIntra: (arrondissement: string, limit: number | 'all') => void;
-  onLaunchInter: (originArr: string, destArr: string, limit: number | 'all') => void;
+  onLaunchIntra: (arrondissement: string, limit: number | 'all', comment?: string) => void;
+  onLaunchInter: (originArr: string, destArr: string, limit: number | 'all', comment?: string) => void;
 }
 
 export const PricingArrondissementTester: React.FC<PricingArrondissementTesterProps> = ({
@@ -41,6 +41,7 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
   const [selectedArr, setSelectedArr] = useState<string>(defaultFirst);
   const [originArr, setOriginArr] = useState<string>(defaultFirst);
   const [destArr, setDestArr] = useState<string>(defaultSecond);
+  const [comment, setComment] = useState<string>('');
 
   // Stats for selected arrondissements
   const selectedInfo = useMemo(() => {
@@ -133,8 +134,8 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
         <div className={mode === 'intra' ? 'sm:col-span-4 flex justify-end' : 'sm:col-span-3 flex justify-end'}>
           <button
             onClick={() => {
-              if (mode === 'intra') onLaunchIntra(selectedArr, 'all');
-              else onLaunchInter(originArr, destArr, 'all');
+              if (mode === 'intra') onLaunchIntra(selectedArr, 'all', comment.trim() || undefined);
+              else onLaunchInter(originArr, destArr, 'all', comment.trim() || undefined);
             }}
             disabled={isRunning}
             className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#1F4F4A] hover:bg-[#183F3B] rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer active:scale-95"
@@ -143,6 +144,19 @@ export const PricingArrondissementTester: React.FC<PricingArrondissementTesterPr
             <span>{isRunning ? 'Démarrage...' : 'Lancer la tarification'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Champ commentaire au lancement */}
+      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+        <MessageSquare className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        <input
+          type="text"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          disabled={isRunning}
+          placeholder="Commentaire optionnel (ex: Heure de pointe soir, pluie sur Akwa, embouteillages...)"
+          className="w-full text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none bg-transparent"
+        />
       </div>
 
       {/* Informative Summary Pill */}

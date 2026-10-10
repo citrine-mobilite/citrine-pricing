@@ -226,7 +226,8 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     arrondissement,
     originArrondissement,
     destArrondissement,
-    comment
+    comment,
+    timeSlotOverride
   } = req.body;
   if (!cityId) {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
@@ -317,6 +318,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     totalPossiblePairs: totalPossible,
     comment: comment?.trim() || undefined,
     comments: comment?.trim() || undefined,
+    timeSlotOverride: timeSlotOverride && timeSlotOverride !== 'auto' ? timeSlotOverride : undefined,
     scopeMode: scopeMode || (arrondissement ? 'intra' : 'city'),
     arrondissement: arrondissement || undefined,
     originArrondissement: originArrondissement || undefined,
@@ -436,24 +438,34 @@ router.post('/api/campaigns/:id/cancel', (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Arrêt immédiat de la campagne effectué en mémoire.' });
 });
 
-// 4b. Mise à jour du commentaire d'une campagne
+// 4b. Mise à jour du commentaire et/ou créneau d'une campagne
 router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { comment } = req.body;
-  const trimmedComment = typeof comment === 'string' ? comment.trim() : '';
+  const { comment, timeSlotOverride } = req.body;
+  const trimmedComment = typeof comment === 'string' ? comment.trim() : undefined;
 
   // 1. Mettre à jour en mémoire
   const memCamp = memoryCampaigns.find(c => c.id === id);
   if (memCamp) {
-    memCamp.comment = trimmedComment;
-    memCamp.comments = trimmedComment;
+    if (trimmedComment !== undefined) {
+      memCamp.comment = trimmedComment;
+      memCamp.comments = trimmedComment;
+    }
+    if (timeSlotOverride !== undefined) {
+      memCamp.timeSlotOverride = timeSlotOverride === 'auto' ? undefined : timeSlotOverride;
+    }
   }
 
   // 2. Mettre à jour dans le cache Firestore
   const cached = cachedFirestoreCampaigns.find(c => c.id === id);
   if (cached) {
-    cached.comment = trimmedComment;
-    cached.comments = trimmedComment;
+    if (trimmedComment !== undefined) {
+      cached.comment = trimmedComment;
+      cached.comments = trimmedComment;
+    }
+    if (timeSlotOverride !== undefined) {
+      cached.timeSlotOverride = timeSlotOverride === 'auto' ? undefined : timeSlotOverride;
+    }
   }
 
   // 3. Sauvegarde disque local
@@ -462,8 +474,16 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
   // 4. Sauvegarde Firestore
   if (db && !isFirestoreQuotaExceeded()) {
     try {
+      const updatePayload: Record<string, any> = {};
+      if (trimmedComment !== undefined) {
+        updatePayload.comment = trimmedComment;
+        updatePayload.comments = trimmedComment;
+      }
+      if (timeSlotOverride !== undefined) {
+        updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
+      }
       await safeFirestoreWrite('updateCampaignComment', () =>
-        setDoc(doc(db!, 'campaigns', id), cleanFirestoreDoc({ comment: trimmedComment, comments: trimmedComment }), { merge: true })
+        setDoc(doc(db!, 'campaigns', id), cleanFirestoreDoc(updatePayload), { merge: true })
       );
     } catch (e: any) {
       console.warn('[Firestore] Warning saving campaign comment:', e.message);
@@ -473,13 +493,13 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
   await recordHistory({
     action: 'update_campaign_comment',
     eventType: 'campaign',
-    title: `Commentaire campagne mis à jour`,
-    description: trimmedComment ? `Note: "${trimmedComment.slice(0, 80)}..."` : 'Commentaire supprimé',
+    title: `Commentaire / Créneau campagne mis à jour`,
+    description: trimmedComment ? `Note: "${trimmedComment.slice(0, 80)}"` : 'Mise à jour du contexte de la campagne',
     performedByName: 'Admin',
-    metadata: { campaignId: id }
+    metadata: { campaignId: id, timeSlotOverride }
   }).catch(() => {});
 
-  return res.json({ success: true, id, comment: trimmedComment, campaign: memCamp || cached });
+  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp || cached });
 });
 
 // 5. Suppression globale

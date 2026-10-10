@@ -145,6 +145,7 @@ export interface PricingCampaign {
   isTestSample?: boolean;
   comment?: string; // Commentaire sur la campagne (météo, trafic, etc.)
   comments?: string;
+  timeSlotOverride?: 'auto' | 'morning_peak' | 'midday_peak' | 'evening_peak' | 'off_peak' | 'night' | string;
   scopeMode?: 'city' | 'intra' | 'inter' | 'global';
   arrondissement?: string;
   originArrondissement?: string;

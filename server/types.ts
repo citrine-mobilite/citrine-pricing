@@ -263,6 +263,7 @@ export interface PricingCampaign {
   totalPossiblePairs?: number;
   comment?: string; // Commentaire libre sur la campagne (ex: météo, pluie, contexte de circulation, etc.)
   comments?: string; // Alias
+  timeSlotOverride?: 'auto' | 'morning_peak' | 'midday_peak' | 'evening_peak' | 'off_peak' | 'night' | string;
   scopeMode?: 'city' | 'intra' | 'inter' | 'global';
   arrondissement?: string;
   originArrondissement?: string;

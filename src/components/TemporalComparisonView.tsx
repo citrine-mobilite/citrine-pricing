@@ -3,6 +3,11 @@ import { PricingCampaign, City, Neighborhood } from '../types';
 import { SearchableSelect, SearchableOption } from './SearchableSelect';
 import { detectArrondissement } from '../utils/routeMatrix';
 import {
+  getCampaignPeakHourInfo,
+  matchesTimeSlotFilter,
+  TimeSlotFilter
+} from '../utils/durationUtils';
+import {
   TrendingUp,
   TrendingDown,
   Minus,
@@ -63,7 +68,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'city_wide' | 'arrondissement' | 'test_sample'>('all');
   const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
-  const [jamsFilter, setJamsFilter] = useState<'all' | 'with_jams' | 'without_jams'>('all');
+  const [jamsFilter, setJamsFilter] = useState<TimeSlotFilter>('all');
 
   // Extraction 100% dynamique et exhaustive des arrondissements
   const availableArrondissements = useMemo(() => {
@@ -141,12 +146,8 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
         }
       }
 
-      // 4. Filtre Trafic
-      if (jamsFilter === 'with_jams') {
-        if (!c.hasJamsCount || c.hasJamsCount <= 0) return false;
-      } else if (jamsFilter === 'without_jams') {
-        if (c.hasJamsCount && c.hasJamsCount > 0) return false;
-      }
+      // 4. Filtre Trafic & Heures de pointe
+      if (!matchesTimeSlotFilter(c, jamsFilter)) return false;
 
       return true;
     });
@@ -841,20 +842,27 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
               <Zap className="w-3 h-3 text-amber-500" />
-              <span>Trafic / Heures de pointe</span>
+              <span>Créneau / Heures de pointe</span>
             </label>
             <select
               value={jamsFilter}
-              onChange={(e) => setJamsFilter(e.target.value as any)}
+              onChange={(e) => setJamsFilter(e.target.value as TimeSlotFilter)}
               className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
-                jamsFilter === 'with_jams'
+                jamsFilter !== 'all'
                   ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
                   : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
-              <option value="all">Tous (Pointe & Fluide)</option>
-              <option value="with_jams">🚗 Heure de pointe uniquement</option>
-              <option value="without_jams">🟢 Fluide uniquement</option>
+              <option value="all">Tous les créneaux (24h/24)</option>
+              <option value="peak_any">🔥 Toutes Heures de Pointe (Matin, Midi, Soir)</option>
+              <option value="morning_peak">🌅 Pointe Matin (06h00 – 10h00)</option>
+              <option value="off_peak_morning">🟢 Creuse Matinée (10h00 – 12h00)</option>
+              <option value="midday_peak">☀️ Pointe Midi (12h00 – 14h30)</option>
+              <option value="off_peak_afternoon">🌤️ Creuse Après-midi (14h30 – 16h30)</option>
+              <option value="evening_peak">🌆 Pointe Soir (16h30 – 20h30)</option>
+              <option value="night">🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
+              <option value="off_peak">🟢 Toutes Heures Creuses (Fluide)</option>
+              <option value="with_shortage">⚠️ Avec Pénurie Chauffeurs</option>
             </select>
           </div>
         </div>
@@ -1037,11 +1045,14 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Période A (Référence)</label>
               <SearchableSelect
-                options={sorted.map((c) => ({
-                  value: c.id,
-                  label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
-                  sublabel: `${c.completedPairs || 0} trajets - Moyenne: ${c.avgPrice ? c.avgPrice + ' F' : '—'}`
-                }))}
+                options={sorted.map((c) => {
+                  const peak = getCampaignPeakHourInfo(c);
+                  return {
+                    value: c.id,
+                    label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+                    sublabel: `${peak.shortLabel} • ${c.completedPairs || 0} trajets • Moy: ${c.avgPrice ? c.avgPrice + ' F' : '—'}${c.comment ? ` • 💬 ${c.comment}` : ''}`
+                  };
+                })}
                 value={campaignAId}
                 onChange={setCampaignAId}
                 searchPlaceholder="Rechercher une campagne A..."
@@ -1052,11 +1063,14 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Période B (Comparée)</label>
               <SearchableSelect
-                options={sorted.map((c) => ({
-                  value: c.id,
-                  label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
-                  sublabel: `${c.completedPairs || 0} trajets - Moyenne: ${c.avgPrice ? c.avgPrice + ' F' : '—'}`
-                }))}
+                options={sorted.map((c) => {
+                  const peak = getCampaignPeakHourInfo(c);
+                  return {
+                    value: c.id,
+                    label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+                    sublabel: `${peak.shortLabel} • ${c.completedPairs || 0} trajets • Moy: ${c.avgPrice ? c.avgPrice + ' F' : '—'}${c.comment ? ` • 💬 ${c.comment}` : ''}`
+                  };
+                })}
                 value={campaignBId}
                 onChange={setCampaignBId}
                 searchPlaceholder="Rechercher une campagne B..."

@@ -214,6 +214,31 @@ export const getTripMasterPrice = (t: TripResult, className: 'eco' | 'confort' |
   return null;
 };
 
+export interface TripSurgeInfo {
+  isSurge: boolean;
+  surgePct: number;
+}
+
+/**
+ * Détecte de façon 100% déterministe si un trajet individuel subit une majoration / forte demande Yango.
+ * Évite les faux positifs historiques où `t.jams` était à `true` sur des courses au tarif minimum (650 FCFA).
+ */
+export function getTripSurgeInfo(t: TripResult): TripSurgeInfo {
+  const yEco = getYangoPrice(t, 'econom');
+  if (!yEco || yEco < 1000) {
+    return { isSurge: false, surgePct: 0 };
+  }
+  const hEco = getHeroPrice(t, 'eco');
+  const dist = t.distanceKm && t.distanceKm > 0 ? t.distanceKm : 1;
+  const refPrice = hEco && hEco > 0 ? hEco : Math.round(500 + dist * 145);
+
+  if (refPrice > 0 && yEco >= refPrice * 1.25) {
+    const surgePct = Math.round(((yEco - refPrice) / refPrice) * 100);
+    return { isSurge: true, surgePct };
+  }
+  return { isSurge: false, surgePct: 0 };
+}
+
 export interface PricingStatsSummary {
   yango: {
     eco: { avg: number; min: number; count: number };

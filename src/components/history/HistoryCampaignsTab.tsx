@@ -3,9 +3,25 @@ import Swal from 'sweetalert2';
 import { PricingCampaign, City } from '../../types';
 import { api } from '../../services/api';
 import { DataTable, Column } from '../DataTable';
-import { computeCampaignDuration } from '../../utils/durationUtils';
+import {
+  computeCampaignDuration,
+  getCampaignPeakHourInfo,
+  matchesTimeSlotFilter,
+  TimeSlotFilter
+} from '../../utils/durationUtils';
 import { SearchableSelect } from '../SearchableSelect';
-import { ArrowRight, Calendar, LayoutGrid, Table, RotateCw, Clock, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Calendar,
+  LayoutGrid,
+  Table,
+  RotateCw,
+  Trash2,
+  MessageSquare,
+  MapPin,
+  Zap,
+  Filter
+} from 'lucide-react';
 
 interface HistoryCampaignsTabProps {
   campaigns: PricingCampaign[];
@@ -29,15 +45,81 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'city_wide' | 'arrondissement' | 'test_sample'>('all');
   const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
-  const [jamsFilter, setJamsFilter] = useState<'all' | 'with_jams' | 'without_jams'>('all');
+  const [timeSlotFilter, setTimeSlotFilter] = useState<TimeSlotFilter>('all');
 
   const availableArrondissements = useMemo(() => {
     const set = new Set<string>();
     campaigns.forEach(c => {
+      if (cityFilter && c.cityId !== cityFilter) return;
       if (c.arrondissement && c.arrondissement.trim()) set.add(c.arrondissement.trim());
     });
     return Array.from(set).sort();
-  }, [campaigns]);
+  }, [campaigns, cityFilter]);
+
+  const handleEditComment = async (campaign: PricingCampaign, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const peak = getCampaignPeakHourInfo(campaign);
+    const currentSlot = campaign.timeSlotOverride || 'auto';
+    const currentComment = (campaign.comment || campaign.comments || '').replace(/"/g, '&quot;');
+
+    const { value: formValues, isConfirmed } = await Swal.fire({
+      title: 'Créneau & Commentaire du relevé',
+      html: `
+        <div style="text-align: left; font-size: 12px; color: #334155;">
+          <p style="margin-bottom: 10px; font-weight: 600; color: #0f172a;">
+            ${campaign.cityName} — Relevé du ${new Date(campaign.startedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </p>
+          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
+            1. Créneau horaire / Heure de pointe :
+          </label>
+          <select id="swal-hist-slot" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 12px; font-size: 12px; background: #f8fafc;">
+            <option value="auto" ${currentSlot === 'auto' ? 'selected' : ''}>⏱️ Automatique selon l'heure (${peak.exactTimeStr})</option>
+            <option value="morning_peak" ${currentSlot === 'morning_peak' ? 'selected' : ''}>🌅 Pointe Matin (06h00 – 10h00)</option>
+            <option value="off_peak_morning" ${currentSlot === 'off_peak_morning' ? 'selected' : ''}>🟢 Creuse Matinée (10h00 – 12h00)</option>
+            <option value="midday_peak" ${currentSlot === 'midday_peak' ? 'selected' : ''}>☀️ Pointe Midi (12h00 – 14h30)</option>
+            <option value="off_peak_afternoon" ${currentSlot === 'off_peak_afternoon' ? 'selected' : ''}>🌤️ Creuse Après-midi (14h30 – 16h30)</option>
+            <option value="evening_peak" ${currentSlot === 'evening_peak' ? 'selected' : ''}>🌆 Pointe Soir (16h30 – 20h30)</option>
+            <option value="night" ${currentSlot === 'night' ? 'selected' : ''}>🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
+          </select>
+          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
+            2. Commentaire / Observation (météo, trafic, événement) :
+          </label>
+          <textarea id="swal-hist-comment" rows="3" placeholder="Ex: Forte pluie, embouteillages, jour férié..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">${currentComment}</textarea>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonColor: '#1F4F4A',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Enregistrer',
+      cancelButtonText: 'Annuler',
+      preConfirm: () => {
+        const slotEl = document.getElementById('swal-hist-slot') as HTMLSelectElement | null;
+        const commentEl = document.getElementById('swal-hist-comment') as HTMLTextAreaElement | null;
+        return {
+          timeSlotOverride: slotEl ? slotEl.value : 'auto',
+          comment: commentEl ? commentEl.value.trim() : ''
+        };
+      }
+    });
+
+    if (isConfirmed && formValues) {
+      try {
+        await api.updateCampaignComment(campaign.id, formValues.comment, formValues.timeSlotOverride);
+        campaign.comment = formValues.comment;
+        campaign.comments = formValues.comment;
+        campaign.timeSlotOverride = formValues.timeSlotOverride === 'auto' ? undefined : formValues.timeSlotOverride;
+        onRefresh();
+        Swal.fire({
+          icon: 'success',
+          title: 'Mis à jour',
+          timer: 1200,
+          showConfirmButton: false
+        });
+      } catch (err: any) {
+        Swal.fire('Erreur', err?.message || 'Impossible de sauvegarder.', 'error');
+      }
+    }
+  };
 
   const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -111,22 +193,34 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
 
       if (scopeFilter === 'test_sample' && !isSample) return false;
       if (scopeFilter === 'city_wide' && (isSample || isIntra)) return false;
-      if (scopeFilter === 'arrondissement') {
-        if (!isIntra) return false;
-        if (arrondissementFilter !== 'all' && c.arrondissement !== arrondissementFilter) return false;
+      if (scopeFilter === 'arrondissement' && !isIntra) return false;
+
+      if (arrondissementFilter !== 'all') {
+        if ((c.arrondissement || '').trim() !== arrondissementFilter) return false;
       }
 
-      if (jamsFilter === 'with_jams') {
-        if (!c.hasJamsCount || c.hasJamsCount <= 0) return false;
-      } else if (jamsFilter === 'without_jams') {
-        if (c.hasJamsCount && c.hasJamsCount > 0) return false;
-      }
+      if (!matchesTimeSlotFilter(c, timeSlotFilter)) return false;
 
       return true;
     });
-  }, [campaigns, cityFilter, scopeFilter, arrondissementFilter, jamsFilter]);
+  }, [campaigns, cityFilter, scopeFilter, arrondissementFilter, timeSlotFilter]);
 
-  // Group campaigns strictly by calendar day (e.g., Today = 1 card, Yesterday = 7 cards on 1 row)
+  const filteredStats = useMemo(() => {
+    const total = filteredCampaigns.length;
+    const totalTrips = filteredCampaigns.reduce((acc, c) => acc + (c.completedPairs || 0), 0);
+    const withYango = filteredCampaigns.filter(c => c.avgPrice && c.avgPrice > 0);
+    const avgYango = withYango.length > 0
+      ? Math.round(withYango.reduce((acc, c) => acc + (c.avgPrice || 0), 0) / withYango.length)
+      : 0;
+    const withHero = filteredCampaigns.filter(c => c.heroStats?.avgPrice && c.heroStats.avgPrice > 0);
+    const avgHero = withHero.length > 0
+      ? Math.round(withHero.reduce((acc, c) => acc + (c.heroStats?.avgPrice || 0), 0) / withHero.length)
+      : 0;
+    const peakCount = filteredCampaigns.filter(c => getCampaignPeakHourInfo(c).isPeakHour).length;
+    return { total, totalTrips, avgYango, avgHero, peakCount };
+  }, [filteredCampaigns]);
+
+  // Group campaigns strictly by calendar day
   const campaignsByDay = useMemo(() => {
     const map = new Map<string, { key: string; label: string; date: Date; items: PricingCampaign[] }>();
     const now = new Date();
@@ -169,25 +263,65 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   const columns: Column<PricingCampaign>[] = useMemo(() => [
     {
       key: 'startedAt',
-      label: 'Date & Heure',
+      label: 'Date, Créneau & Pointe',
       sortable: true,
-      render: (c) => (
-        <span className="font-semibold text-slate-900">
-          {new Date(c.startedAt).toLocaleString('fr-FR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </span>
-      )
+      render: (c) => {
+        const peakInfo = getCampaignPeakHourInfo(c);
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-slate-900">
+              {new Date(c.startedAt).toLocaleString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => handleEditComment(c, e)}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer hover:opacity-80 transition ${peakInfo.badgeClass}`}
+                title={`${peakInfo.slotLabel} — Cliquer pour modifier le créneau`}
+              >
+                {peakInfo.shortLabel}
+              </button>
+              {peakInfo.surgePct > 0 && (
+                <span
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-950 border border-amber-300"
+                  title="Forte demande / hausse tarifaire Yango par rapport au tarif creux"
+                >
+                  🔥 +{peakInfo.surgePct}%
+                </span>
+              )}
+              {peakInfo.shortageCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                  <Zap className="w-2.5 h-2.5" /> {peakInfo.shortageCount} pén.
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      }
     },
     {
       key: 'cityName',
-      label: 'Ville',
+      label: 'Ville & Zone',
       sortable: true,
-      render: (c) => <span className="font-medium text-slate-800">{c.cityName}</span>
+      render: (c) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-slate-800">{c.cityName}</span>
+          {c.arrondissement ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded w-fit">
+              <MapPin className="w-2.5 h-2.5" />
+              {c.arrondissement}
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-400">Ville globale</span>
+          )}
+        </div>
+      )
     },
     {
       key: 'completedPairs',
@@ -231,6 +365,32 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
         <span className="font-mono text-xs font-semibold text-slate-700">
           {computeCampaignDuration(c)}
         </span>
+      )
+    },
+    {
+      key: 'comment',
+      label: 'Commentaire',
+      render: (c) => (
+        <div className="max-w-[220px]">
+          {c.comment ? (
+            <button
+              onClick={(e) => handleEditComment(c, e)}
+              className="group text-left flex items-start gap-1.5 text-xs text-slate-700 hover:text-[#1F4F4A] bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/80 px-2 py-1 rounded-lg transition cursor-pointer"
+              title="Cliquer pour modifier le commentaire"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+              <span className="line-clamp-2">{c.comment}</span>
+            </button>
+          ) : (
+            <button
+              onClick={(e) => handleEditComment(c, e)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-slate-700 px-2 py-1 rounded-md hover:bg-slate-100 transition cursor-pointer"
+            >
+              <MessageSquare className="w-3 h-3" />
+              <span>+ Ajouter une note</span>
+            </button>
+          )}
+        </div>
       )
     },
     {
@@ -281,9 +441,48 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Statistiques filtrées de l'historique */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-sm">
+          <div className="text-[11px] font-medium text-slate-500">Campagnes filtrées</div>
+          <div className="text-base font-bold text-slate-900 mt-0.5">
+            {filteredStats.total} <span className="text-xs font-normal text-slate-400">/ {campaigns.length}</span>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-sm">
+          <div className="text-[11px] font-medium text-slate-500">Trajets analysés</div>
+          <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">
+            {filteredStats.totalTrips.toLocaleString('fr-FR')}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-sm">
+          <div className="text-[11px] font-medium text-slate-500">Moyenne Yango (filtrée)</div>
+          <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">
+            {filteredStats.avgYango > 0 ? `${filteredStats.avgYango.toLocaleString('fr-FR')} F` : '—'}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-sm">
+          <div className="text-[11px] font-medium text-slate-500">Moyenne Hero Cab (filtrée)</div>
+          <div className="text-base font-bold text-teal-700 mt-0.5 font-mono">
+            {filteredStats.avgHero > 0 ? `${filteredStats.avgHero.toLocaleString('fr-FR')} F` : '—'}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-sm">
+          <div className="text-[11px] font-medium text-slate-500">Heures de pointe</div>
+          <div className="text-base font-bold text-rose-700 mt-0.5">
+            {filteredStats.peakCount} <span className="text-xs font-normal text-slate-500">campagne(s)</span>
+          </div>
+        </div>
+      </div>
+
       {/* Controls Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+            <Filter className="w-3.5 h-3.5 text-[#1F4F4A]" />
+            <span>Filtres :</span>
+          </div>
+
           <div className="flex items-center gap-2">
             <label htmlFor="city-filter-select" className="text-xs text-slate-500 font-medium">Ville :</label>
             <SearchableSelect
@@ -298,53 +497,58 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
             />
           </div>
 
+          {/* Arrondissement */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-500 font-medium">Arrondissement :</label>
+            <select
+              value={arrondissementFilter}
+              onChange={(e) => setArrondissementFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none"
+            >
+              <option value="all">Tous arrondissements</option>
+              {availableArrondissements.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Périmètre */}
           <div className="flex items-center gap-1.5">
             <label className="text-xs text-slate-500 font-medium">Périmètre :</label>
             <select
               value={scopeFilter}
-              onChange={(e) => {
-                setScopeFilter(e.target.value as any);
-                if (e.target.value !== 'arrondissement') setArrondissementFilter('all');
-              }}
+              onChange={(e) => setScopeFilter(e.target.value as any)}
               className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="all">Tous périmètres</option>
               <option value="city_wide">Ville entière</option>
-              <option value="arrondissement">Arrondissement</option>
+              <option value="arrondissement">Arrondissement (Intra)</option>
               <option value="test_sample">Tests (&le; 50)</option>
             </select>
           </div>
 
-          {scopeFilter === 'arrondissement' && (
-            <div className="flex items-center gap-1.5">
-              <select
-                value={arrondissementFilter}
-                onChange={(e) => setArrondissementFilter(e.target.value)}
-                className="bg-teal-50 border border-teal-200 rounded-lg px-2 py-1 text-xs font-medium text-teal-900 focus:outline-none"
-              >
-                <option value="all">Tous arrondissements</option>
-                {availableArrondissements.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Jams / Heures de pointe */}
+          {/* Heures de pointe & Créneaux */}
           <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-500 font-medium">Créneau / Pointe :</label>
             <select
-              value={jamsFilter}
-              onChange={(e) => setJamsFilter(e.target.value as any)}
+              value={timeSlotFilter}
+              onChange={(e) => setTimeSlotFilter(e.target.value as TimeSlotFilter)}
               className={`rounded-lg px-2 py-1 text-xs font-medium border focus:outline-none ${
-                jamsFilter === 'with_jams'
-                  ? 'bg-amber-50/80 border-amber-200 text-amber-800 font-semibold'
+                timeSlotFilter !== 'all'
+                  ? 'bg-amber-50/80 border-amber-300 text-amber-900 font-semibold'
                   : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
-              <option value="all">Tous trafics</option>
-              <option value="with_jams">🚗 Heure de pointe</option>
-              <option value="without_jams">🟢 Fluide</option>
+              <option value="all">Tous les créneaux (24h/24)</option>
+              <option value="peak_any">🔥 Toutes Heures de Pointe (Matin, Midi, Soir)</option>
+              <option value="morning_peak">🌅 Pointe Matin (06h00 – 10h00)</option>
+              <option value="off_peak_morning">🟢 Creuse Matinée (10h00 – 12h00)</option>
+              <option value="midday_peak">☀️ Pointe Midi (12h00 – 14h30)</option>
+              <option value="off_peak_afternoon">🌤️ Creuse Après-midi (14h30 – 16h30)</option>
+              <option value="evening_peak">🌆 Pointe Soir (16h30 – 20h30)</option>
+              <option value="night">🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
+              <option value="off_peak">🟢 Toutes Heures Creuses (Fluide)</option>
+              <option value="with_shortage">⚠️ Avec Pénurie Chauffeurs</option>
             </select>
           </div>
 
@@ -401,7 +605,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
         <div className="space-y-6">
           {campaignsByDay.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 text-xs">
-              Aucune campagne enregistrée dans l'historique.
+              Aucune campagne enregistrée pour les filtres sélectionnés.
             </div>
           ) : (
             campaignsByDay.map((group) => (
@@ -426,6 +630,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                       hour: '2-digit',
                       minute: '2-digit'
                     });
+                    const peakInfo = getCampaignPeakHourInfo(c);
                     return (
                       <div
                         key={c.id}
@@ -433,12 +638,12 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                       >
                         {/* Top info */}
                         <div>
-                          <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
                             <div className="flex items-center gap-1.5">
                               <strong className="text-xs font-bold text-slate-900 truncate">
                                 {c.cityName}
                               </strong>
-                              <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                                 {timeStr}
                               </span>
                             </div>
@@ -454,6 +659,37 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                             >
                               {c.status === 'completed' ? 'Succès' : c.status === 'in_progress' ? 'En cours' : 'Arrêtée'}
                             </span>
+                          </div>
+
+                          {/* Peak Hour & Arrondissement Badges */}
+                          <div className="flex flex-wrap items-center gap-1 mb-2">
+                            <button
+                              type="button"
+                              onClick={(e) => handleEditComment(c, e)}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer hover:opacity-80 transition ${peakInfo.badgeClass}`}
+                              title={`${peakInfo.slotLabel} — Cliquer pour modifier le créneau`}
+                            >
+                              {peakInfo.shortLabel}
+                            </button>
+                            {c.arrondissement && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-50 text-teal-800 border border-teal-200">
+                                <MapPin className="w-2.5 h-2.5" />
+                                {c.arrondissement}
+                              </span>
+                            )}
+                            {peakInfo.surgePct > 0 && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-950 border border-amber-300"
+                                title="Forte demande / hausse tarifaire Yango par rapport au tarif creux"
+                              >
+                                🔥 +{peakInfo.surgePct}%
+                              </span>
+                            )}
+                            {peakInfo.shortageCount > 0 && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                                <Zap className="w-2.5 h-2.5" /> {peakInfo.shortageCount} pén.
+                              </span>
+                            )}
                           </div>
 
                           <div className="text-[11px] text-slate-500 font-medium mb-2">
@@ -486,6 +722,28 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                                 {c.heroStats?.avgPrice ? `${c.heroStats.avgPrice.toLocaleString('fr-FR')} F` : '—'}
                               </span>
                             </div>
+                          </div>
+
+                          {/* Comment Section */}
+                          <div className="mt-2">
+                            {c.comment ? (
+                              <button
+                                onClick={(e) => handleEditComment(c, e)}
+                                className="w-full text-left flex items-start gap-1.5 text-[11px] text-slate-700 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/80 p-1.5 rounded-lg transition cursor-pointer"
+                                title="Modifier le commentaire"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                <span className="line-clamp-2">{c.comment}</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => handleEditComment(c, e)}
+                                className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-medium text-slate-400 hover:text-slate-700 py-1 rounded-md border border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition cursor-pointer"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                <span>Ajouter un commentaire</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -521,11 +779,12 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
         <DataTable
           columns={columns}
           data={filteredCampaigns}
-          searchPlaceholder="Rechercher par date ou ville..."
-          searchKeys={['cityName']}
+          searchPlaceholder="Rechercher par date, ville, arrondissement ou commentaire..."
+          searchKeys={['cityName', 'arrondissement', 'comment']}
           exportFileName="historique_campagnes_vtc"
         />
       )}
     </div>
   );
 };
+

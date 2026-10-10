@@ -9,6 +9,9 @@ export type TripShortageFilter = 'all' | 'shortage' | 'available';
 
 interface PricingResultsFilterBarProps {
   neighborhoodNames: string[];
+  arrondissements?: string[];
+  arrondissementFilter?: string;
+  onArrondissementFilterChange?: (val: string) => void;
   startFilter: string;
   onStartFilterChange: (val: string) => void;
   endFilter: string;
@@ -32,6 +35,9 @@ interface PricingResultsFilterBarProps {
 
 export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = ({
   neighborhoodNames,
+  arrondissements = [],
+  arrondissementFilter = 'all',
+  onArrondissementFilterChange,
   startFilter,
   onStartFilterChange,
   endFilter,
@@ -62,6 +68,7 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
   ];
 
   const isFiltered =
+    (arrondissementFilter && arrondissementFilter !== 'all') ||
     Boolean(startFilter) ||
     Boolean(endFilter) ||
     jamsFilter !== 'all' ||
@@ -112,7 +119,29 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
       </div>
 
       {/* Selectors grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-xs">
+        {/* 0. Arrondissement */}
+        {arrondissements.length > 0 && onArrondissementFilterChange && (
+          <div>
+            <select
+              value={arrondissementFilter}
+              onChange={(e) => onArrondissementFilterChange(e.target.value)}
+              className={`w-full border rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none transition ${
+                arrondissementFilter !== 'all'
+                  ? 'bg-teal-50 border-teal-300 text-teal-900 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              <option value="all">Arrondissement : Tous</option>
+              {arrondissements.map((arr) => (
+                <option key={arr} value={arr}>
+                  📍 {arr}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* 1. Quartier Départ */}
         <div>
           <SearchableSelect
@@ -144,9 +173,9 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
                 : 'bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
-            <option value="all">Trafic : Tous</option>
-            <option value="with_jams">🚗 Heure de pointe ({hasJamsInCampaign ? 'Détecté' : 'Actif'})</option>
-            <option value="without_jams">🟢 Fluide uniquement</option>
+            <option value="all">Trafic / Majoration : Tous</option>
+            <option value="with_jams">🔥 Trajets majorés ({hasJamsInCampaign ? 'Détectés' : '+25% et +'})</option>
+            <option value="without_jams">🟢 Tarif normal (Fluide)</option>
           </select>
         </div>
 
