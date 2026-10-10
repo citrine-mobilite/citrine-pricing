@@ -1,5 +1,5 @@
 import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings } from '../types';
-import { getCachedCampaignTrips, setCachedCampaignTrips, invalidateCampaignTripsCache } from './dbCache';
+import { getCachedCampaignTrips, setCachedCampaignTrips, invalidateCampaignTripsCache, invalidateAllTripsCache } from './dbCache';
 
 const BASE_URL = '/api';
 
@@ -85,6 +85,11 @@ export const api = {
   },
 
   async deleteUser(id: string): Promise<void> {
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('citrine_users') || k.includes(id))
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/users/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -136,6 +141,11 @@ export const api = {
   },
 
   async deleteCity(id: string): Promise<void> {
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(id))
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
   },
@@ -159,7 +169,7 @@ export const api = {
 
   async createNeighborhood(data: Partial<Neighborhood>): Promise<Neighborhood> {
     try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache_v2')).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods`, {
       method: 'POST',
@@ -175,7 +185,7 @@ export const api = {
 
   async updateNeighborhood(id: string, data: Partial<Neighborhood>): Promise<Neighborhood> {
     try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache_v2')).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, {
       method: 'PUT',
@@ -188,13 +198,16 @@ export const api = {
 
   async deleteNeighborhood(id: string): Promise<void> {
     try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache_v2')).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(id)).forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression du quartier.');
   },
 
   async clearCityNeighborhoods(cityId: string): Promise<{ success: boolean; deletedCount: number }> {
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(cityId)).forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/city/${encodeURIComponent(cityId)}`, {
       method: 'DELETE'
     });
@@ -258,46 +271,34 @@ export const api = {
     return res.json();
   },
 
-  // Campaigns (avec cache local 7 jours - conserve les anciennes et fusionne les nouvelles)
+  // Campaigns
   async getCampaigns(cityId?: string): Promise<PricingCampaign[]> {
     const CACHE_KEY = `citrine_campaigns_v7_${cityId || 'all'}`;
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-    let cachedList: PricingCampaign[] = [];
-    try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const { data, timestamp } = JSON.parse(raw);
-        if (Date.now() - timestamp < SEVEN_DAYS_MS && Array.isArray(data)) {
-          cachedList = data;
-        }
-      }
-    } catch {}
 
     try {
       const url = cityId ? `${BASE_URL}/campaigns?cityId=${encodeURIComponent(cityId)}` : `${BASE_URL}/campaigns`;
       const res = await fetch(url);
       if (res.ok) {
         const freshList: PricingCampaign[] = await res.json();
-        // Si le serveur a renvoyé des campagnes réelles, on met à jour le cache
-        if (freshList && freshList.length > 0) {
-          try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ data: freshList, timestamp: Date.now() }));
-          } catch {}
-          return freshList;
-        }
-        // Si le serveur renvoie 0 campagne (ex: quota Firestore temporairement atteint),
-        // on préserve précieusement le cache local existant de l'utilisateur !
-        if (cachedList && cachedList.length > 0) {
-          return cachedList;
-        }
+        // Le serveur fait foi : mise à jour immédiate du cache local (y compris si la liste est vide)
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: freshList, timestamp: Date.now() }));
+        } catch {}
         return freshList;
       }
     } catch (e) {
       console.warn('[API Client] getCampaigns network error:', e);
+      // En cas d'erreur réseau complète (hors-ligne), lecture de secours du cache local
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const { data } = JSON.parse(raw);
+          if (Array.isArray(data)) return data;
+        }
+      } catch {}
     }
 
-    return cachedList;
+    return [];
   },
 
   async getCampaign(id: string): Promise<PricingCampaign | null> {
@@ -479,16 +480,26 @@ export const api = {
   async deleteCampaign(id: string): Promise<void> {
     await invalidateCampaignTripsCache(id);
     try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('citrine_campaigns_')) {
+      localStorage.removeItem(`citrine_campaigns_${id}`);
+      localStorage.removeItem(`citrine_trips_${id}`);
+      localStorage.removeItem(`citrine_canonical_${id}`);
+      localStorage.removeItem(`trips_${id}`);
+
+      const allKeys = Object.keys(localStorage);
+      for (const key of allKeys) {
+        if (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_')) {
           const raw = localStorage.getItem(key);
           if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed.data)) {
-              parsed.data = parsed.data.filter((c: any) => c.id !== id);
-              localStorage.setItem(key, JSON.stringify(parsed));
-            }
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed.data)) {
+                parsed.data = parsed.data.filter((c: any) => c.id !== id);
+                localStorage.setItem(key, JSON.stringify(parsed));
+              } else if (Array.isArray(parsed)) {
+                const filtered = parsed.filter((c: any) => c.id !== id);
+                localStorage.setItem(key, JSON.stringify(filtered));
+              }
+            } catch {}
           }
         }
       }
@@ -500,15 +511,19 @@ export const api = {
 
   async deleteAllCampaigns(): Promise<void> {
     try {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_'))) {
-          keysToRemove.push(key);
+      const allKeys = Object.keys(localStorage);
+      for (const key of allKeys) {
+        if (
+          key.startsWith('citrine_campaigns') ||
+          key.startsWith('citrine_trips') ||
+          key.startsWith('trips_') ||
+          key.startsWith('citrine_canonical')
+        ) {
+          localStorage.removeItem(key);
         }
       }
-      keysToRemove.forEach(k => localStorage.removeItem(k));
     } catch {}
+    await invalidateAllTripsCache();
     const res = await fetch(`${BASE_URL}/campaigns`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de toutes les campagnes.');
   },

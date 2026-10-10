@@ -110,6 +110,23 @@ export async function invalidateCampaignTripsCache(campaignId: string): Promise<
 }
 
 /**
+ * Supprime TOUS les trajets et comparaisons en cache (suppression globale)
+ */
+export async function invalidateAllTripsCache(): Promise<void> {
+  memoryFallback.clear();
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const transaction = db.transaction([STORE_TRIPS, STORE_COMPARISONS], 'readwrite');
+      transaction.objectStore(STORE_TRIPS).clear();
+      transaction.objectStore(STORE_COMPARISONS).clear();
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+    });
+  } catch {}
+}
+
+/**
  * Récupère une comparaison temporelle mise en cache jusqu'à minuit
  */
 export async function getTemporalComparisonCache(key: string): Promise<any | null> {

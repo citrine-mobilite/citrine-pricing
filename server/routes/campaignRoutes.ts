@@ -26,7 +26,9 @@ import {
   ensureSynced,
   saveLocalCampaignsDiskBackup,
   saveCampaignTripsDiskBackup,
-  loadCampaignTripsDiskBackup
+  loadCampaignTripsDiskBackup,
+  deleteCampaignTripsDiskBackup,
+  deleteAllCampaignTripsDiskBackup
 } from '../db/memoryStore.js';
 import { PricingCampaign, CanonicalTrip, TripResult } from '../types.js';
 import {
@@ -514,6 +516,7 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
   }
   campaignSessions.clear();
   activePricingSessions.clear();
+  deleteAllCampaignTripsDiskBackup();
   saveLocalCampaignsDiskBackup();
 
   if (db && !isFirestoreQuotaExceeded() && !isFirestoreWriteQuotaExceeded()) {
@@ -556,6 +559,7 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   delete memoryCampaignTrips[id];
   delete memoryCampaignCanonicalTrips[id];
   campaignSessions.delete(id);
+  deleteCampaignTripsDiskBackup(id);
   saveLocalCampaignsDiskBackup();
 
   // Nettoyage de l'historique en mémoire locale

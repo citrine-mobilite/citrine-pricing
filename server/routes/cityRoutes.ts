@@ -116,6 +116,7 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const deleted = cities.splice(idx, 1)[0];
   const remainingNbs = neighborhoods.filter(n => n.cityId !== id);
   setNeighborhoods(remainingNbs);
+  saveNeighborhoodsDiskBackup();
 
   await safeFirestoreWrite('deleteCity', () => deleteDoc(doc(db!, 'cities', id)));
 
@@ -240,6 +241,7 @@ router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   }
 
   neighborhoods.splice(idx, 1);
+  saveNeighborhoodsDiskBackup();
   await safeFirestoreWrite('deleteNb', () => deleteDoc(doc(db!, 'neighborhoods', id)));
   return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
 });
@@ -249,6 +251,7 @@ router.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Respo
   const countBefore = neighborhoods.length;
   const filtered = neighborhoods.filter(n => n.cityId !== cityId);
   setNeighborhoods(filtered);
+  saveNeighborhoodsDiskBackup();
   const deletedCount = countBefore - filtered.length;
 
   if (db) {

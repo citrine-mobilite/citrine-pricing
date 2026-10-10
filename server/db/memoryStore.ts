@@ -30,6 +30,33 @@ export function saveLocalCampaignsDiskBackup() {
   }
 }
 
+const USERS_FILE = path.resolve(DATA_DIR, 'users.json');
+
+export function saveUsersDiskBackup() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing users to disk:', e.message);
+  }
+}
+
+export function loadUsersDiskBackup(): boolean {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const raw = fs.readFileSync(USERS_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        users = data;
+        return true;
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning reading users from disk:', e.message);
+  }
+  return false;
+}
+
 export function saveCampaignTripsDiskBackup(campaignId: string, trips: TripResult[], canonicalTrips?: CanonicalTrip[]) {
   try {
     if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
@@ -43,6 +70,34 @@ export function saveCampaignTripsDiskBackup(campaignId: string, trips: TripResul
     }
   } catch (e: any) {
     console.warn(`[Disk Backup] Warning writing trips for ${campaignId} to disk:`, e.message);
+  }
+}
+
+export function deleteCampaignTripsDiskBackup(campaignId: string) {
+  try {
+    if (fs.existsSync(TRIPS_DIR)) {
+      const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+      if (fs.existsSync(canonPath)) fs.unlinkSync(canonPath);
+    }
+  } catch (e: any) {
+    console.warn(`[Disk Backup] Warning deleting trips for ${campaignId} from disk:`, e.message);
+  }
+}
+
+export function deleteAllCampaignTripsDiskBackup() {
+  try {
+    if (fs.existsSync(TRIPS_DIR)) {
+      const files = fs.readdirSync(TRIPS_DIR);
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          fs.unlinkSync(path.resolve(TRIPS_DIR, file));
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning deleting all trips from disk:', e.message);
   }
 }
 
@@ -335,6 +390,7 @@ export async function deleteHistoryForCampaign(campaignId: string) {
  */
 export async function syncFromFirestore() {
   loadLocalCampaignsDiskBackup();
+  loadUsersDiskBackup();
   if (!db || isFirestoreQuotaExceeded()) return;
   try {
     const [usersRes, citiesRes, nbsRes] = await Promise.allSettled([

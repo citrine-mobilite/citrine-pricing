@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
-import { users, setUsers, defaultUsers, recordHistory, CITRINE_ADMIN_PASSWORD } from '../db/memoryStore.js';
+import { users, setUsers, defaultUsers, recordHistory, CITRINE_ADMIN_PASSWORD, saveUsersDiskBackup } from '../db/memoryStore.js';
 import { User } from '../types.js';
 
 const router = Router();
@@ -188,6 +188,7 @@ router.post('/api/users', async (req: Request, res: Response) => {
   };
 
   users.push(newUser);
+  saveUsersDiskBackup();
   await safeFirestoreWrite('createUser', () => setDoc(doc(db!, 'users', newUser.id), cleanFirestoreDoc(newUser)));
 
   await recordHistory({
@@ -229,6 +230,7 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
     user.passwordHash = await bcrypt.hash(rawPass, DEFAULT_SALT_ROUNDS);
   }
 
+  saveUsersDiskBackup();
   await safeFirestoreWrite('updateUser', () => setDoc(doc(db!, 'users', id), cleanFirestoreDoc(user), { merge: true }));
 
   await recordHistory({
@@ -284,6 +286,7 @@ router.delete('/api/users/:id', async (req: Request, res: Response) => {
   }
 
   const deleted = users.splice(idx, 1)[0];
+  saveUsersDiskBackup();
   
   if (db) {
     // 1. Tenter la suppression physique directe

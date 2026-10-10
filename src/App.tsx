@@ -67,24 +67,8 @@ function AppContent() {
         setCampaigns(campaignsData);
         setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
       } else {
-        // Fallback résilient : restaurer depuis le cache local navigateur
-        try {
-          const raw = localStorage.getItem('citrine_campaigns_v7_all');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-              setCampaigns(parsed.data);
-              setSelectedCampaignId(parsed.data[0].id);
-              api.syncCampaignsCache(parsed.data).catch(() => {});
-            } else {
-              setSelectedCampaignId(null);
-            }
-          } else {
-            setSelectedCampaignId(null);
-          }
-        } catch {
-          setSelectedCampaignId(null);
-        }
+        setCampaigns([]);
+        setSelectedCampaignId(null);
       }
 
       if (usersData && usersData.length > 0) {
