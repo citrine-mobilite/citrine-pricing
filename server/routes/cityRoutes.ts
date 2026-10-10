@@ -3,8 +3,8 @@ import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced, saveNeighborhoodsDiskBackup } from '../db/memoryStore.js';
-import { City, Neighborhood } from '../types.js';
 import { getNextSequence } from '../db/counters.js';
+import { City, Neighborhood } from '../types.js';
 
 const router = Router();
 
@@ -47,11 +47,11 @@ router.post('/api/cities', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Nom, pays et devise sont obligatoires.' });
   }
 
-  const cityNumericId = getNextSequence('cities');
+  const citySeqId = getNextSequence('cities');
   const cityUuid = `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
 
   const newCity: City = {
-    id: cityNumericId,
+    id: citySeqId,
     uuid: cityUuid,
     name: name.trim(),
     country: country.trim(),
@@ -77,7 +77,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
 
 router.put('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const city = cities.find(c => String(c.id) === String(id) || c.uuid === id);
+  const city = cities.find(c => String(c.id) === id || c.uuid === id || c.id == id);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
@@ -94,7 +94,7 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
     if (!isNewActive) {
       // Lorsqu'une ville est désactivée, ses quartiers ne sont plus monitorés
       neighborhoods.forEach(n => {
-        if (String(n.cityId) === String(city.id) || n.cityId === city.uuid) {
+        if (n.cityId === id || n.cityId === city.uuid || String(n.cityId) === String(city.id)) {
           n.active = false;
           if (db) {
             safeFirestoreWrite('deactivateNbOnCityDisable', () =>
@@ -107,25 +107,23 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
   }
   if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
 
-  const docId = city.uuid || String(city.id);
-  await safeFirestoreWrite('updateCity', () => setDoc(doc(db!, 'cities', docId), cleanFirestoreDoc(city), { merge: true }));
+  await safeFirestoreWrite('updateCity', () => setDoc(doc(db!, 'cities', city.uuid || String(city.id)), cleanFirestoreDoc(city), { merge: true }));
   return res.json(city);
 });
 
 router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = cities.findIndex(c => String(c.id) === String(id) || c.uuid === id);
+  const idx = cities.findIndex(c => String(c.id) === id || c.uuid === id || c.id == id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
 
   const deleted = cities.splice(idx, 1)[0];
-  const remainingNbs = neighborhoods.filter(n => String(n.cityId) !== String(deleted.id) && n.cityId !== deleted.uuid);
+  const remainingNbs = neighborhoods.filter(n => n.cityId !== id && n.cityId !== deleted.uuid && String(n.cityId) !== String(deleted.id));
   setNeighborhoods(remainingNbs);
   saveNeighborhoodsDiskBackup();
 
-  const docId = deleted.uuid || String(deleted.id);
-  await safeFirestoreWrite('deleteCity', () => deleteDoc(doc(db!, 'cities', docId)));
+  await safeFirestoreWrite('deleteCity', () => deleteDoc(doc(db!, 'cities', deleted.uuid || String(deleted.id))));
 
   await recordHistory({
     action: 'delete_city',
@@ -182,17 +180,17 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'cityId, nom, latitude et longitude sont obligatoires.' });
   }
 
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
+  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId || c.id == cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville parente introuvable.' });
   }
 
   const isActive = active !== undefined ? Boolean(active) : (status ? status.toLowerCase() !== 'inactif' : true);
-  const nbNumericId = getNextSequence('neighborhoods');
+  const nbSeqId = getNextSequence('neighborhoods');
   const nbUuid = `nb_${randomUUID()}`;
 
   const newNb: Neighborhood = {
-    id: nbNumericId,
+    id: nbSeqId,
     uuid: nbUuid,
     cityId: String(city.uuid || city.id),
     name: name.trim(),
@@ -211,15 +209,14 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
 
   neighborhoods.push(newNb);
   saveNeighborhoodsDiskBackup();
-  const docId = newNb.uuid || String(newNb.id);
-  await safeFirestoreWrite('createNb', () => setDoc(doc(db!, 'neighborhoods', docId), cleanFirestoreDoc(newNb)));
+  await safeFirestoreWrite('createNb', () => setDoc(doc(db!, 'neighborhoods', newNb.uuid || String(newNb.id)), cleanFirestoreDoc(newNb)));
 
   return res.status(201).json({ ...newNb, cityName: city.name });
 });
 
 router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const nb = neighborhoods.find(n => String(n.id) === String(id) || n.uuid === id);
+  const nb = neighborhoods.find(n => String(n.id) === id || n.uuid === id || n.id == id);
   if (!nb) {
     return res.status(404).json({ error: 'Quartier introuvable.' });
   }
@@ -240,22 +237,20 @@ router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   nb.updatedAt = new Date().toISOString();
 
   saveNeighborhoodsDiskBackup();
-  const docId = nb.uuid || String(nb.id);
-  await safeFirestoreWrite('updateNb', () => setDoc(doc(db!, 'neighborhoods', docId), cleanFirestoreDoc(nb), { merge: true }));
+  await safeFirestoreWrite('updateNb', () => setDoc(doc(db!, 'neighborhoods', nb.uuid || String(nb.id)), cleanFirestoreDoc(nb), { merge: true }));
   return res.json(nb);
 });
 
 router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = neighborhoods.findIndex(n => String(n.id) === String(id) || n.uuid === id);
+  const idx = neighborhoods.findIndex(n => String(n.id) === id || n.uuid === id || n.id == id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Quartier introuvable.' });
   }
 
   const deleted = neighborhoods.splice(idx, 1)[0];
   saveNeighborhoodsDiskBackup();
-  const docId = deleted.uuid || String(deleted.id);
-  await safeFirestoreWrite('deleteNb', () => deleteDoc(doc(db!, 'neighborhoods', docId)));
+  await safeFirestoreWrite('deleteNb', () => deleteDoc(doc(db!, 'neighborhoods', deleted.uuid || String(deleted.id))));
   return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
 });
 
@@ -329,12 +324,9 @@ router.post('/api/neighborhoods/import-batch', async (req: Request, res: Respons
   const createdNeighborhoods: Neighborhood[] = [];
   importedList.forEach((item: any) => {
     if (item.name && item.lat !== undefined && item.lng !== undefined) {
-      const nbNumericId = getNextSequence('neighborhoods');
-      const nbUuid = `nb_${randomUUID()}`;
       const nb: Neighborhood = {
-        id: nbNumericId,
-        uuid: nbUuid,
-        cityId: String(city.uuid || city.id),
+        id: randomUUID(),
+        cityId,
         name: String(item.name).trim(),
         lat: Number(item.lat),
         lng: Number(item.lng),
@@ -417,12 +409,9 @@ router.post('/api/neighborhoods/reconcile-batch', async (req: Request, res: Resp
         modifiedDocs.push(existing);
       }
     } else if (item.status === 'create') {
-      const nbNumericId = getNextSequence('neighborhoods');
-      const nbUuid = `nb_dla_${randomUUID()}`;
       const newNb: Neighborhood = {
-        id: nbNumericId,
-        uuid: nbUuid,
-        cityId: String(city.uuid || city.id),
+        id: `nb_dla_${randomUUID()}`,
+        cityId,
         name: String(item.name).trim(),
         ville: item.ville ? String(item.ville).trim() : city.name,
         departement: item.departement ? String(item.departement).trim() : 'Wouri',

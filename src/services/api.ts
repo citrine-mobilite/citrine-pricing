@@ -59,7 +59,7 @@ export const api = {
   },
 
   async updateUser(id: string | number, data: Partial<User> & { password?: string }): Promise<User> {
-    const res = await fetch(`${BASE_URL}/users/${encodeURIComponent(String(id))}`, {
+    const res = await fetch(`${BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -72,7 +72,7 @@ export const api = {
   },
 
   async changeUserPassword(id: string | number, password: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${BASE_URL}/users/${encodeURIComponent(String(id))}/change-password`, {
+    const res = await fetch(`${BASE_URL}/users/${id}/change-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password })
@@ -85,13 +85,13 @@ export const api = {
   },
 
   async deleteUser(id: string | number): Promise<void> {
-    const strId = String(id);
     try {
+      const idStr = String(id);
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_users') || k.includes(strId))
+        .filter(k => k.startsWith('citrine_users') || k.includes(idStr))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/users/${encodeURIComponent(strId)}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/users/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la suppression de l’utilisateur.');
@@ -131,8 +131,8 @@ export const api = {
     return res.json();
   },
 
-  async updateCity(id: string | number, data: Partial<City>): Promise<City> {
-    const res = await fetch(`${BASE_URL}/cities/${encodeURIComponent(String(id))}`, {
+  async updateCity(id: string, data: Partial<City>): Promise<City> {
+    const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -141,22 +141,21 @@ export const api = {
     return res.json();
   },
 
-  async deleteCity(id: string | number): Promise<void> {
-    const strId = String(id);
+  async deleteCity(id: string): Promise<void> {
     try {
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(strId))
+        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(id))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/cities/${encodeURIComponent(strId)}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
   },
 
   // Neighborhoods (Toujours frais depuis le serveur)
-  async getNeighborhoods(cityId?: string | number, forceRefresh: boolean = false): Promise<Neighborhood[]> {
+  async getNeighborhoods(cityId?: string, forceRefresh: boolean = false): Promise<Neighborhood[]> {
     try {
       const params = new URLSearchParams();
-      if (cityId) params.append('cityId', String(cityId));
+      if (cityId) params.append('cityId', cityId);
       if (forceRefresh) params.append('forceRefresh', 'true');
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
@@ -185,11 +184,11 @@ export const api = {
     return res.json();
   },
 
-  async updateNeighborhood(id: string | number, data: Partial<Neighborhood>): Promise<Neighborhood> {
+  async updateNeighborhood(id: string, data: Partial<Neighborhood>): Promise<Neighborhood> {
     try {
       Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/neighborhoods/${encodeURIComponent(String(id))}`, {
+    const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -198,12 +197,11 @@ export const api = {
     return res.json();
   },
 
-  async deleteNeighborhood(id: string | number): Promise<void> {
-    const strId = String(id);
+  async deleteNeighborhood(id: string): Promise<void> {
     try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(strId)).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(id)).forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/neighborhoods/${encodeURIComponent(strId)}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression du quartier.');
   },
 
@@ -304,9 +302,9 @@ export const api = {
     return [];
   },
 
-  async getCampaign(id: string | number): Promise<PricingCampaign | null> {
+  async getCampaign(id: string): Promise<PricingCampaign | null> {
     try {
-      const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(String(id))}`);
+      const res = await fetch(`${BASE_URL}/campaigns/${id}`);
       if (res.status === 404) return null;
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -377,7 +375,7 @@ export const api = {
   },
 
   async processCampaignChunk(
-    campaignId: string | number, 
+    campaignId: string, 
     chunkIndex: number, 
     signal?: AbortSignal,
     meta?: {
@@ -398,7 +396,7 @@ export const api = {
     chunkTrips: TripResult[];
     chunkCanonicalTrips?: any[];
   }> {
-    const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(String(campaignId))}/process-chunk`, {
+    const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/process-chunk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chunkIndex, ...meta, fallbackMeta: meta }),
@@ -412,11 +410,11 @@ export const api = {
   },
 
   async finalizeCampaign(
-    campaignId: string | number, 
+    campaignId: string, 
     canonicalTrips?: any[], 
     trips?: TripResult[]
   ): Promise<{ success: boolean; campaign: PricingCampaign }> {
-    const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(String(campaignId))}/finalize`, {
+    const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/finalize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ canonicalTrips, trips })
@@ -428,15 +426,14 @@ export const api = {
     return res.json();
   },
 
-  async cancelCampaign(id: string | number): Promise<{ campaign: PricingCampaign }> {
-    const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(String(id))}/cancel`, { method: 'POST' });
+  async cancelCampaign(id: string): Promise<{ campaign: PricingCampaign }> {
+    const res = await fetch(`${BASE_URL}/campaigns/${id}/cancel`, { method: 'POST' });
     if (!res.ok) throw new Error('Erreur lors de l’interruption de la campagne.');
     return res.json();
   },
 
-  async updateCampaignComment(id: string | number, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
-    const strId = String(id);
-    const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(strId)}/comment`, {
+  async updateCampaignComment(id: string, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
+    const res = await fetch(`${BASE_URL}/campaigns/${id}/comment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ comment, timeSlotOverride })
@@ -455,7 +452,7 @@ export const api = {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed.data)) {
               parsed.data = parsed.data.map((c: any) =>
-                String(c.id) === strId || c.uuid === strId
+                c.id === id
                   ? {
                       ...c,
                       comment,
@@ -473,22 +470,21 @@ export const api = {
     return data.campaign;
   },
 
-  async stepCampaign(id: string | number): Promise<{ success: boolean; campaign?: PricingCampaign }> {
+  async stepCampaign(id: string): Promise<{ success: boolean; campaign?: PricingCampaign }> {
     try {
-      const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(String(id))}/step`, { method: 'POST' });
+      const res = await fetch(`${BASE_URL}/campaigns/${id}/step`, { method: 'POST' });
       if (res.ok) return await res.json();
     } catch {}
     return { success: false };
   },
 
-  async deleteCampaign(id: string | number): Promise<void> {
-    const strId = String(id);
-    await invalidateCampaignTripsCache(strId);
+  async deleteCampaign(id: string): Promise<void> {
+    await invalidateCampaignTripsCache(id);
     try {
-      localStorage.removeItem(`citrine_campaigns_${strId}`);
-      localStorage.removeItem(`citrine_trips_${strId}`);
-      localStorage.removeItem(`citrine_canonical_${strId}`);
-      localStorage.removeItem(`trips_${strId}`);
+      localStorage.removeItem(`citrine_campaigns_${id}`);
+      localStorage.removeItem(`citrine_trips_${id}`);
+      localStorage.removeItem(`citrine_canonical_${id}`);
+      localStorage.removeItem(`trips_${id}`);
 
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
@@ -498,10 +494,10 @@ export const api = {
             try {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed.data)) {
-                parsed.data = parsed.data.filter((c: any) => String(c.id) !== strId && c.uuid !== strId);
+                parsed.data = parsed.data.filter((c: any) => c.id !== id);
                 localStorage.setItem(key, JSON.stringify(parsed));
               } else if (Array.isArray(parsed)) {
-                const filtered = parsed.filter((c: any) => String(c.id) !== strId && c.uuid !== strId);
+                const filtered = parsed.filter((c: any) => c.id !== id);
                 localStorage.setItem(key, JSON.stringify(filtered));
               }
             } catch {}
@@ -510,7 +506,7 @@ export const api = {
       }
     } catch {}
 
-    const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(strId)}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/campaigns/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la campagne.');
   },
 
@@ -535,7 +531,7 @@ export const api = {
 
   // Trip Results avec Cache Local PWA IndexedDB (0 lecture Firestore)
   async getCampaignResults(
-    campaignId: string | number,
+    campaignId: string,
     filters?: {
       startNeighborhood?: string;
       endNeighborhood?: string;
@@ -546,7 +542,6 @@ export const api = {
       all?: boolean;
     }
   ): Promise<TripResult[]> {
-    const strId = String(campaignId);
     // Si aucun filtre spécifique, tenter d'abord de servir depuis le cache local IndexedDB
     const hasCustomFilters = Boolean(
       filters?.startNeighborhood ||
@@ -558,10 +553,10 @@ export const api = {
     );
 
     if (!hasCustomFilters) {
-      const cached = await getCachedCampaignTrips(strId);
+      const cached = await getCachedCampaignTrips(campaignId);
       if (cached && cached.length > 0) {
         // En arrière-plan non-bloquant, synchroniser le serveur si nécessaire
-        fetch(`${BASE_URL}/campaigns/${encodeURIComponent(strId)}/sync-trips`, {
+        fetch(`${BASE_URL}/campaigns/${campaignId}/sync-trips`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trips: cached })
@@ -581,14 +576,14 @@ export const api = {
       if (filters?.search) params.append('search', filters.search);
 
       const qs = params.toString();
-      const res = await fetch(`${BASE_URL}/campaigns/${encodeURIComponent(strId)}/results${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/results${qs ? `?${qs}` : ''}`);
       if (res.status === 404) return [];
       if (!res.ok) throw new Error('Erreur lors de la récupération des trajets.');
       const data = await res.json();
 
       // Sauvegarde dans IndexedDB si données reçues et sans filtres restrictifs
       if (!hasCustomFilters && Array.isArray(data) && data.length > 0) {
-        setCachedCampaignTrips(strId, data).catch(() => {});
+        setCachedCampaignTrips(campaignId, data).catch(() => {});
       }
 
       return data;
@@ -597,8 +592,8 @@ export const api = {
     }
   },
 
-  getExportCsvUrl(campaignId: string | number): string {
-    return `${BASE_URL}/campaigns/${encodeURIComponent(String(campaignId))}/export`;
+  getExportCsvUrl(campaignId: string): string {
+    return `${BASE_URL}/campaigns/${campaignId}/export`;
   },
 
   // Single Route Test

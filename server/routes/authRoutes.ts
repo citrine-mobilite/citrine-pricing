@@ -4,8 +4,8 @@ import bcrypt from 'bcryptjs';
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import { users, setUsers, defaultUsers, recordHistory, CITRINE_ADMIN_PASSWORD, saveUsersDiskBackup } from '../db/memoryStore.js';
-import { User } from '../types.js';
 import { getNextSequence } from '../db/counters.js';
+import { User } from '../types.js';
 
 const router = Router();
 
@@ -178,11 +178,11 @@ router.post('/api/users', async (req: Request, res: Response) => {
   const rawPassword = password && String(password).trim() ? String(password).trim() : DEFAULT_PASSWORD;
   const passwordHash = await bcrypt.hash(rawPassword, DEFAULT_SALT_ROUNDS);
 
-  const userNumericId = getNextSequence('users');
-  const userUuid = `usr_${randomUUID()}`;
+  const userSeqId = getNextSequence('users');
+  const userUuid = randomUUID();
 
   const newUser: User = {
-    id: userNumericId,
+    id: userSeqId,
     uuid: userUuid,
     name: name.trim(),
     email: cleanEmail,
@@ -194,8 +194,7 @@ router.post('/api/users', async (req: Request, res: Response) => {
 
   users.push(newUser);
   saveUsersDiskBackup();
-  const docId = newUser.uuid || String(newUser.id);
-  await safeFirestoreWrite('createUser', () => setDoc(doc(db!, 'users', docId), cleanFirestoreDoc(newUser)));
+  await safeFirestoreWrite('createUser', () => setDoc(doc(db!, 'users', newUser.uuid || String(newUser.id)), cleanFirestoreDoc(newUser)));
 
   await recordHistory({
     action: 'create_user',
@@ -211,7 +210,7 @@ router.post('/api/users', async (req: Request, res: Response) => {
 
 router.put('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const user = users.find(u => String(u.id) === String(id) || u.uuid === id);
+  const user = users.find(u => String(u.id) === id || u.uuid === id || u.id == id);
   if (!user) {
     return res.status(404).json({ error: 'Utilisateur introuvable.' });
   }
@@ -220,7 +219,7 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
   if (name !== undefined) user.name = name.trim();
   if (email !== undefined) {
     const cleanEmail = email.trim().toLowerCase();
-    const duplicate = users.find(u => String(u.id) !== String(id) && u.uuid !== id && u.email.toLowerCase() === cleanEmail);
+    const duplicate = users.find(u => (String(u.id) !== id && u.uuid !== id && u.id != id) && u.email.toLowerCase() === cleanEmail);
     if (duplicate) {
       return res.status(409).json({ error: 'Un autre utilisateur utilise déjà cette adresse email.' });
     }
@@ -237,8 +236,7 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
   }
 
   saveUsersDiskBackup();
-  const docId = user.uuid || String(user.id);
-  await safeFirestoreWrite('updateUser', () => setDoc(doc(db!, 'users', docId), cleanFirestoreDoc(user), { merge: true }));
+  await safeFirestoreWrite('updateUser', () => setDoc(doc(db!, 'users', user.uuid || String(user.id)), cleanFirestoreDoc(user), { merge: true }));
 
   await recordHistory({
     action: 'update_user',
@@ -260,7 +258,7 @@ router.post('/api/users/:id/change-password', async (req: Request, res: Response
     return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 4 caractères.' });
   }
 
-  const user = users.find(u => String(u.id) === String(id) || u.uuid === id);
+  const user = users.find(u => String(u.id) === id || u.uuid === id || u.id == id);
   if (!user) {
     return res.status(404).json({ error: 'Utilisateur introuvable.' });
   }
@@ -269,9 +267,8 @@ router.post('/api/users/:id/change-password', async (req: Request, res: Response
   user.passwordHash = await bcrypt.hash(rawPass, DEFAULT_SALT_ROUNDS);
 
   if (db) {
-    const docId = user.uuid || String(user.id);
     await safeFirestoreWrite('changePassword', () =>
-      setDoc(doc(db!, 'users', docId), { passwordHash: user.passwordHash }, { merge: true })
+      setDoc(doc(db!, 'users', user.uuid || String(user.id)), { passwordHash: user.passwordHash }, { merge: true })
     );
   }
 
@@ -288,7 +285,7 @@ router.post('/api/users/:id/change-password', async (req: Request, res: Response
 
 router.delete('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = users.findIndex(u => String(u.id) === String(id) || u.uuid === id);
+  const idx = users.findIndex(u => String(u.id) === id || u.uuid === id || u.id == id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Utilisateur introuvable.' });
   }
@@ -297,13 +294,11 @@ router.delete('/api/users/:id', async (req: Request, res: Response) => {
   saveUsersDiskBackup();
   
   if (db) {
-    const docId = deleted.uuid || String(deleted.id);
-    // 1. Tenter la suppression physique directe
-    const delRes = await safeFirestoreWrite('deleteUser', () => deleteDoc(doc(db!, 'users', docId)));
-    // 2. En cas de blocage de règles de sécurité cloud sur delete, marquer deleted: true
+    const docKey = deleted.uuid || String(deleted.id);
+    const delRes = await safeFirestoreWrite('deleteUser', () => deleteDoc(doc(db!, 'users', docKey)));
     if (delRes === null) {
       await safeFirestoreWrite('markDeletedUser', () => 
-        setDoc(doc(db!, 'users', docId), { deleted: true, active: false }, { merge: true })
+        setDoc(doc(db!, 'users', docKey), { deleted: true, active: false }, { merge: true })
       );
     }
   }

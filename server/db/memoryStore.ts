@@ -6,17 +6,22 @@ import { User, City, Neighborhood, PricingCampaign, TripResult, ActivePricingSes
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from './firestore.js';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
+
 import { getNextSequence } from './counters.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
-const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
 const NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/db/defaultNeighborhoods.json');
+const ROOT_NEIGHBORHOOD_FILE = path.resolve(process.cwd(), 'server/neighboorhood.json');
+const ROOT_NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/neighborhoods.json');
 
 export function saveNeighborhoodsDiskBackup() {
   try {
-    fs.writeFileSync(NEIGHBORHOODS_FILE, JSON.stringify(neighborhoods, null, 2), 'utf8');
-    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans defaultNeighborhoods.json`);
+    const json = JSON.stringify(neighborhoods, null, 2);
+    fs.writeFileSync(NEIGHBORHOODS_FILE, json, 'utf8');
+    fs.writeFileSync(ROOT_NEIGHBORHOOD_FILE, json, 'utf8');
+    fs.writeFileSync(ROOT_NEIGHBORHOODS_FILE, json, 'utf8');
+    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans defaultNeighborhoods.json et server/neighboorhood.json`);
   } catch (e: any) {
     console.warn('[Disk Backup] Warning writing neighborhoods to disk:', e.message);
   }
@@ -58,89 +63,82 @@ export function loadUsersDiskBackup(): boolean {
   return false;
 }
 
-export function saveCampaignTripsDiskBackup(campaignId: string, trips: TripResult[], canonicalTrips?: CanonicalTrip[]) {
+const TRIPS_FILE = path.resolve(DATA_DIR, 'trips.json');
+
+function readAllTripsStore(): Record<string, TripResult[]> {
   try {
-    if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
-    if (Array.isArray(trips) && trips.length > 0) {
-      const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
-      fs.writeFileSync(filePath, JSON.stringify(trips, null, 2), 'utf8');
-    }
-    if (Array.isArray(canonicalTrips) && canonicalTrips.length > 0) {
-      const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-      fs.writeFileSync(canonPath, JSON.stringify(canonicalTrips, null, 2), 'utf8');
+    if (fs.existsSync(TRIPS_FILE)) {
+      const raw = fs.readFileSync(TRIPS_FILE, 'utf8');
+      return JSON.parse(raw) || {};
     }
   } catch (e: any) {
-    console.warn(`[Disk Backup] Warning writing trips for ${campaignId} to disk:`, e.message);
+    console.warn('[Disk Backup] Warning reading trips.json:', e.message);
+  }
+  return {};
+}
+
+function writeAllTripsStore(store: Record<string, TripResult[]>) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(TRIPS_FILE, JSON.stringify(store, null, 2), 'utf8');
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing trips.json:', e.message);
   }
 }
 
-export function deleteCampaignTripsDiskBackup(campaignId: string) {
+export function saveCampaignTripsDiskBackup(campaignId: string | number, trips: TripResult[], _canonicalTrips?: CanonicalTrip[]) {
   try {
-    if (fs.existsSync(TRIPS_DIR)) {
-      const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-      if (fs.existsSync(canonPath)) fs.unlinkSync(canonPath);
-    }
+    const store = readAllTripsStore();
+    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
+    store[String(campaignId)] = trips;
+    if (camp?.uuid) store[camp.uuid] = trips;
+    if (camp?.id) store[String(camp.id)] = trips;
+    writeAllTripsStore(store);
   } catch (e: any) {
-    console.warn(`[Disk Backup] Warning deleting trips for ${campaignId} from disk:`, e.message);
+    console.warn(`[Disk Backup] Warning writing trips for ${campaignId} to trips.json:`, e.message);
+  }
+}
+
+export function deleteCampaignTripsDiskBackup(campaignId: string | number) {
+  try {
+    const store = readAllTripsStore();
+    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
+    delete store[String(campaignId)];
+    if (camp?.uuid) delete store[camp.uuid];
+    if (camp?.id) delete store[String(camp.id)];
+    writeAllTripsStore(store);
+  } catch (e: any) {
+    console.warn(`[Disk Backup] Warning deleting trips for ${campaignId} from trips.json:`, e.message);
   }
 }
 
 export function deleteAllCampaignTripsDiskBackup() {
   try {
-    if (fs.existsSync(TRIPS_DIR)) {
-      const files = fs.readdirSync(TRIPS_DIR);
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          fs.unlinkSync(path.resolve(TRIPS_DIR, file));
-        }
-      }
-    }
+    writeAllTripsStore({});
   } catch (e: any) {
-    console.warn('[Disk Backup] Warning deleting all trips from disk:', e.message);
+    console.warn('[Disk Backup] Warning clearing trips.json:', e.message);
   }
 }
 
-export function loadCampaignTripsDiskBackup(campaignId: string): TripResult[] | null {
+export function loadCampaignTripsDiskBackup(campaignId: string | number): TripResult[] | null {
   try {
-    const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) {
-        memoryCampaignTrips[campaignId] = data;
+    const store = readAllTripsStore();
+    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
+    const candidates = [String(campaignId)];
+    if (camp?.uuid && !candidates.includes(camp.uuid)) candidates.push(camp.uuid);
+    if (camp?.id && !candidates.includes(String(camp.id))) candidates.push(String(camp.id));
+
+    for (const key of candidates) {
+      if (store[key] && Array.isArray(store[key]) && store[key].length > 0) {
+        const data = store[key];
+        memoryCampaignTrips[String(campaignId)] = data;
+        if (camp?.uuid) memoryCampaignTrips[camp.uuid] = data;
+        if (camp?.id) memoryCampaignTrips[String(camp.id)] = data;
         return data;
       }
     }
-    const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-    if (fs.existsSync(canonPath)) {
-      const raw = fs.readFileSync(canonPath, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) {
-        memoryCampaignCanonicalTrips[campaignId] = data;
-        const mapped = data.map((t: CanonicalTrip) => ({
-          id: t.id,
-          campaignId,
-          origin: t.origin,
-          destination: t.destination,
-          distanceKm: t.distanceKm,
-          durationMinutes: t.durationMin,
-          jams: Boolean(t.jams),
-          yangoUnavailable: Boolean(t.yangoUnavailable),
-          yangoWaitingMinutes: t.yangoWaitingMinutes,
-          yangoUnavailableClasses: t.yangoUnavailableClasses,
-          prices: t.prices,
-          cheapest: t.cheapest,
-          status: t.status,
-          createdAt: t.createdAt
-        })) as unknown as TripResult[];
-        memoryCampaignTrips[campaignId] = mapped;
-        return mapped;
-      }
-    }
   } catch (e: any) {
-    console.warn(`[Disk Backup] Warning reading trips for ${campaignId} from disk:`, e.message);
+    console.warn(`[Disk Backup] Warning reading trips for ${campaignId} from trips.json:`, e.message);
   }
   return null;
 }

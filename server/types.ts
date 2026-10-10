@@ -151,7 +151,7 @@ export interface TripMasterQuote {
 export interface TripResult {
   id: number | string;
   uuid?: string;
-  campaignId: string;
+  campaignId: number | string;
   cityId?: string;
   cityName?: string;
   origin: string;

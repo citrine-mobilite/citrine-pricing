@@ -114,19 +114,6 @@ export async function initializeCampaignSession(
     });
   }
 
-  if (typeof campaign.id !== 'number') {
-    const existingNum = Number(campaign.id);
-    if (!isNaN(existingNum) && existingNum > 0) {
-      campaign.uuid = campaign.uuid || String(campaign.id);
-      campaign.id = existingNum;
-    } else {
-      campaign.uuid = campaign.uuid || String(campaign.id);
-      campaign.id = getNextSequence('campaigns');
-    }
-  } else if (!campaign.uuid) {
-    campaign.uuid = randomUUID();
-  }
-
   campaign.totalBatches = chunks.length;
   campaign.workersCount = 1;
   campaign.status = 'in_progress';
@@ -143,27 +130,19 @@ export async function initializeCampaignSession(
     startedAtMs: Date.now()
   };
 
-  campaignSessions.set(String(campaign.id), sessionState);
-  if (campaign.uuid) {
-    campaignSessions.set(campaign.uuid, sessionState);
-  }
+  campaignSessions.set(campaign.id, sessionState);
 
-  // Écriture initiale unique dans Firestore des métadonnées (utilise le docId = uuid ou String(id))
+  // Écriture initiale unique dans Firestore des métadonnées
   if (db) {
-    const firestoreDocId = campaign.uuid || String(campaign.id);
     await safeFirestoreWrite('initCampaignMetaDoc', async () => {
-      await setDoc(doc(db!, 'campaigns', firestoreDocId), cleanFirestoreDoc(campaign));
+      await setDoc(doc(db!, 'campaigns', campaign.id), cleanFirestoreDoc(campaign));
     });
   }
 
   // Mémoire
   memoryCampaigns.unshift(campaign);
-  memoryCampaignTrips[String(campaign.id)] = sessionState.trips;
-  memoryCampaignCanonicalTrips[String(campaign.id)] = sessionState.canonicalTrips;
-  if (campaign.uuid) {
-    memoryCampaignTrips[campaign.uuid] = sessionState.trips;
-    memoryCampaignCanonicalTrips[campaign.uuid] = sessionState.canonicalTrips;
-  }
+  memoryCampaignTrips[campaign.id] = sessionState.trips;
+  memoryCampaignCanonicalTrips[campaign.id] = sessionState.canonicalTrips;
 
   return { totalChunks: chunks.length, totalPairs: pairs.length };
 }
@@ -348,7 +327,7 @@ export async function processCampaignChunk(
       confCandidates.sort((a, b) => (a.p as number) - (b.p as number));
       const cheaperConf = confCandidates[0]?.name || null;
 
-      const tripNumericId = getNextSequence('trips');
+      const tripSeqId = getNextSequence('trips');
       const tripUuid = randomUUID();
       const cleanOrigin = cleanNeighborhoodName(origin.name);
       const cleanDest = cleanNeighborhoodName(dest.name);
@@ -357,7 +336,7 @@ export async function processCampaignChunk(
       const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) ? yangoStats.durationMinutes : durationMin;
 
       const canonicalTrip: CanonicalTrip = {
-        id: tripNumericId,
+        id: tripSeqId,
         uuid: tripUuid,
         origin: cleanOrigin,
         destination: cleanDest,
@@ -389,7 +368,7 @@ export async function processCampaignChunk(
       };
 
       const tripRow: TripResult = {
-        id: tripNumericId,
+        id: tripSeqId,
         uuid: tripUuid,
         campaignId,
         origin: cleanOrigin,
@@ -661,7 +640,7 @@ export async function finalizeCampaignExecution(
     }
   }
 
-  const existingIdx = memoryCampaigns.findIndex(c => String(c.id) === String(campaignId) || c.uuid === campaignId);
+  const existingIdx = memoryCampaigns.findIndex(c => c.id === campaignId);
   if (existingIdx >= 0) {
     memoryCampaigns[existingIdx] = campaign;
   } else {
@@ -669,20 +648,13 @@ export async function finalizeCampaignExecution(
   }
 
   // Cache mémoire RAM serveur immédiat (0 lecture Firestore pour les futures consultations)
-  const idStr = String(campaign.id);
-  const uuidStr = campaign.uuid || campaignId;
   if (session?.trips && session.trips.length > 0) {
-    memoryCampaignTrips[idStr] = session.trips;
-    memoryCampaignTrips[uuidStr] = session.trips;
+    memoryCampaignTrips[campaignId] = session.trips;
   }
   if (canonicalTrips && canonicalTrips.length > 0) {
-    memoryCampaignCanonicalTrips[idStr] = canonicalTrips;
-    memoryCampaignCanonicalTrips[uuidStr] = canonicalTrips;
+    memoryCampaignCanonicalTrips[campaignId] = canonicalTrips;
   }
   saveCampaignTripsDiskBackup(campaignId, memoryCampaignTrips[campaignId] || [], canonicalTrips);
-  if (campaign.uuid && campaign.uuid !== campaignId) {
-    saveCampaignTripsDiskBackup(campaign.uuid, memoryCampaignTrips[campaignId] || [], canonicalTrips);
-  }
   saveLocalCampaignsDiskBackup();
 
   campaignSessions.delete(campaignId);

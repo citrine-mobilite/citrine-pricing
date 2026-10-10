@@ -40,66 +40,26 @@ import {
   campaignSessions
 } from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
+
 import { getNextSequence } from '../db/counters.js';
 
 const router = Router();
 
-// 1. Liste des campagnes (Servie depuis la RAM & disque local - 0 lecture Firestore consommée)
-let lastCampaignsFirestoreFetch = 0;
-let cachedFirestoreCampaigns: PricingCampaign[] = [];
+// Helper pour trouver une campagne par son id numérique ou son uuid
+function findCampaign(idOrUuid: string | number): PricingCampaign | undefined {
+  const target = String(idOrUuid);
+  return memoryCampaigns.find(c => String(c.id) === target || c.uuid === target || c.id == idOrUuid);
+}
 
-router.get('/api/campaigns', async (req: Request, res: Response) => {
-  const forceRefresh = req.query.forceRefresh === 'true';
-  const now = Date.now();
-  let list: PricingCampaign[] = [];
-
-  // Zéro lecture Firestore si les campagnes sont déjà présentes en mémoire vive (RAM)
-  if (memoryCampaigns.length === 0 && db && !isFirestoreQuotaExceeded()) {
-    try {
-      const campaignsQuery = query(
-        collection(db, 'campaigns'),
-        orderBy('startedAt', 'desc'),
-        limit(25)
-      );
-      const snap = await getDocs(campaignsQuery);
-      if (!snap.empty) {
-        cachedFirestoreCampaigns = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingCampaign));
-        lastCampaignsFirestoreFetch = now;
-
-        for (const camp of cachedFirestoreCampaigns) {
-          const idx = memoryCampaigns.findIndex(m => String(m.id) === String(camp.id) || m.uuid === camp.uuid || m.uuid === camp.id);
-          if (idx < 0) {
-            memoryCampaigns.push(camp);
-          }
-        }
-        saveLocalCampaignsDiskBackup();
-      }
-    } catch (e: any) {
-      if (isQuotaExceededError(e)) {
-        flagFirestoreQuotaExceeded(e);
-      }
-    }
-  }
-
-  // Utilisation immédiate de l'état mémoire vive RAM
-  list = [...memoryCampaigns];
-
-  // Fusion avec memoryCampaigns (l'état RAM serveur plus récent l'emporte sur un snapshot Firestore retardataire)
-  for (const memCamp of memoryCampaigns) {
-    const idx = list.findIndex(c => c.id === memCamp.id);
-    if (idx >= 0) {
-      // Si la version mémoire est completed ou plus avancée en completedPairs, elle prime
-      if (memCamp.status === 'completed' || (memCamp.completedPairs || 0) >= (list[idx].completedPairs || 0)) {
-        list[idx] = { ...list[idx], ...memCamp };
-      }
-    } else {
-      list.unshift({ ...memCamp });
-    }
-  }
+// 1. Liste des campagnes (100% Mémoire Vive Serveur & Disque local - 0 lecture Firestore)
+// Conformément à la consigne : les campagnes écrites sur Firestore n'ont pas besoin d'être lues,
+// car l'écriture enregistre aussi en mémoire vive / disque local. 0 requête de lecture Firestore consommée !
+router.get('/api/campaigns', async (_req: Request, res: Response) => {
+  let list: PricingCampaign[] = [...memoryCampaigns];
 
   // Fusion avec les campagnes actives en mémoire (Chunking sessions & Worker sessions)
   for (const [id, session] of campaignSessions.entries()) {
-    const idx = list.findIndex(c => c.id === id);
+    const idx = list.findIndex(c => String(c.id) === String(id) || c.uuid === id);
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...session.campaign };
     } else {
@@ -107,7 +67,7 @@ router.get('/api/campaigns', async (req: Request, res: Response) => {
     }
   }
   for (const [id, session] of activePricingSessions.entries()) {
-    const idx = list.findIndex(c => c.id === id);
+    const idx = list.findIndex(c => String(c.id) === String(id) || c.uuid === id);
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...session.campaign };
     } else {
@@ -150,52 +110,25 @@ router.post('/api/campaigns/sync-cache', (req: Request, res: Response) => {
   return res.json({ success: true, count: memoryCampaigns.length });
 });
 
-// 2. Détail d'une campagne
+// 2. Détail d'une campagne (0 lecture Firestore)
 router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   // 1. Session active en cours
-  const chunkSession = campaignSessions.get(id);
+  const chunkSession = campaignSessions.get(id) || Array.from(campaignSessions.values()).find(s => String(s.campaign.id) === id || s.campaign.uuid === id);
   if (chunkSession) {
     return res.json(chunkSession.campaign);
   }
-  const session = activePricingSessions.get(id);
+  const session = activePricingSessions.get(id) || Array.from(activePricingSessions.values()).find(s => String(s.campaign.id) === id || s.campaign.uuid === id);
   if (session) {
     return res.json(session.campaign);
   }
 
-  // 2. Recherche en RAM locale du serveur (memoryCampaigns et cachedFirestoreCampaigns)
-  const mem = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
+  // 2. Recherche en RAM locale du serveur (0 lecture Firestore requise)
+  const mem = findCampaign(id);
   if (mem) {
     res.setHeader('X-Cache', 'HIT-RAM');
     return res.json(mem);
-  }
-
-  const cached = cachedFirestoreCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
-  if (cached) {
-    res.setHeader('X-Cache', 'HIT-CACHE');
-    return res.json(cached);
-  }
-
-  // 3. Uniquement en dernier recours, requêter Firestore
-  if (db && !isFirestoreQuotaExceeded()) {
-    try {
-      const snap = await getDoc(doc(db, 'campaigns', id));
-      if (snap.exists()) {
-        const data = { id: snap.id, ...snap.data() } as PricingCampaign;
-        // Mettre en cache
-        memoryCampaigns.push(data);
-        saveLocalCampaignsDiskBackup();
-        res.setHeader('X-Cache', 'HIT-FIRESTORE');
-        return res.json(data);
-      }
-    } catch (e: any) {
-      if (isQuotaExceededError(e)) {
-        flagFirestoreQuotaExceeded(e);
-      } else {
-        console.warn('[Firestore] get campaign error:', e.message);
-      }
-    }
   }
 
   return res.status(404).json({ error: 'Campagne introuvable.' });
@@ -223,7 +156,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
   }
 
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
+  const city = cities.find(c => c.id === cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
@@ -231,7 +164,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Impossible de lancer un pricing sur une ville inactive. Activez la ville d’abord.' });
   }
 
-  const activeNbs = neighborhoods.filter(n => (String(n.cityId) === String(city.id) || n.cityId === city.uuid) && n.active);
+  const activeNbs = neighborhoods.filter(n => n.cityId === cityId && n.active);
   if (activeNbs.length < 2) {
     return res.status(400).json({ error: 'Au moins 2 quartiers actifs sont requis pour calculer des trajets.' });
   }
@@ -288,10 +221,10 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     ? String(triggeredByUserName).trim()
     : (triggerType === 'scheduled' ? 'Planificateur Automatique' : 'Citrine Opérateur');
 
-  const campaignNumericId = getNextSequence('campaigns');
+  const campaignSeqId = getNextSequence('campaigns');
   const campaignUuid = randomUUID();
   const campaign: PricingCampaign = {
-    id: campaignNumericId,
+    id: campaignSeqId,
     uuid: campaignUuid,
     cityId: String(city.uuid || city.id),
     cityName: city.name,
@@ -437,7 +370,7 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
   const trimmedComment = typeof comment === 'string' ? comment.trim() : undefined;
 
   // 1. Mettre à jour en mémoire
-  const memCamp = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
+  const memCamp = findCampaign(id);
   if (memCamp) {
     if (trimmedComment !== undefined) {
       memCamp.comment = trimmedComment;
@@ -446,40 +379,25 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     if (timeSlotOverride !== undefined) {
       memCamp.timeSlotOverride = timeSlotOverride === 'auto' ? undefined : timeSlotOverride;
     }
-  }
+    saveLocalCampaignsDiskBackup();
 
-  // 2. Mettre à jour dans le cache Firestore
-  const cached = cachedFirestoreCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
-  if (cached) {
-    if (trimmedComment !== undefined) {
-      cached.comment = trimmedComment;
-      cached.comments = trimmedComment;
-    }
-    if (timeSlotOverride !== undefined) {
-      cached.timeSlotOverride = timeSlotOverride === 'auto' ? undefined : timeSlotOverride;
-    }
-  }
-
-  // 3. Sauvegarde disque local
-  saveLocalCampaignsDiskBackup();
-
-  // 4. Sauvegarde Firestore
-  if (db && !isFirestoreQuotaExceeded()) {
-    try {
-      const docId = memCamp?.uuid || id;
-      const updatePayload: Record<string, any> = {};
-      if (trimmedComment !== undefined) {
-        updatePayload.comment = trimmedComment;
-        updatePayload.comments = trimmedComment;
+    // 2. Sauvegarde Firestore asynchrone non-bloquante
+    if (db && !isFirestoreQuotaExceeded()) {
+      try {
+        const updatePayload: Record<string, any> = {};
+        if (trimmedComment !== undefined) {
+          updatePayload.comment = trimmedComment;
+          updatePayload.comments = trimmedComment;
+        }
+        if (timeSlotOverride !== undefined) {
+          updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
+        }
+        await safeFirestoreWrite('updateCampaignComment', () =>
+          setDoc(doc(db!, 'campaigns', memCamp.uuid || String(memCamp.id)), cleanFirestoreDoc(updatePayload), { merge: true })
+        );
+      } catch (e: any) {
+        console.warn('[Firestore] Warning saving campaign comment:', e.message);
       }
-      if (timeSlotOverride !== undefined) {
-        updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
-      }
-      await safeFirestoreWrite('updateCampaignComment', () =>
-        setDoc(doc(db!, 'campaigns', docId), cleanFirestoreDoc(updatePayload), { merge: true })
-      );
-    } catch (e: any) {
-      console.warn('[Firestore] Warning saving campaign comment:', e.message);
     }
   }
 
@@ -492,12 +410,11 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     metadata: { campaignId: id, timeSlotOverride }
   }).catch(() => {});
 
-  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp || cached });
+  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp });
 });
 
 // 5. Suppression globale
 router.delete('/api/campaigns', async (_req: Request, res: Response) => {
-  cachedFirestoreCampaigns = [];
   memoryCampaigns.length = 0;
   for (const id of Object.keys(memoryCampaignTrips)) {
     delete memoryCampaignTrips[id];
@@ -544,108 +461,67 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
 // 6. Suppression unique
 router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const memCamp = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
-  const targetIds = [id, memCamp ? String(memCamp.id) : null, memCamp?.uuid].filter(Boolean) as string[];
+  const target = findCampaign(id);
+  const targetId = target ? target.id : id;
+  const targetUuid = target?.uuid;
 
-  for (const tid of targetIds) {
-    cachedFirestoreCampaigns = cachedFirestoreCampaigns.filter(c => String(c.id) !== tid && c.uuid !== tid);
-    delete memoryCampaignTrips[tid];
-    delete memoryCampaignCanonicalTrips[tid];
-    campaignSessions.delete(tid);
-    deleteCampaignTripsDiskBackup(tid);
-  }
-
-  const idx = memoryCampaigns.findIndex(c => String(c.id) === String(id) || c.uuid === id);
+  const idx = memoryCampaigns.findIndex(c => String(c.id) === String(id) || c.uuid === id || c.id == id);
   if (idx >= 0) memoryCampaigns.splice(idx, 1);
+
+  delete memoryCampaignTrips[String(targetId)];
+  if (targetUuid) delete memoryCampaignTrips[targetUuid];
+  delete memoryCampaignCanonicalTrips[String(targetId)];
+  if (targetUuid) delete memoryCampaignCanonicalTrips[targetUuid];
+
+  campaignSessions.delete(String(targetId));
+  if (targetUuid) campaignSessions.delete(targetUuid);
+  activePricingSessions.delete(String(targetId));
+  if (targetUuid) activePricingSessions.delete(targetUuid);
+
+  deleteCampaignTripsDiskBackup(targetId);
   saveLocalCampaignsDiskBackup();
 
   // Nettoyage de l'historique en mémoire locale
-  for (const tid of targetIds) {
-    deleteHistoryForCampaign(tid).catch(() => {});
-  }
+  deleteHistoryForCampaign(String(targetId)).catch(() => {});
+  if (targetUuid) deleteHistoryForCampaign(targetUuid).catch(() => {});
 
-  // Nettoyage Firestore asynchrone non-bloquant si les écritures sont permises
+  // Nettoyage Firestore asynchrone non-bloquant
   if (db && !isFirestoreWriteQuotaExceeded()) {
-    for (const tid of targetIds) {
-      deleteCanonicalCampaign(tid).catch(() => {});
-    }
+    deleteCanonicalCampaign(targetUuid || String(targetId)).catch(() => {});
+    safeFirestoreWrite('deleteCampaignDoc', () => deleteDoc(doc(db!, 'campaigns', targetUuid || String(targetId)))).catch(() => {});
   }
 
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
 });
 
-// 7. Résultats des trajets (Exploite notre cache RAM, disque local et JSON canonique pour garantir 0 lecture Firestore)
+// 7. Résultats des trajets (100% Mémoire RAM & Disque local - 0 lecture Firestore)
 router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const memCamp = memoryCampaigns.find(c => String(c.id) === String(id) || c.uuid === id);
-  const targetIds = [id, memCamp ? String(memCamp.id) : null, memCamp?.uuid].filter(Boolean) as string[];
+  const camp = findCampaign(id);
+  const targetId = camp ? camp.id : id;
+  const targetUuid = camp?.uuid;
 
   // 1. Session active en cours
-  for (const tid of targetIds) {
-    const session = activePricingSessions.get(tid);
-    if (session && session.trips.length > 0) {
-      res.setHeader('X-Cache', 'HIT-SESSION');
-      return res.json(session.trips);
-    }
+  const session = activePricingSessions.get(String(targetId)) || (targetUuid ? activePricingSessions.get(targetUuid) : undefined);
+  if (session && session.trips.length > 0) {
+    res.setHeader('X-Cache', 'HIT-SESSION');
+    return res.json(session.trips);
   }
 
   // 2. Cache mémoire RAM serveur instantané (2ms, 0 lecture Firestore)
-  for (const tid of targetIds) {
-    if (memoryCampaignTrips[tid] && memoryCampaignTrips[tid].length > 0) {
-      res.setHeader('X-Cache', 'HIT-RAM');
-      return res.json(memoryCampaignTrips[tid]);
-    }
+  const ramTrips = memoryCampaignTrips[String(targetId)] || (targetUuid ? memoryCampaignTrips[targetUuid] : undefined);
+  if (ramTrips && ramTrips.length > 0) {
+    res.setHeader('X-Cache', 'HIT-RAM');
+    return res.json(ramTrips);
   }
 
-  // 3. Cache disque local serveur persistant (survit aux redémarrages et quotas)
-  for (const tid of targetIds) {
-    const diskTrips = loadCampaignTripsDiskBackup(tid);
-    if (diskTrips && diskTrips.length > 0) {
-      res.setHeader('X-Cache', 'HIT-DISK');
-      return res.json(diskTrips);
-    }
+  // 3. Cache disque local serveur persistant (survit aux redémarrages et quotas, 0 lecture Firestore)
+  const diskTrips = loadCampaignTripsDiskBackup(targetId) || (targetUuid ? loadCampaignTripsDiskBackup(targetUuid) : null);
+  if (diskTrips && diskTrips.length > 0) {
+    res.setHeader('X-Cache', 'HIT-DISK');
+    return res.json(diskTrips);
   }
 
-  // 4. Lecture du JSON canonique en base de données Firestore (si quota disponible)
-  if (!isFirestoreQuotaExceeded()) {
-    const canonicalTrips = await loadCanonicalCampaignResults(id);
-    if (canonicalTrips.length > 0) {
-      const cleanTrips = canonicalTrips.map(t => {
-        const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
-        return {
-          id: t.id,
-          campaignId: id,
-          origin: t.origin,
-          destination: t.destination,
-          distanceKm: t.distanceKm,
-          durationMinutes: t.durationMin,
-          jams: Boolean(t.jams),
-          yangoUnavailable: Boolean(t.yangoUnavailable),
-          yangoWaitingMinutes: t.yangoWaitingMinutes,
-          yangoUnavailableClasses: t.yangoUnavailableClasses,
-          prices: {
-            ...t.prices,
-            yango: {
-              ...pYango,
-              jams: pYango.jams !== undefined ? pYango.jams : Boolean(t.jams),
-              yangoUnavailable: pYango.yangoUnavailable !== undefined ? pYango.yangoUnavailable : Boolean(t.yangoUnavailable)
-            }
-          },
-          cheapest: t.cheapest,
-          status: t.status,
-          createdAt: t.createdAt
-        };
-      }) as unknown as TripResult[];
-
-      memoryCampaignTrips[id] = cleanTrips;
-      // Sauvegarder immédiatement sur disque local pour les prochains redémarrages
-      saveCampaignTripsDiskBackup(id, cleanTrips, canonicalTrips);
-      res.setHeader('X-Cache', 'HIT-FIRESTORE');
-      return res.json(cleanTrips);
-    }
-  }
-
-  // Si aucun trajet n'est encore enregistré ou si la campagne débute, renvoyer un tableau vide [] avec statut 200 (pas d'erreur 404)
   return res.json([]);
 });
 
