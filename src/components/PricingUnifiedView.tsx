@@ -131,8 +131,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
   const [inspectedTrip, setInspectedTrip] = useState<TripResult | null>(null);
   const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter'>('none');
-  const [quickOriginId, setQuickOriginId] = useState<string>(cityActiveNeighborhoods[0]?.id || '');
-  const [quickDestId, setQuickDestId] = useState<string>(cityActiveNeighborhoods[1]?.id || '');
+  const [quickOriginId, setQuickOriginId] = useState<string>(String(cityActiveNeighborhoods[0]?.id || ''));
+  const [quickDestId, setQuickDestId] = useState<string>(String(cityActiveNeighborhoods[1]?.id || ''));
   const [isQuickTesting, setIsQuickTesting] = useState<boolean>(false);
   const [quickTestResult, setQuickTestResult] = useState<any>(null);
   const [launchingTarget, setLaunchingTarget] = useState<string | null>(null);
@@ -178,8 +178,9 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
       // Détection de transition vers un état final
       if (prevStatus === 'in_progress' && (camp.status === 'completed' || camp.status === 'failed' || camp.status === 'cancelled')) {
-        if (!alertedCampaignsRef.current.has(camp.id)) {
-          alertedCampaignsRef.current.add(camp.id);
+        const campIdStr = String(camp.id);
+        if (!alertedCampaignsRef.current.has(campIdStr)) {
+          alertedCampaignsRef.current.add(campIdStr);
 
           if (camp.status === 'completed') {
             const completedPairs = camp.completedPairs || camp.totalPairs || 0;
@@ -297,9 +298,9 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     setLaunchingTarget(targetKey);
     try {
       const result = await api.startCampaign({
-        cityId: currentCity.id,
+        cityId: String(currentCity.id),
         triggerType: 'manual',
-        triggeredByUserId: user?.id || 'manual_user',
+        triggeredByUserId: user?.id ? String(user.id) : 'manual_user',
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe',
         selectedClasses: ['econom'],
@@ -313,7 +314,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
 
       if (result?.campaign) {
-        const campaignId = result.campaign.id;
+        const campaignId = String(result.campaign.id);
         runningCampaignIdRef.current = campaignId;
         onCampaignStarted(campaignId);
         handleCampaignChange(campaignId);

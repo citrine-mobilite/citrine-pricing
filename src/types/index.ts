@@ -350,3 +350,81 @@ export interface HistoryRecord {
   status?: 'success' | 'failed' | 'in_progress' | 'cancelled';
   metadata?: Record<string, any>;
 }
+
+export interface StoredStatsSnapshot {
+  id: number | string;
+  uuid: string;
+  title: string;
+  cityName?: string;
+  timestamp: string;
+  notes?: string;
+  data: {
+    totalCampaigns: number;
+    totalTrips: number;
+    avgYangoPrice: number;
+    avgHeroPrice: number;
+    avgTripMasterPrice: number;
+    yangoShortageRate: number;
+    heroCheaperRate: number;
+    arrondissementStats?: Record<string, any>;
+    metricsSummary?: Record<string, any>;
+  };
+}
+
+export interface StatisticsData {
+  current: {
+    totalCampaigns: number;
+    completedCampaigns: number;
+    totalTrips: number;
+    avgYangoPrice: number;
+    avgHeroPrice: number;
+    avgTripMasterPrice: number;
+    avgHeroEconomyPct: number;
+    yangoShortageTrips: number;
+    yangoShortageRate: number;
+    heroCheaperRate: number;
+    arrondissementSummary: Record<string, any>;
+    citiesCount: number;
+    neighborhoodsCount: number;
+  };
+  snapshots: StoredStatsSnapshot[];
+}
+
+export interface CampaignShortageRecord {
+  id: string | number;
+  campaignId: string | number;
+  cityName: string;
+  cityId?: string | number;
+  origin: string;
+  destination: string;
+  startNeighborhoodId?: string | number;
+  endNeighborhoodId?: string | number;
+  arrondissementOrigin?: string;
+  arrondissementDest?: string;
+  timestamp: string;
+  timeSlot: string;
+  distanceKm: number;
+  durationMinutes: number;
+  waitingMinutes?: number;
+  unavailableClasses?: string[];
+  jams?: boolean;
+  priceYangoEco?: number | null;
+  priceHeroEco?: number | null;
+}
+
+export interface ShortagesAnalyticsSummary {
+  totalShortages: number;
+  topOrigins: Array<{ name: string; count: number; pct: number }>;
+  topDestinations: Array<{ name: string; count: number; pct: number }>;
+  topCorridors: Array<{ origin: string; destination: string; count: number; avgDistanceKm: number; pct: number }>;
+  byTimeSlot: Array<{ slot: string; label: string; count: number; pct: number }>;
+  byArrondissement: Array<{ name: string; count: number; pct: number }>;
+}
+
+export interface ShortagesResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  shortages: CampaignShortageRecord[];
+  analytics: ShortagesAnalyticsSummary;
+}

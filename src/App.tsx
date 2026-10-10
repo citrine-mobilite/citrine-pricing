@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
+import { StatisticsView } from './components/StatisticsView';
+import { ShortagesView } from './components/ShortagesView';
 import { PricingUnifiedView } from './components/PricingUnifiedView';
 import { CampaignsView } from './components/CampaignsView';
 import { TemporalComparisonView } from './components/TemporalComparisonView';
@@ -196,6 +198,24 @@ function AppContent() {
                       setSelectedCityId(cityId);
                       setActiveTab('pricing');
                     }}
+                  />
+                )}
+
+                {activeTab === 'statistics' && (
+                  <StatisticsView
+                    cities={cities}
+                    campaigns={campaigns}
+                    neighborhoods={neighborhoods}
+                    onNavigate={setActiveTab}
+                    onSelectCampaign={handleSelectCampaign}
+                  />
+                )}
+
+                {activeTab === 'shortages' && (
+                  <ShortagesView
+                    cities={cities}
+                    onNavigate={setActiveTab}
+                    onSelectCampaign={handleSelectCampaign}
                   />
                 )}
 

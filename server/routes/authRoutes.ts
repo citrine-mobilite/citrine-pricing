@@ -113,7 +113,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     user.passwordHash = await bcrypt.hash(password, DEFAULT_SALT_ROUNDS);
     if (db) {
       await safeFirestoreWrite('updateUserPasswordHash', () => 
-        setDoc(doc(db!, 'users', user!.id), { passwordHash: user!.passwordHash }, { merge: true })
+        setDoc(doc(db!, 'users', String(user!.id)), { passwordHash: user!.passwordHash }, { merge: true })
       );
     }
   }
@@ -125,7 +125,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
   user.lastLoginAt = new Date().toISOString();
   if (db) {
     await safeFirestoreWrite('updateLastLogin', () => 
-      setDoc(doc(db!, 'users', user!.id), { lastLoginAt: user!.lastLoginAt }, { merge: true })
+      setDoc(doc(db!, 'users', String(user!.id)), { lastLoginAt: user!.lastLoginAt }, { merge: true })
     );
   }
 

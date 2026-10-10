@@ -381,32 +381,47 @@ export async function saveCanonicalCampaignResults(
   console.log(`[Firestore Quota Shield] ${canonicalTrips.length} trajets canoniques stockés en ${totalChunks} écriture(s) (< 500 Ko).`);
 }
 
+const TRIPS_FILE = path.resolve(process.cwd(), 'server/data/trips.json');
+
+function readLocalTripsJson(): Record<string, any> {
+  try {
+    if (fs.existsSync(TRIPS_FILE)) {
+      return JSON.parse(fs.readFileSync(TRIPS_FILE, 'utf8')) || {};
+    }
+  } catch {}
+  return {};
+}
+
+function writeLocalTripsJson(store: Record<string, any>) {
+  try {
+    const dir = path.dirname(TRIPS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(TRIPS_FILE, JSON.stringify(store, null, 2), 'utf8');
+  } catch {}
+}
+
 /**
- * Chargement direct (Exactement 1 seule lecture Firestore O(1), avec sauvegarde disque immédiate)
+ * Chargement direct (Exactement 1 seule lecture Firestore O(1), avec sauvegarde dans trips.json)
  * ZÉRO scan de sous-collections, ZÉRO getDocs multi-documents.
  */
 export async function loadCanonicalCampaignResults(campaignId: string): Promise<CanonicalTrip[]> {
-  // 1. Contrôle préalable : Vérifier le cache disque local (0 lecture Firestore)
+  // 1. Contrôle préalable : Vérifier trips.json unifié (0 lecture Firestore)
   try {
-    const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
-    const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-    if (fs.existsSync(canonPath)) {
-      const raw = fs.readFileSync(canonPath, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) {
-        return data;
+    const store = readLocalTripsJson();
+    const entry = store[campaignId] || store[String(campaignId)];
+    if (entry) {
+      if (typeof entry === 'object' && Array.isArray(entry.canonicalTrips) && entry.canonicalTrips.length > 0) {
+        return entry.canonicalTrips;
       }
-    }
-    const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) {
-        return data.map(legacyToCanonical);
+      if (Array.isArray(entry) && entry.length > 0) {
+        return entry.map(legacyToCanonical);
+      }
+      if (typeof entry === 'object' && Array.isArray(entry.trips) && entry.trips.length > 0) {
+        return entry.trips.map(legacyToCanonical);
       }
     }
   } catch (e: any) {
-    console.warn('[Disk Cache] Warning reading local trips:', e.message);
+    console.warn('[Disk Cache] Warning reading trips.json:', e.message);
   }
 
   // 2. Si le quota de lecture est atteint ou si Firestore est indisponible : stop immédiat
@@ -447,12 +462,17 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
       }
     }
 
-    // 5. Sauvegarde immédiate sur disque local pour que les prochains accès soient à 0 lecture Firestore !
+    // 5. Sauvegarde immédiate dans trips.json unifié (sans fichiers séparés)
     if (allTrips.length > 0) {
       try {
-        const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
-        if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
-        fs.writeFileSync(path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`), JSON.stringify(allTrips, null, 2), 'utf8');
+        const store = readLocalTripsJson();
+        const existing = store[campaignId] || {};
+        store[campaignId] = {
+          trips: Array.isArray(existing.trips) ? existing.trips : (Array.isArray(existing) ? existing : []),
+          canonicalTrips: allTrips,
+          updatedAt: new Date().toISOString()
+        };
+        writeLocalTripsJson(store);
       } catch {}
     }
 
@@ -470,7 +490,7 @@ export async function loadCanonicalCampaignResults(campaignId: string): Promise<
 /**
  * Conversion rétrocompatible d'anciens enregistrements vers le format canonique
  */
-function legacyToCanonical(t: any): CanonicalTrip {
+export function legacyToCanonical(t: any): CanonicalTrip {
   const orig = (t.startNeighborhoodName || t.startName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
   const dest = (t.endNeighborhoodName || t.endName || '—').replace(/,\s*(?:Cameroun|Cameroon)\s*$/i, '').trim();
 

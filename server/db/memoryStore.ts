@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { User, City, Neighborhood, PricingCampaign, TripResult, ActivePricingSession, CanonicalTrip } from '../types.js';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from './firestore.js';
+import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded, legacyToCanonical } from './firestore.js';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
 
@@ -11,17 +11,20 @@ import { getNextSequence } from './counters.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
+const DATA_NEIGHBORHOODS_FILE = path.resolve(DATA_DIR, 'neighborhoods.json');
 const NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/db/defaultNeighborhoods.json');
 const ROOT_NEIGHBORHOOD_FILE = path.resolve(process.cwd(), 'server/neighboorhood.json');
 const ROOT_NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/neighborhoods.json');
 
 export function saveNeighborhoodsDiskBackup() {
   try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     const json = JSON.stringify(neighborhoods, null, 2);
+    fs.writeFileSync(DATA_NEIGHBORHOODS_FILE, json, 'utf8');
     fs.writeFileSync(NEIGHBORHOODS_FILE, json, 'utf8');
     fs.writeFileSync(ROOT_NEIGHBORHOOD_FILE, json, 'utf8');
     fs.writeFileSync(ROOT_NEIGHBORHOODS_FILE, json, 'utf8');
-    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans defaultNeighborhoods.json et server/neighboorhood.json`);
+    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans server/data/neighborhoods.json et server/neighborhoods.json`);
   } catch (e: any) {
     console.warn('[Disk Backup] Warning writing neighborhoods to disk:', e.message);
   }
@@ -65,7 +68,13 @@ export function loadUsersDiskBackup(): boolean {
 
 const TRIPS_FILE = path.resolve(DATA_DIR, 'trips.json');
 
-function readAllTripsStore(): Record<string, TripResult[]> {
+export interface UnifiedCampaignTripsRecord {
+  trips: TripResult[];
+  canonicalTrips?: CanonicalTrip[];
+  updatedAt?: string;
+}
+
+function readAllTripsStore(): Record<string, UnifiedCampaignTripsRecord | TripResult[]> {
   try {
     if (fs.existsSync(TRIPS_FILE)) {
       const raw = fs.readFileSync(TRIPS_FILE, 'utf8');
@@ -77,7 +86,7 @@ function readAllTripsStore(): Record<string, TripResult[]> {
   return {};
 }
 
-function writeAllTripsStore(store: Record<string, TripResult[]>) {
+function writeAllTripsStore(store: Record<string, UnifiedCampaignTripsRecord | TripResult[]>) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(TRIPS_FILE, JSON.stringify(store, null, 2), 'utf8');
@@ -86,13 +95,22 @@ function writeAllTripsStore(store: Record<string, TripResult[]>) {
   }
 }
 
-export function saveCampaignTripsDiskBackup(campaignId: string | number, trips: TripResult[], _canonicalTrips?: CanonicalTrip[]) {
+export function saveCampaignTripsDiskBackup(campaignId: string | number, trips: TripResult[], canonicalTrips?: CanonicalTrip[]) {
   try {
     const store = readAllTripsStore();
-    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
-    store[String(campaignId)] = trips;
-    if (camp?.uuid) store[camp.uuid] = trips;
-    if (camp?.id) store[String(camp.id)] = trips;
+    const idKey = String(campaignId);
+    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === idKey);
+
+    const payload: UnifiedCampaignTripsRecord = {
+      trips: trips || [],
+      canonicalTrips: canonicalTrips || (trips && trips.length > 0 ? trips.map(legacyToCanonical) : []),
+      updatedAt: new Date().toISOString()
+    };
+
+    store[idKey] = payload;
+    if (camp?.uuid && camp.uuid !== idKey) store[camp.uuid] = payload;
+    if (camp?.id && String(camp.id) !== idKey) store[String(camp.id)] = payload;
+
     writeAllTripsStore(store);
   } catch (e: any) {
     console.warn(`[Disk Backup] Warning writing trips for ${campaignId} to trips.json:`, e.message);
@@ -102,8 +120,9 @@ export function saveCampaignTripsDiskBackup(campaignId: string | number, trips: 
 export function deleteCampaignTripsDiskBackup(campaignId: string | number) {
   try {
     const store = readAllTripsStore();
-    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
-    delete store[String(campaignId)];
+    const idKey = String(campaignId);
+    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === idKey);
+    delete store[idKey];
     if (camp?.uuid) delete store[camp.uuid];
     if (camp?.id) delete store[String(camp.id)];
     writeAllTripsStore(store);
@@ -129,16 +148,52 @@ export function loadCampaignTripsDiskBackup(campaignId: string | number): TripRe
     if (camp?.id && !candidates.includes(String(camp.id))) candidates.push(String(camp.id));
 
     for (const key of candidates) {
-      if (store[key] && Array.isArray(store[key]) && store[key].length > 0) {
-        const data = store[key];
-        memoryCampaignTrips[String(campaignId)] = data;
-        if (camp?.uuid) memoryCampaignTrips[camp.uuid] = data;
-        if (camp?.id) memoryCampaignTrips[String(camp.id)] = data;
-        return data;
+      const entry = store[key];
+      if (entry) {
+        if (Array.isArray(entry) && entry.length > 0) {
+          memoryCampaignTrips[String(campaignId)] = entry;
+          return entry;
+        } else if (typeof entry === 'object' && Array.isArray((entry as any).trips) && (entry as any).trips.length > 0) {
+          const list = (entry as any).trips;
+          memoryCampaignTrips[String(campaignId)] = list;
+          return list;
+        }
       }
     }
   } catch (e: any) {
     console.warn(`[Disk Backup] Warning reading trips for ${campaignId} from trips.json:`, e.message);
+  }
+  return null;
+}
+
+export function loadCanonicalTripsDiskBackup(campaignId: string | number): CanonicalTrip[] | null {
+  try {
+    const store = readAllTripsStore();
+    const camp = memoryCampaigns.find(c => c.id == campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
+    const candidates = [String(campaignId)];
+    if (camp?.uuid && !candidates.includes(camp.uuid)) candidates.push(camp.uuid);
+    if (camp?.id && !candidates.includes(String(camp.id))) candidates.push(String(camp.id));
+
+    for (const key of candidates) {
+      const entry = store[key];
+      if (entry) {
+        if (typeof entry === 'object' && Array.isArray((entry as any).canonicalTrips) && (entry as any).canonicalTrips.length > 0) {
+          const list = (entry as any).canonicalTrips;
+          memoryCampaignCanonicalTrips[String(campaignId)] = list;
+          return list;
+        } else if (Array.isArray(entry) && entry.length > 0) {
+          const canon = entry.map(legacyToCanonical);
+          memoryCampaignCanonicalTrips[String(campaignId)] = canon;
+          return canon;
+        } else if (typeof entry === 'object' && Array.isArray((entry as any).trips) && (entry as any).trips.length > 0) {
+          const canon = (entry as any).trips.map(legacyToCanonical);
+          memoryCampaignCanonicalTrips[String(campaignId)] = canon;
+          return canon;
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn(`[Disk Backup] Warning reading canonical trips for ${campaignId} from trips.json:`, e.message);
   }
   return null;
 }
@@ -326,7 +381,25 @@ export let cities: City[] = [
   }
 ];
 
-export let neighborhoods: Neighborhood[] = (defaultNeighborhoods as unknown as Neighborhood[]) || [];
+function loadInitialNeighborhoods(): Neighborhood[] {
+  try {
+    if (fs.existsSync(DATA_NEIGHBORHOODS_FILE)) {
+      const raw = fs.readFileSync(DATA_NEIGHBORHOODS_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+    if (fs.existsSync(ROOT_NEIGHBORHOODS_FILE)) {
+      const raw = fs.readFileSync(ROOT_NEIGHBORHOODS_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (e: any) {
+    console.warn('[Neighborhoods Load] Warning reading neighborhoods JSON:', e.message);
+  }
+  return (defaultNeighborhoods as unknown as Neighborhood[]) || [];
+}
+
+export let neighborhoods: Neighborhood[] = loadInitialNeighborhoods();
 
 export let memoryCampaigns: PricingCampaign[] = [];
 export const memoryCampaignTrips: Record<string, TripResult[]> = {};
@@ -417,7 +490,7 @@ export async function syncFromFirestore() {
     } else if (usersRes.status === 'fulfilled' && usersRes.value.empty) {
       // Seed initial admin in Firestore
       for (const u of users) {
-        await safeFirestoreWrite('seedUser', () => setDoc(doc(db!, 'users', u.id), cleanFirestoreDoc(u)));
+        await safeFirestoreWrite('seedUser', () => setDoc(doc(db!, 'users', String(u.id)), cleanFirestoreDoc(u)));
       }
     }
 
@@ -426,7 +499,7 @@ export async function syncFromFirestore() {
     } else if (citiesRes.status === 'fulfilled' && citiesRes.value.empty) {
       // Seed default cities
       for (const c of cities) {
-        await safeFirestoreWrite('seedCity', () => setDoc(doc(db!, 'cities', c.id), cleanFirestoreDoc(c)));
+        await safeFirestoreWrite('seedCity', () => setDoc(doc(db!, 'cities', String(c.id)), cleanFirestoreDoc(c)));
       }
     }
 
@@ -435,7 +508,7 @@ export async function syncFromFirestore() {
     } else if (nbsRes.status === 'fulfilled' && nbsRes.value.empty) {
       // Seed default neighborhoods
       for (const nb of neighborhoods) {
-        await safeFirestoreWrite('seedNb', () => setDoc(doc(db!, 'neighborhoods', nb.id), cleanFirestoreDoc(nb)));
+        await safeFirestoreWrite('seedNb', () => setDoc(doc(db!, 'neighborhoods', String(nb.id)), cleanFirestoreDoc(nb)));
       }
     }
 

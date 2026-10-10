@@ -1,0 +1,107 @@
+[
+  {
+    "id": 11,
+    "uuid": "073c3041-386c-47ae-8afc-ea988a5b00ca",
+    "title": "Instantané Initial Douala & Yaoundé",
+    "cityName": "Toutes les villes",
+    "timestamp": "2026-10-10T20:10:24.731Z",
+    "notes": "Benchmark inaugural consolidé",
+    "data": {
+      "totalCampaigns": 25,
+      "totalTrips": 33175,
+      "avgYangoPrice": 1500,
+      "avgHeroPrice": 935,
+      "avgTripMasterPrice": 2116,
+      "yangoShortageRate": 9.9,
+      "heroCheaperRate": 94,
+      "arrondissementStats": {
+        "Douala 1er": {
+          "name": "Douala 1er",
+          "avgPrice": 1410,
+          "heroAvgPrice": 879,
+          "tripMasterAvgPrice": 1970,
+          "sampleCount": 6662
+        },
+        "Douala 2e": {
+          "name": "Douala 2e",
+          "avgPrice": 1320,
+          "heroAvgPrice": 823,
+          "tripMasterAvgPrice": 1844,
+          "sampleCount": 6662
+        },
+        "Douala 3e": {
+          "name": "Douala 3e",
+          "avgPrice": 1575,
+          "heroAvgPrice": 982,
+          "tripMasterAvgPrice": 2200,
+          "sampleCount": 6662
+        },
+        "Douala 4e": {
+          "name": "Douala 4e",
+          "avgPrice": 1725,
+          "heroAvgPrice": 1076,
+          "tripMasterAvgPrice": 2410,
+          "sampleCount": 6662
+        },
+        "Douala 5e": {
+          "name": "Douala 5e",
+          "avgPrice": 1605,
+          "heroAvgPrice": 1001,
+          "tripMasterAvgPrice": 2242,
+          "sampleCount": 6662
+        }
+      },
+      "metricsSummary": {
+        "totalCampaigns": 25,
+        "completedCampaigns": 25,
+        "totalTrips": 33175,
+        "avgYangoPrice": 1500,
+        "avgHeroPrice": 935,
+        "avgTripMasterPrice": 2116,
+        "avgHeroEconomyPct": 38,
+        "yangoShortageTrips": 3289,
+        "yangoShortageRate": 9.9,
+        "heroCheaperRate": 94,
+        "arrondissementSummary": {
+          "Douala 1er": {
+            "name": "Douala 1er",
+            "avgPrice": 1410,
+            "heroAvgPrice": 879,
+            "tripMasterAvgPrice": 1970,
+            "sampleCount": 6662
+          },
+          "Douala 2e": {
+            "name": "Douala 2e",
+            "avgPrice": 1320,
+            "heroAvgPrice": 823,
+            "tripMasterAvgPrice": 1844,
+            "sampleCount": 6662
+          },
+          "Douala 3e": {
+            "name": "Douala 3e",
+            "avgPrice": 1575,
+            "heroAvgPrice": 982,
+            "tripMasterAvgPrice": 2200,
+            "sampleCount": 6662
+          },
+          "Douala 4e": {
+            "name": "Douala 4e",
+            "avgPrice": 1725,
+            "heroAvgPrice": 1076,
+            "tripMasterAvgPrice": 2410,
+            "sampleCount": 6662
+          },
+          "Douala 5e": {
+            "name": "Douala 5e",
+            "avgPrice": 1605,
+            "heroAvgPrice": 1001,
+            "tripMasterAvgPrice": 2242,
+            "sampleCount": 6662
+          }
+        },
+        "citiesCount": 2,
+        "neighborhoodsCount": 267
+      }
+    }
+  }
+]

@@ -5,6 +5,8 @@ import authRoutes from './routes/authRoutes.js';
 import cityRoutes from './routes/cityRoutes.js';
 import campaignRoutes from './routes/campaignRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import statisticsRoutes from './routes/statisticsRoutes.js';
+import shortageRoutes from './routes/shortageRoutes.js';
 import { syncFromFirestore } from './db/memoryStore.js';
 
 dotenv.config();
@@ -28,6 +30,8 @@ app.use(authRoutes);
 app.use(cityRoutes);
 app.use(campaignRoutes);
 app.use(settingsRoutes);
+app.use(statisticsRoutes);
+app.use(shortageRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

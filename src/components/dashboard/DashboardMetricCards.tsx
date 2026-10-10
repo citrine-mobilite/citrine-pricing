@@ -110,13 +110,26 @@ export const DashboardMetricCards: React.FC<DashboardMetricCardsProps> = ({
 
       {/* 4. Taux de Disponibilité / Réponse Agrégateurs */}
       <div
-        onClick={() => onNavigate('pricing')}
+        onClick={() => onNavigate('shortages')}
         className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-md hover:border-amber-500/40 transition cursor-pointer group flex flex-col justify-between"
       >
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Taux de Disponibilité</span>
-          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition">
-            <Activity className="w-4 h-4" />
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate('statistics');
+              }}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md transition cursor-pointer shadow-2xs"
+              title="Voir toutes les statistiques détaillées"
+            >
+              <span>Stats</span>
+            </button>
+            <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition">
+              <Activity className="w-4 h-4" />
+            </div>
           </div>
         </div>
 
@@ -126,9 +139,11 @@ export const DashboardMetricCards: React.FC<DashboardMetricCardsProps> = ({
             <span className="text-xs font-normal text-slate-400">Hero Cab</span>
           </div>
           <div className="text-[10px] text-slate-500 mt-1 font-medium flex items-center justify-between border-t border-slate-100 pt-1">
-            <span>Hero <strong className="text-amber-700">{availabilityStats.heroRate}%</strong></span>
             <span>Yango <strong className="text-slate-700">{availabilityStats.yangoRate}%</strong></span>
             <span>TM <strong className="text-slate-700">{availabilityStats.tmRate}%</strong></span>
+            <span className="text-amber-700 font-semibold flex items-center gap-0.5 group-hover:underline">
+              Pénuries <ArrowRight className="w-3 h-3" />
+            </span>
           </div>
         </div>
       </div>

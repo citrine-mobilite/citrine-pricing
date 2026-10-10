@@ -348,7 +348,7 @@ router.post('/api/neighborhoods/import-batch', async (req: Request, res: Respons
         const batch = writeBatch(db!);
         for (const nb of chunk) {
           const cleaned = cleanFirestoreDoc({ ...nb, cityName: city.name });
-          batch.set(doc(db!, 'neighborhoods', nb.id), cleaned, { merge: true });
+          batch.set(doc(db!, 'neighborhoods', String(nb.id)), cleaned, { merge: true });
         }
         await batch.commit();
       }
@@ -444,7 +444,7 @@ router.post('/api/neighborhoods/reconcile-batch', async (req: Request, res: Resp
         const batch = writeBatch(db!);
         for (const nb of chunk) {
           const cleaned = cleanFirestoreDoc({ ...nb, cityName: city.name });
-          batch.set(doc(db!, 'neighborhoods', nb.id), cleaned, { merge: true });
+          batch.set(doc(db!, 'neighborhoods', String(nb.id)), cleaned, { merge: true });
         }
         await batch.commit();
       }

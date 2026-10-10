@@ -73,7 +73,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     }
   }, [isOpen]);
 
-  const handleSelect = (optionValue: string) => {
+  const handleSelect = (optionValue: string | number) => {
     onChange(optionValue);
     setIsOpen(false);
   };

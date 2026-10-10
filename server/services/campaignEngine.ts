@@ -26,8 +26,10 @@ import {
   ensureSynced,
   saveCampaignTripsDiskBackup,
   loadCampaignTripsDiskBackup,
+  loadCanonicalTripsDiskBackup,
   saveLocalCampaignsDiskBackup
 } from '../db/memoryStore.js';
+import { extractAndSaveCampaignShortages } from '../db/shortageStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
 import { callTripMasterStats } from './tripMasterService.js';
@@ -59,7 +61,7 @@ export interface CampaignSessionState {
 }
 
 // Map local des sessions actives
-export const campaignSessions = new Map<string, CampaignSessionState>();
+export const campaignSessions = new Map<string | number, CampaignSessionState>();
 
 function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T> {
   let timeoutId: NodeJS.Timeout;
@@ -69,7 +71,7 @@ function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promi
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-export function cancelChunkCampaignSession(campaignId: string): boolean {
+export function cancelChunkCampaignSession(campaignId: string | number): boolean {
   const session = campaignSessions.get(campaignId);
   if (session) {
     session.campaign.status = 'cancelled';
@@ -83,7 +85,7 @@ export function cancelChunkCampaignSession(campaignId: string): boolean {
   // Notification d'arrière-plan sans blocage ("Fire & Forget")
   // Même si Firestore est en panne ou hors quota, l'arrêt en RAM prend effet en 0ms
   if (db) {
-    const firestorePromise = setDoc(doc(db, 'campaigns', campaignId), { status: 'cancelled' }, { merge: true });
+    const firestorePromise = setDoc(doc(db, 'campaigns', String(campaignId)), { status: 'cancelled' }, { merge: true });
     Promise.race([
       firestorePromise,
       new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore timeout')), 1500))
@@ -135,7 +137,7 @@ export async function initializeCampaignSession(
   // Écriture initiale unique dans Firestore des métadonnées
   if (db) {
     await safeFirestoreWrite('initCampaignMetaDoc', async () => {
-      await setDoc(doc(db!, 'campaigns', campaign.id), cleanFirestoreDoc(campaign));
+      await setDoc(doc(db!, 'campaigns', String(campaign.id)), cleanFirestoreDoc(campaign));
     });
   }
 
@@ -238,13 +240,7 @@ export async function processCampaignChunk(
     const diskTrips = loadCampaignTripsDiskBackup(campaignId) || [];
     let diskCanonical = memoryCampaignCanonicalTrips[campaignId] || [];
     if (diskCanonical.length === 0) {
-      try {
-        const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
-        const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-        if (fs.existsSync(canonPath)) {
-          diskCanonical = JSON.parse(fs.readFileSync(canonPath, 'utf8'));
-        }
-      } catch {}
+      diskCanonical = loadCanonicalTripsDiskBackup(campaignId) || [];
     }
 
     session = {
@@ -500,10 +496,10 @@ export async function finalizeCampaignExecution(
   if (Array.isArray(clientCanonicalTrips) && clientCanonicalTrips.length > 0) {
     const tripMap = new Map<string, CanonicalTrip>();
     for (const t of canonicalTrips) {
-      tripMap.set(t.id || `${t.origin}-${t.destination}`, t);
+      tripMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
     }
     for (const ct of clientCanonicalTrips) {
-      tripMap.set(ct.id || `${ct.origin}-${ct.destination}`, ct);
+      tripMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
     }
     canonicalTrips = Array.from(tripMap.values());
   }
@@ -511,10 +507,10 @@ export async function finalizeCampaignExecution(
   if (Array.isArray(clientTrips) && clientTrips.length > 0 && session) {
     const rMap = new Map<string, TripResult>();
     for (const t of session.trips) {
-      rMap.set(t.id || `${t.origin}-${t.destination}`, t);
+      rMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
     }
     for (const ct of clientTrips) {
-      rMap.set(ct.id || `${ct.origin}-${ct.destination}`, ct);
+      rMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
     }
     session.trips = Array.from(rMap.values());
   }
@@ -656,6 +652,13 @@ export async function finalizeCampaignExecution(
   }
   saveCampaignTripsDiskBackup(campaignId, memoryCampaignTrips[campaignId] || [], canonicalTrips);
   saveLocalCampaignsDiskBackup();
+
+  // Enregistrement des trajets en pénurie (UNIQUEMENT à la fin de la campagne)
+  try {
+    extractAndSaveCampaignShortages(campaign, canonicalTrips || [], memoryCampaignTrips[campaignId] || []);
+  } catch (err: any) {
+    console.warn('[CampaignEngine] Warning extracting campaign shortages:', err?.message);
+  }
 
   campaignSessions.delete(campaignId);
 

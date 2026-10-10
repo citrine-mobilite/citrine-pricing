@@ -121,7 +121,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
     }
   };
 
-  const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
+  const handleDeleteCampaign = async (id: string | number, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const res = await Swal.fire({
       title: 'Supprimer cette campagne ?',

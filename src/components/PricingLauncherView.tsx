@@ -34,8 +34,8 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
   const [isLaunching, setIsLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [singleStartId, setSingleStartId] = useState<string>(activeNeighborhoods[0]?.id || '');
-  const [singleEndId, setSingleEndId] = useState<string>(activeNeighborhoods[1]?.id || '');
+  const [singleStartId, setSingleStartId] = useState<string>(String(activeNeighborhoods[0]?.id || ''));
+  const [singleEndId, setSingleEndId] = useState<string>(String(activeNeighborhoods[1]?.id || ''));
   const [singleTestResult, setSingleTestResult] = useState<any>(null);
   const [isTestingSingle, setIsTestingSingle] = useState(false);
 
@@ -61,15 +61,15 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
 
     try {
       const res = await api.startCampaign({
-        cityId: currentCity.id,
-        triggeredByUserId: user?.id,
+        cityId: String(currentCity.id),
+        triggeredByUserId: user?.id ? String(user.id) : undefined,
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe',
         triggerType: 'manual',
         selectedClasses
       });
 
-      onCampaignStarted(res.campaign.id);
+      onCampaignStarted(String(res.campaign.id));
 
       const campaignId = res.campaign.id;
       const totalChunks = res.totalChunks || 1;

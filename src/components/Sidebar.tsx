@@ -3,6 +3,8 @@ import { HeroLogo } from './HeroLogo';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   LayoutDashboard,
+  BarChart3,
+  AlertOctagon,
   Zap,
   Activity,
   Building2,
@@ -35,6 +37,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navigation = [
     { id: 'dashboard', label: 'Accueil', icon: LayoutDashboard },
+    { id: 'statistics', label: 'Statistiques', icon: BarChart3 },
+    { id: 'shortages', label: 'Pénuries Trajets', icon: AlertOctagon },
     { id: 'pricing', label: 'Pricing', icon: Zap },
     { id: 'campaigns', label: 'Campagnes', icon: Activity, badge: activeCampaignCount > 0 ? activeCampaignCount : undefined },
     { id: 'temporal', label: 'Évolution Prix', icon: Clock },

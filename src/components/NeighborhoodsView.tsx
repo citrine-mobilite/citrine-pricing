@@ -222,7 +222,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     setEditNbZone(nb.zone || nb.zoneType || 'commercial');
     setEditNbStatus(typeof nb.status === 'string' ? nb.status : (nb.active !== false ? 'actif' : 'inactif'));
     setEditNbActive(nb.active ?? true);
-    setEditNbCityId(nb.cityId || currentCity?.id || '');
+    setEditNbCityId(String(nb.cityId || currentCity?.id || ''));
     setEditError(null);
   };
 
@@ -390,7 +390,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         totalCount={filteredNeighborhoods.length}
         activeNeighborhoods={activeFilteredNeighborhoods}
         cityName={selectedCityFilter === 'all' ? 'Toutes les villes (Intra-ville strict)' : currentCity.name}
-        onLaunchPricing={() => onLaunchPricingForCity(currentCity.id)}
+        onLaunchPricing={() => onLaunchPricingForCity(String(currentCity.id))}
       />
 
       {/* Data Table */}
@@ -426,7 +426,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         onStatusChange={setNewNbStatus}
         active={newNbActive}
         onActiveChange={setNewNbActive}
-        cityId={currentCity?.id || 'city_douala'}
+        cityId={String(currentCity?.id || 'city_douala')}
         cities={cities}
         isSubmitting={isSubmitting}
         onSubmit={handleAddNeighborhood}
@@ -471,7 +471,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         cities={cities}
-        currentCityId={currentCity?.id || cities[0]?.id || ''}
+        currentCityId={String(currentCity?.id || cities[0]?.id || '')}
         existingNeighborhoods={neighborhoods}
         onSuccess={onRefresh}
       />

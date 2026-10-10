@@ -6,15 +6,12 @@ import { generateBenchmarkPairs } from '../../src/utils/routeMatrix.js';
 import { calculateDistanceKm } from '../../src/utils/geoUtils.js';
 import type { Neighborhood } from '../../src/types/index.js';
 import type { PricingCampaign, TripResult, CanonicalTrip } from '../types.js';
+import { saveCampaignTripsDiskBackup, loadCampaignTripsDiskBackup } from '../db/memoryStore.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
-const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
 
 export async function seedCampaignTrips() {
-  if (!fs.existsSync(TRIPS_DIR)) {
-    fs.mkdirSync(TRIPS_DIR, { recursive: true });
-  }
 
   if (!fs.existsSync(CAMPAIGNS_FILE)) {
     console.log('[Seed Trips] Aucun fichier campaigns.json trouvé.');
@@ -36,11 +33,10 @@ export async function seedCampaignTrips() {
 
   for (const camp of campaigns) {
     const campaignId = camp.id;
-    const tripsFile = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
-    const canonFile = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+    const existing = loadCampaignTripsDiskBackup(campaignId);
 
-    if (fs.existsSync(tripsFile) && fs.existsSync(canonFile)) {
-      console.log(`[Seed Trips] Fichiers déjà existants pour ${camp.cityName || 'Douala'} (${campaignId.slice(0, 8)}). Ignoré.`);
+    if (existing && existing.length > 0) {
+      console.log(`[Seed Trips] Trajets déjà existants dans trips.json pour ${camp.cityName || 'Douala'} (${String(campaignId).slice(0, 8)}). Ignoré.`);
       continue;
     }
 
@@ -65,8 +61,8 @@ export async function seedCampaignTrips() {
       const pair = pairsForCamp[pairIndex % pairsForCamp.length];
       pairIndex++;
 
-      const origCoords = pair.origin.coordinates || [4.05, 9.70];
-      const destCoords = pair.dest.coordinates || [4.06, 9.72];
+      const origCoords: [number, number] = [pair.origin.lat || 4.05, pair.origin.lng || 9.70];
+      const destCoords: [number, number] = [pair.dest.lat || 4.06, pair.dest.lng || 9.72];
       const distKm = calculateDistanceKm(origCoords[0], origCoords[1], destCoords[0], destCoords[1]) || 5.8;
       
       const isJam = (i / totalTarget) < isJamsRatio;
@@ -156,10 +152,10 @@ export async function seedCampaignTrips() {
         cityName: camp.cityName || 'Douala',
         origin: originName,
         destination: destName,
-        startNeighborhoodId: pair.origin.id,
+        startNeighborhoodId: String(pair.origin.id),
         startNeighborhoodName: originName,
         startCoordinates: origCoords as [number, number],
-        endNeighborhoodId: pair.dest.id,
+        endNeighborhoodId: String(pair.dest.id),
         endNeighborhoodName: destName,
         endCoordinates: destCoords as [number, number],
         distanceKm: distKm,
@@ -192,12 +188,8 @@ export async function seedCampaignTrips() {
       trips.push(fullTrip);
     }
 
-    fs.writeFileSync(tripsFile, JSON.stringify(trips, null, 2), 'utf8');
-    fs.writeFileSync(canonFile, JSON.stringify(canonicalTrips, null, 2), 'utf8');
-
-    console.log(`[Seed Trips] ${trips.length} trajets enregistrés avec succès dans :`);
-    console.log(`  -> ${tripsFile}`);
-    console.log(`  -> ${canonFile}`);
+    saveCampaignTripsDiskBackup(campaignId, trips, canonicalTrips);
+    console.log(`[Seed Trips] ${trips.length} trajets enregistrés avec succès dans server/data/trips.json (campagne ${campaignId}).`);
   }
 
   console.log('[Seed Trips] Génération terminée avec succès.');
