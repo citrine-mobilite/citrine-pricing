@@ -39,7 +39,7 @@ import {
   cleanNeighborhoodName,
   campaignSessions
 } from '../services/campaignEngine.js';
-import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
+import { generatePricingPairs, calculatePossiblePricingPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
 
 import { getNextSequence } from '../db/counters.js';
 
@@ -156,7 +156,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
   }
 
-  const city = cities.find(c => c.id === cityId);
+  const city = cities.find(c => c.id === cityId || String(c.id) === String(cityId) || c.uuid === cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
@@ -205,8 +205,37 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     if (pairs.length > 300) {
       pairs = pairs.slice(0, 300);
     }
+  } else if (scopeMode === 'airport') {
+    // Tous les quartiers actifs de la ville ciblent l'aéroport enregistré en base
+    const cityAirport = city.airport;
+    let airportDest: any = null;
+    if (cityAirport && cityAirport.lat && cityAirport.lng) {
+      airportDest = {
+        id: `airport_${city.id}`,
+        cityId: String(city.uuid || city.id),
+        name: cityAirport.name || `Aéroport de ${city.name}`,
+        lat: cityAirport.lat,
+        lng: cityAirport.lng,
+        zoneType: 'airport',
+        active: true
+      };
+    } else {
+      airportDest = activeNbs.find(n =>
+        n.zoneType === 'airport' ||
+        n.name.toLowerCase().includes('aérop') ||
+        n.name.toLowerCase().includes('aerop') ||
+        n.name.toLowerCase().includes('nsimalen')
+      );
+    }
+    if (!airportDest) {
+      return res.status(400).json({ error: `Coordonnées de l'aéroport non configurées pour la ville de ${city.name}. Renseignez l'aéroport dans la gestion des villes.` });
+    }
+    const otherNbs = activeNbs.filter(n => String(n.id) !== String(airportDest.id) && n.name.toLowerCase().trim() !== airportDest.name.toLowerCase().trim());
+    for (const origin of otherNbs) {
+      pairs.push({ origin, dest: airportDest });
+    }
   } else {
-    pairs = generateBenchmarkPairs(activeNbs);
+    pairs = generatePricingPairs(activeNbs);
   }
 
   const totalPossible = pairs.length;

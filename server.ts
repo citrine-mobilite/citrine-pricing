@@ -64,6 +64,9 @@ async function startServer() {
     app.all('/api/*', (req: Request, res: Response) => {
       return res.status(404).json({ error: `Endpoint API de développement non trouvé : ${req.method} ${req.path}` });
     });
+    if (typeof (globalThis as any).__dirname !== 'undefined') {
+      delete (globalThis as any).__dirname;
+    }
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {

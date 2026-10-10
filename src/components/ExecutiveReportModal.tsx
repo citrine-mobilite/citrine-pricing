@@ -175,7 +175,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
                 <span className="text-xs font-bold tracking-widest uppercase text-slate-400">| RAPPORT DIRECTION</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
-                Synthèse Stratégique & Benchmark VTC
+                Synthèse Stratégique & Pricing VTC
               </h1>
               <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                 <span className="flex items-center gap-1 font-semibold text-slate-700">

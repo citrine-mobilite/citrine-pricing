@@ -67,7 +67,7 @@ export const DashboardCityCardsGrid: React.FC<DashboardCityCardsGridProps> = ({
                 className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 text-xs font-semibold text-white bg-[#1F4F4A] hover:bg-[#183F3B] rounded-lg transition disabled:opacity-40"
               >
                 <Play className="w-3 h-3 fill-white" />
-                <span>Benchmark</span>
+                <span>Pricing</span>
               </button>
             </div>
           </div>

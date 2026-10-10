@@ -1,5 +1,159 @@
 [
   {
+    "id": 27,
+    "uuid": "7d6baa5f-494e-4bcb-8dcf-3e0ea80e450a",
+    "cityId": "city_douala",
+    "cityName": "Douala",
+    "currency": "XAF",
+    "triggerType": "manual",
+    "triggeredByUserId": "admin_user",
+    "triggeredByUserName": "Citrine Opérateur",
+    "triggeredByUserRole": "admin",
+    "status": "in_progress",
+    "totalPairs": 3,
+    "completedPairs": 3,
+    "failedPairs": 0,
+    "startedAt": "2026-10-10T21:08:22.199Z",
+    "isTestSample": true,
+    "sampleLimit": 3,
+    "totalPossiblePairs": 231,
+    "scopeMode": "airport",
+    "hasJamsCount": 0,
+    "logs": [
+      {
+        "timestamp": "2026-10-10T21:08:22.199Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (3 trajets) par Citrine Opérateur (admin) pour Douala."
+      }
+    ],
+    "totalBatches": 1,
+    "workersCount": 1,
+    "yangoShortageCount": 3,
+    "completedBatches": 1,
+    "durationSeconds": 9
+  },
+  {
+    "id": "26",
+    "cityId": "city_douala",
+    "cityName": "Douala",
+    "currency": "XAF",
+    "triggerType": "manual",
+    "status": "in_progress",
+    "totalPairs": 1381,
+    "completedPairs": 10,
+    "failedPairs": 0,
+    "startedAt": "2026-10-10T21:07:35.341Z",
+    "scopeMode": "global",
+    "totalBatches": 139,
+    "yangoShortageCount": 10,
+    "completedBatches": 1,
+    "durationSeconds": 4,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1316,
+        "heroAvgPrice": 921,
+        "tripMasterAvgPrice": 1711,
+        "count": 276
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1232,
+        "heroAvgPrice": 862,
+        "tripMasterAvgPrice": 1602,
+        "count": 276
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1470,
+        "heroAvgPrice": 1029,
+        "tripMasterAvgPrice": 1911,
+        "count": 276
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1610,
+        "heroAvgPrice": 1127,
+        "tripMasterAvgPrice": 2093,
+        "count": 276
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1498,
+        "heroAvgPrice": 1049,
+        "tripMasterAvgPrice": 1947,
+        "count": 276
+      }
+    }
+  },
+  {
+    "id": 26,
+    "uuid": "a877df8a-75a8-432d-9be2-672947f14a55",
+    "cityId": "city_douala",
+    "cityName": "Douala",
+    "currency": "XAF",
+    "triggerType": "manual",
+    "triggeredByUserId": "admin_user",
+    "triggeredByUserName": "Citrine Opérateur",
+    "triggeredByUserRole": "admin",
+    "status": "in_progress",
+    "totalPairs": 5,
+    "completedPairs": 0,
+    "failedPairs": 0,
+    "startedAt": "2026-10-10T21:07:16.252Z",
+    "isTestSample": true,
+    "sampleLimit": 5,
+    "totalPossiblePairs": 231,
+    "scopeMode": "airport",
+    "hasJamsCount": 0,
+    "logs": [
+      {
+        "timestamp": "2026-10-10T21:07:16.252Z",
+        "level": "info",
+        "message": "Démarrage de la campagne (5 trajets) par Citrine Opérateur (admin) pour Douala."
+      }
+    ],
+    "totalBatches": 1,
+    "workersCount": 1,
+    "arrondissementStats": {
+      "Douala 1er": {
+        "arrondissement": "Douala 1er",
+        "avgPrice": 1316,
+        "heroAvgPrice": 921,
+        "tripMasterAvgPrice": 1711,
+        "count": 1
+      },
+      "Douala 2e": {
+        "arrondissement": "Douala 2e",
+        "avgPrice": 1232,
+        "heroAvgPrice": 862,
+        "tripMasterAvgPrice": 1602,
+        "count": 1
+      },
+      "Douala 3e": {
+        "arrondissement": "Douala 3e",
+        "avgPrice": 1470,
+        "heroAvgPrice": 1029,
+        "tripMasterAvgPrice": 1911,
+        "count": 1
+      },
+      "Douala 4e": {
+        "arrondissement": "Douala 4e",
+        "avgPrice": 1610,
+        "heroAvgPrice": 1127,
+        "tripMasterAvgPrice": 2093,
+        "count": 1
+      },
+      "Douala 5e": {
+        "arrondissement": "Douala 5e",
+        "avgPrice": 1498,
+        "heroAvgPrice": 1049,
+        "tripMasterAvgPrice": 1947,
+        "count": 1
+      }
+    }
+  },
+  {
     "id": 25,
     "logs": [
       {

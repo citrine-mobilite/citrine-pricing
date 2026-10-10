@@ -12,6 +12,14 @@ export interface User {
   passwordHash?: string;
 }
 
+export interface AirportConfig {
+  name: string;
+  lat: number;
+  lng: number;
+  code?: string;
+  active?: boolean;
+}
+
 export interface City {
   id: number | string;
   uuid?: string;
@@ -24,6 +32,7 @@ export interface City {
     lat: number;
     lng: number;
   };
+  airport?: AirportConfig;
   autoSchedule: {
     enabled: boolean;
     slots: string[];
@@ -125,7 +134,7 @@ export interface PricingCampaign {
   triggeredByUserName: string;
   triggeredByUserRole?: string;
   status: CampaignStatus;
-  providerMode?: 'benchmark' | 'yango' | 'hero';
+  providerMode?: 'pricing' | 'yango' | 'hero';
   selectedClasses?: string[]; // ['econom', 'business', 'comfortplus', 'moto']
   totalPairs: number;
   completedPairs: number;
@@ -150,7 +159,7 @@ export interface PricingCampaign {
   comment?: string; // Commentaire sur la campagne (météo, trafic, etc.)
   comments?: string;
   timeSlotOverride?: 'auto' | 'morning_peak' | 'midday_peak' | 'evening_peak' | 'off_peak' | 'night' | string;
-  scopeMode?: 'city' | 'intra' | 'inter' | 'global';
+  scopeMode?: 'city' | 'intra' | 'inter' | 'global' | 'airport';
   arrondissement?: string;
   originArrondissement?: string;
   destArrondissement?: string;
@@ -178,7 +187,7 @@ export interface PricingCampaign {
     count: number;
   }>;
   classesStats?: Record<string, any>;
-  // Hero Statistics & Benchmark Comparison
+  // Hero Statistics & Pricing Comparison
   heroStats?: {
     avgPrice: number;
     minPrice: number;
@@ -384,6 +393,22 @@ export interface StatisticsData {
     yangoShortageRate: number;
     heroCheaperRate: number;
     arrondissementSummary: Record<string, any>;
+    airportStats?: {
+      tripsCount: number;
+      avgYangoPrice: number;
+      avgHeroPrice: number;
+      avgTripMasterPrice: number;
+      heroEconomyPct: number;
+      heroEconomyFcfa: number;
+      shortageRate: number;
+      avgDistanceKm: number;
+      avgDurationMin: number;
+      pricePerKmYango: number;
+      pricePerKmHero: number;
+      arrondissements: Array<{ name: string; avgY: number; avgH: number; count: number }>;
+      hasRealCampaignData: boolean;
+      campaignsCount?: number;
+    };
     citiesCount: number;
     neighborhoodsCount: number;
   };

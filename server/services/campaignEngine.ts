@@ -33,7 +33,7 @@ import { extractAndSaveCampaignShortages } from '../db/shortageStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
 import { callTripMasterStats } from './tripMasterService.js';
-import { generateBenchmarkPairs, detectArrondissement } from '../../src/utils/routeMatrix.js';
+import { generatePricingPairs, detectArrondissement } from '../../src/utils/routeMatrix.js';
 import { getNextSequence } from '../db/counters.js';
 
 export function cleanNeighborhoodName(name: string | null | undefined): string {
@@ -173,15 +173,17 @@ export async function processCampaignChunk(
   chunkTrips: TripResult[];
   chunkCanonicalTrips?: CanonicalTrip[];
 }> {
-  let session = campaignSessions.get(campaignId);
+  let session = campaignSessions.get(campaignId) ||
+    campaignSessions.get(Number(campaignId)) ||
+    Array.from(campaignSessions.values()).find(s => String(s.campaign.id) === String(campaignId) || s.campaign.uuid === String(campaignId));
 
   // Reconstitution si le serveur a redémarré (cold start Serverless ou instance Cloud Run secondaire)
   if (!session) {
     await ensureSynced();
-    let camp = memoryCampaigns.find(c => c.id === campaignId);
+    let camp = memoryCampaigns.find(c => String(c.id) === String(campaignId) || c.uuid === String(campaignId));
     if (!camp && db && !isFirestoreQuotaExceeded()) {
       try {
-        const snap = await getDoc(doc(db, 'campaigns', campaignId));
+        const snap = await getDoc(doc(db, 'campaigns', String(campaignId)));
         if (snap.exists()) camp = { id: snap.id, ...snap.data() } as PricingCampaign;
       } catch (e: any) {
         if (isQuotaExceededError(e)) flagFirestoreQuotaExceeded(e);
@@ -213,9 +215,39 @@ export async function processCampaignChunk(
       memoryCampaigns.unshift(camp);
     }
 
-    const city = cities.find(c => c.id === camp?.cityId) || { id: camp.cityId, name: camp.cityName, currency: camp.currency } as City;
-    const activeNbs = neighborhoods.filter(n => n.cityId === city.id && n.active);
-    let pairs = generateBenchmarkPairs(activeNbs);
+    const city = cities.find(c => c.id === camp?.cityId || c.uuid === camp?.cityId || String(c.id) === String(camp?.cityId)) || { id: camp.cityId, name: camp.cityName, currency: camp.currency } as City;
+    const activeNbs = neighborhoods.filter(n => (n.cityId === city.id || n.cityId === city.uuid || String(n.cityId) === String(city.id)) && n.active);
+    let pairs: Array<{ origin: any; dest: any }> = [];
+    if (camp.scopeMode === 'airport') {
+      const cityAirport = city.airport;
+      let airportDest: any = null;
+      if (cityAirport && cityAirport.lat && cityAirport.lng) {
+        airportDest = {
+          id: `airport_${city.id}`,
+          cityId: String(city.uuid || city.id),
+          name: cityAirport.name || `Aéroport de ${city.name}`,
+          lat: cityAirport.lat,
+          lng: cityAirport.lng,
+          zoneType: 'airport',
+          active: true
+        };
+      } else {
+        airportDest = activeNbs.find(n =>
+          n.zoneType === 'airport' ||
+          n.name.toLowerCase().includes('aérop') ||
+          n.name.toLowerCase().includes('aerop') ||
+          n.name.toLowerCase().includes('nsimalen')
+        );
+      }
+      if (airportDest) {
+        const others = activeNbs.filter(n => String(n.id) !== String(airportDest.id) && n.name.toLowerCase().trim() !== airportDest.name.toLowerCase().trim());
+        pairs = others.map(origin => ({ origin, dest: airportDest }));
+      } else {
+        pairs = generatePricingPairs(activeNbs);
+      }
+    } else {
+      pairs = generatePricingPairs(activeNbs);
+    }
     const limitNum = typeof camp.sampleLimit === 'number' ? camp.sampleLimit : (camp.sampleLimit && String(camp.sampleLimit) !== 'all' ? parseInt(String(camp.sampleLimit), 10) : undefined);
     if (limitNum && limitNum < pairs.length) {
       pairs = pairs.slice(0, limitNum);

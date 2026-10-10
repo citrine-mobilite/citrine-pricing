@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import defaultNeighborhoods from '../db/defaultNeighborhoods.json' with { type: 'json' };
-import { generateBenchmarkPairs } from '../../src/utils/routeMatrix.js';
+import { generatePricingPairs } from '../../src/utils/routeMatrix.js';
 import { calculateDistanceKm } from '../../src/utils/geoUtils.js';
 import type { Neighborhood } from '../../src/types/index.js';
 import type { PricingCampaign, TripResult, CanonicalTrip } from '../types.js';
@@ -27,7 +27,7 @@ export async function seedCampaignTrips() {
   }
 
   const allNeighborhoods = defaultNeighborhoods as unknown as Neighborhood[];
-  const doualaPairs = generateBenchmarkPairs(allNeighborhoods, { cityId: 'city_douala' });
+  const doualaPairs = generatePricingPairs(allNeighborhoods, { cityId: 'city_douala' });
 
   console.log(`[Seed Trips] Traitement de ${campaigns.length} campagnes...`);
 

@@ -4,7 +4,7 @@ import { City, Neighborhood, PricingCampaign, TripResult } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { YangoResponseInspectorModal } from './YangoResponseInspectorModal';
-import { calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../utils/routeMatrix';
+import { calculatePossiblePricingPairsCount, detectArrondissement } from '../utils/routeMatrix';
 import {
   PricingStatsSummary,
   computePricingStats,
@@ -28,6 +28,7 @@ import {
 import { PricingResultsTable } from './pricing/PricingResultsTable';
 import { PricingRecommendationModal } from './pricing/PricingRecommendationModal';
 import { PricingArrondissementTester } from './pricing/PricingArrondissementTester';
+import { PricingAirportView } from './pricing/PricingAirportView';
 import { ArrondissementInfo } from './pricing/ArrondissementSelect2';
 import { computeCampaignDuration } from '../utils/durationUtils';
 
@@ -89,7 +90,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     [neighborhoods, currentCity?.id, currentCity?.active]
   );
   const totalCombinations = useMemo(
-    () => calculatePossibleBenchmarkPairsCount(cityActiveNeighborhoods),
+    () => calculatePossiblePricingPairsCount(cityActiveNeighborhoods),
     [cityActiveNeighborhoods]
   );
 
@@ -130,7 +131,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   }, [currentCity, cityActiveNeighborhoods]);
 
   const [inspectedTrip, setInspectedTrip] = useState<TripResult | null>(null);
-  const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter'>('none');
+  const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter' | 'airport'>('none');
   const [quickOriginId, setQuickOriginId] = useState<string>(String(cityActiveNeighborhoods[0]?.id || ''));
   const [quickDestId, setQuickDestId] = useState<string>(String(cityActiveNeighborhoods[1]?.id || ''));
   const [isQuickTesting, setIsQuickTesting] = useState<boolean>(false);
@@ -283,7 +284,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   }, [activeCampaignId, campaigns, liveCampaignOverride]);
 
   const handleLaunchWithOptions = async (options: {
-    scopeMode: 'global' | 'intra' | 'inter';
+    scopeMode: 'global' | 'intra' | 'inter' | 'airport';
     arrondissement?: string;
     originArrondissement?: string;
     destArrondissement?: string;
@@ -696,6 +697,22 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               scopeMode: 'inter',
               originArrondissement: originArr,
               destArrondissement: destArr,
+              sampleLimit: limit,
+              comment
+            });
+          }}
+        />
+      )}
+
+      {/* 4. Panel Destinations Aéroport */}
+      {activeTesterPanel === 'airport' && (
+        <PricingAirportView
+          currentCity={currentCity}
+          cityActiveNeighborhoods={cityActiveNeighborhoods}
+          isRunning={displayedCampaign?.status === 'in_progress'}
+          onLaunchAirport={(limit, comment) => {
+            handleLaunchWithOptions({
+              scopeMode: 'airport',
               sampleLimit: limit,
               comment
             });

@@ -4,6 +4,11 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Ensure __dirname leaked by tsx does not break vite-plugin-pwa
+if (typeof (globalThis as any).__dirname !== 'undefined') {
+  delete (globalThis as any).__dirname;
+}
+
 export default defineConfig(() => {
   return {
     plugins: [

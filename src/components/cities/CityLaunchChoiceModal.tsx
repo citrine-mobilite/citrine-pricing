@@ -60,7 +60,7 @@ export const CityLaunchChoiceModal: React.FC<CityLaunchChoiceModalProps> = ({
             <ArrowRight className="w-4 h-4 text-emerald-600 group-hover:translate-x-0.5 transition" />
           </button>
 
-          {/* Full Benchmark */}
+          {/* Full Pricing */}
           <button
             onClick={() => onChoice(String(city.id), 'full')}
             disabled={isStartingCampaign}

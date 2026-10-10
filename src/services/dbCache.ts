@@ -185,3 +185,79 @@ export async function setTemporalComparisonCache(key: string, data: any): Promis
     });
   } catch {}
 }
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function getCachedCities(): any[] | null {
+  try {
+    const raw = localStorage.getItem('citrine_cities_30d_cache');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.data) && Date.now() - (parsed.cachedAt || 0) < THIRTY_DAYS_MS) {
+        return parsed.data;
+      }
+    }
+  } catch {}
+  return memoryFallback.get('cities_30d') || null;
+}
+
+export function setCachedCities(cities: any[]): void {
+  if (!cities || cities.length === 0) return;
+  memoryFallback.set('cities_30d', cities);
+  try {
+    localStorage.setItem('citrine_cities_30d_cache', JSON.stringify({
+      cachedAt: Date.now(),
+      data: cities
+    }));
+  } catch {}
+}
+
+export function invalidateCitiesCache(): void {
+  memoryFallback.delete('cities_30d');
+  try {
+    localStorage.removeItem('citrine_cities_30d_cache');
+  } catch {}
+}
+
+export function getCachedNeighborhoods(cityId?: string | number): any[] | null {
+  const key = `citrine_nbs_30d_cache_${cityId ?? 'all'}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.data) && Date.now() - (parsed.cachedAt || 0) < THIRTY_DAYS_MS) {
+        return parsed.data;
+      }
+    }
+  } catch {}
+  return memoryFallback.get(key) || null;
+}
+
+export function setCachedNeighborhoods(cityId: string | number | undefined, nbs: any[]): void {
+  if (!nbs || nbs.length === 0) return;
+  const key = `citrine_nbs_30d_cache_${cityId ?? 'all'}`;
+  memoryFallback.set(key, nbs);
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      cachedAt: Date.now(),
+      data: nbs
+    }));
+  } catch {}
+}
+
+export function invalidateNeighborhoodsCache(cityId?: string | number): void {
+  if (cityId) {
+    const key = `citrine_nbs_30d_cache_${cityId}`;
+    memoryFallback.delete(key);
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  } else {
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('citrine_nbs_30d_cache'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }
+}
+

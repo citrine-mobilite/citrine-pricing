@@ -46,7 +46,7 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-      {/* Card 1 : Yango Benchmark */}
+      {/* Card 1 : Yango Pricing */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
@@ -82,7 +82,7 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
         </div>
       </div>
 
-      {/* Card 2 : Hero Cab Benchmark */}
+      {/* Card 2 : Hero Cab Pricing */}
       <div className="bg-white rounded-xl border border-teal-200/80 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] bg-gradient-to-b from-teal-50/20 to-white">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
@@ -118,7 +118,7 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
         </div>
       </div>
 
-      {/* Card 3 : Trip Master Benchmark */}
+      {/* Card 3 : Trip Master Pricing */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">

@@ -2,25 +2,41 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
-import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced, saveNeighborhoodsDiskBackup } from '../db/memoryStore.js';
+import {
+  cities,
+  neighborhoods,
+  setCities,
+  setNeighborhoods,
+  recordHistory,
+  ensureSynced,
+  saveNeighborhoodsDiskBackup,
+  saveCitiesDiskBackup,
+  isCitiesCacheValid,
+  invalidateCitiesCache,
+  touchCitiesCache,
+  isNeighborhoodsCacheValid,
+  invalidateNeighborhoodsCache,
+  touchNeighborhoodsCache
+} from '../db/memoryStore.js';
 import { getNextSequence } from '../db/counters.js';
 import { City, Neighborhood } from '../types.js';
 
 const router = Router();
 
-// Cities (Servies depuis la RAM en priorité - 0 lecture Firestore inutile)
+// Cities (Servies depuis la mémoire/disque avec validité 30 jours, réinitialisées en cas de modif)
 router.get('/api/cities', async (req: Request, res: Response) => {
   await ensureSynced().catch(() => {});
 
   const forceRefresh = req.query.forceRefresh === 'true';
 
-  // Ne requêter Firestore QUE si la RAM est vide ou en cas de rafraîchissement forcé explicite
-  if (db && !isFirestoreQuotaExceeded() && (cities.length === 0 || forceRefresh)) {
+  // Ne requêter Firestore QUE si la validité 30 jours a expiré, si la RAM est vide ou en cas de rafraîchissement forcé
+  if (db && !isFirestoreQuotaExceeded() && (!isCitiesCacheValid() || cities.length === 0 || forceRefresh)) {
     try {
       const snap = await getDocs(collection(db, 'cities'));
       if (!snap.empty) {
         const dbCities = snap.docs.map(d => ({ id: d.id, ...d.data() } as City));
         setCities(dbCities);
+        saveCitiesDiskBackup();
       }
     } catch (e: any) {
       if (isQuotaExceededError(e)) {
@@ -34,21 +50,36 @@ router.get('/api/cities', async (req: Request, res: Response) => {
   // Injecter le nombre de quartiers
   const enriched = cities.map(c => ({
     ...c,
-    neighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id).length,
-    activeNeighborhoodsCount: c.active ? neighborhoods.filter(n => n.cityId === c.id && n.active).length : 0
+    neighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id || String(n.cityId) === String(c.id) || n.cityId === c.uuid).length,
+    activeNeighborhoodsCount: c.active ? neighborhoods.filter(n => (n.cityId === c.id || String(n.cityId) === String(c.id) || n.cityId === c.uuid) && n.active).length : 0
   }));
 
   return res.json(enriched);
 });
 
 router.post('/api/cities', async (req: Request, res: Response) => {
-  const { name, country, currency, currencySymbol, center, autoSchedule } = req.body;
+  const { name, country, currency, currencySymbol, center, autoSchedule, airport } = req.body;
   if (!name || !country || !currency) {
     return res.status(400).json({ error: 'Nom, pays et devise sont obligatoires.' });
   }
 
   const citySeqId = getNextSequence('cities');
   const cityUuid = `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
+
+  let cityAirport = undefined;
+  if (airport && airport.lat && airport.lng) {
+    cityAirport = {
+      name: airport.name ? String(airport.name).trim() : `Aéroport de ${name}`,
+      lat: parseFloat(airport.lat),
+      lng: parseFloat(airport.lng),
+      code: airport.code ? String(airport.code).trim().toUpperCase() : undefined,
+      active: airport.active ?? true
+    };
+  } else if (name.toLowerCase().includes('douala')) {
+    cityAirport = { name: 'Aéroport International de Douala', lat: 4.0061, lng: 9.7195, code: 'DLA', active: true };
+  } else if (name.toLowerCase().includes('yaound')) {
+    cityAirport = { name: 'Aéroport International de Yaoundé-Nsimalen', lat: 3.7226, lng: 11.5532, code: 'NSI', active: true };
+  }
 
   const newCity: City = {
     id: citySeqId,
@@ -58,18 +89,21 @@ router.post('/api/cities', async (req: Request, res: Response) => {
     currency: currency.trim().toUpperCase(),
     currencySymbol: currencySymbol || currency,
     center: center || { lat: 4.0511, lng: 9.7679 },
+    airport: cityAirport,
     active: true,
     autoSchedule: autoSchedule || { enabled: false, slots: ['08:00', '18:00'] }
   };
 
   cities.push(newCity);
+  saveCitiesDiskBackup();
+  invalidateCitiesCache();
   await safeFirestoreWrite('createCity', () => setDoc(doc(db!, 'cities', newCity.uuid || String(newCity.id)), cleanFirestoreDoc(newCity)));
 
   await recordHistory({
     action: 'create_city',
     eventType: 'cities',
     title: `Nouvelle ville ajoutée: ${newCity.name}`,
-    description: `${newCity.country} - Devise: ${newCity.currency}`
+    description: `${newCity.country} - Devise: ${newCity.currency}${newCity.airport ? ` - Aéroport: ${newCity.airport.name}` : ''}`
   });
 
   return res.status(201).json(newCity);
@@ -82,12 +116,25 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
 
-  const { name, country, currency, currencySymbol, center, active, autoSchedule } = req.body;
+  const { name, country, currency, currencySymbol, center, active, autoSchedule, airport } = req.body;
   if (name !== undefined) city.name = name.trim();
   if (country !== undefined) city.country = country.trim();
   if (currency !== undefined) city.currency = currency.trim().toUpperCase();
   if (currencySymbol !== undefined) city.currencySymbol = currencySymbol;
   if (center !== undefined) city.center = center;
+  if (airport !== undefined) {
+    if (airport && airport.lat && airport.lng) {
+      city.airport = {
+        name: airport.name ? String(airport.name).trim() : `Aéroport de ${city.name}`,
+        lat: parseFloat(airport.lat),
+        lng: parseFloat(airport.lng),
+        code: airport.code ? String(airport.code).trim().toUpperCase() : undefined,
+        active: airport.active ?? true
+      };
+    } else {
+      city.airport = undefined;
+    }
+  }
   if (active !== undefined) {
     const isNewActive = Boolean(active);
     city.active = isNewActive;
@@ -107,6 +154,10 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
   }
   if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
 
+  saveCitiesDiskBackup();
+  invalidateCitiesCache();
+  invalidateNeighborhoodsCache(String(city.id));
+
   await safeFirestoreWrite('updateCity', () => setDoc(doc(db!, 'cities', city.uuid || String(city.id)), cleanFirestoreDoc(city), { merge: true }));
   return res.json(city);
 });
@@ -122,6 +173,9 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const remainingNbs = neighborhoods.filter(n => n.cityId !== id && n.cityId !== deleted.uuid && String(n.cityId) !== String(deleted.id));
   setNeighborhoods(remainingNbs);
   saveNeighborhoodsDiskBackup();
+  saveCitiesDiskBackup();
+  invalidateCitiesCache();
+  invalidateNeighborhoodsCache(id);
 
   await safeFirestoreWrite('deleteCity', () => deleteDoc(doc(db!, 'cities', deleted.uuid || String(deleted.id))));
 
@@ -135,18 +189,19 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Ville et quartiers associés supprimés.' });
 });
 
-// Neighborhoods (Servis depuis la RAM en priorité - 0 lecture Firestore)
+// Neighborhoods (Servis depuis le cache mémoire/disque avec validité 30 jours, réinitialisé si modifié)
 router.get('/api/neighborhoods', async (req: Request, res: Response) => {
   const { cityId, forceRefresh } = req.query;
 
   await ensureSynced().catch(() => {});
 
-  if (db && !isFirestoreQuotaExceeded() && forceRefresh === 'true') {
+  if (db && !isFirestoreQuotaExceeded() && (forceRefresh === 'true' || !isNeighborhoodsCacheValid(cityId as string) || neighborhoods.length === 0)) {
     try {
       const snap = await getDocs(collection(db, 'neighborhoods'));
       if (!snap.empty) {
         const dbNbs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Neighborhood));
         setNeighborhoods(dbNbs);
+        saveNeighborhoodsDiskBackup(cityId as string);
       }
     } catch (e: any) {
       if (isQuotaExceededError(e)) {
@@ -208,7 +263,8 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
   };
 
   neighborhoods.push(newNb);
-  saveNeighborhoodsDiskBackup();
+  saveNeighborhoodsDiskBackup(String(city.id));
+  invalidateNeighborhoodsCache(String(city.id));
   await safeFirestoreWrite('createNb', () => setDoc(doc(db!, 'neighborhoods', newNb.uuid || String(newNb.id)), cleanFirestoreDoc(newNb)));
 
   return res.status(201).json({ ...newNb, cityName: city.name });
@@ -236,7 +292,8 @@ router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   if (cityId !== undefined) nb.cityId = String(cityId).trim();
   nb.updatedAt = new Date().toISOString();
 
-  saveNeighborhoodsDiskBackup();
+  saveNeighborhoodsDiskBackup(String(nb.cityId));
+  invalidateNeighborhoodsCache(String(nb.cityId));
   await safeFirestoreWrite('updateNb', () => setDoc(doc(db!, 'neighborhoods', nb.uuid || String(nb.id)), cleanFirestoreDoc(nb), { merge: true }));
   return res.json(nb);
 });
@@ -249,7 +306,8 @@ router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   }
 
   const deleted = neighborhoods.splice(idx, 1)[0];
-  saveNeighborhoodsDiskBackup();
+  saveNeighborhoodsDiskBackup(String(deleted.cityId));
+  invalidateNeighborhoodsCache(String(deleted.cityId));
   await safeFirestoreWrite('deleteNb', () => deleteDoc(doc(db!, 'neighborhoods', deleted.uuid || String(deleted.id))));
   return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
 });
@@ -259,7 +317,8 @@ router.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Respo
   const countBefore = neighborhoods.length;
   const filtered = neighborhoods.filter(n => n.cityId !== cityId);
   setNeighborhoods(filtered);
-  saveNeighborhoodsDiskBackup();
+  saveNeighborhoodsDiskBackup(String(cityId));
+  invalidateNeighborhoodsCache(String(cityId));
   const deletedCount = countBefore - filtered.length;
 
   if (db) {
@@ -293,6 +352,8 @@ router.post('/api/neighborhoods/batch-toggle', async (req: Request, res: Respons
     }
   });
 
+  saveNeighborhoodsDiskBackup(String(cityId));
+  invalidateNeighborhoodsCache(String(cityId));
   return res.json({ success: true, active: boolActive });
 });
 

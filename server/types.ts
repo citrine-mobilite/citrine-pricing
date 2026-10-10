@@ -24,6 +24,14 @@ export interface Neighborhood {
   orderIndex?: number;
 }
 
+export interface AirportConfig {
+  name: string;
+  lat: number;
+  lng: number;
+  code?: string;
+  active?: boolean;
+}
+
 export interface City {
   id: number | string;
   uuid?: string;
@@ -32,6 +40,7 @@ export interface City {
   currency: string;
   currencySymbol: string;
   center: GeoCoordinate;
+  airport?: AirportConfig;
   active: boolean;
   autoSchedule: {
     enabled: boolean;
@@ -193,7 +202,7 @@ export interface TripResult {
   priceConfortPlus?: number;
   priceMoto?: number;
 
-  // Dual Provider Benchmark (legacy optional)
+  // Dual Provider Pricing (legacy optional)
   heroQuote?: HeroQuote;
   priceHero?: number;
   priceHeroStandard?: number;
@@ -245,7 +254,7 @@ export interface PricingCampaign {
   triggeredByUserName?: string;
   triggeredByUserRole?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'error' | 'failed' | 'cancelled';
-  providerMode?: 'benchmark' | 'yango' | 'hero';
+  providerMode?: 'pricing' | 'yango' | 'hero';
   selectedClasses?: string[];
   totalPairs: number;
   completedPairs: number;
@@ -270,7 +279,7 @@ export interface PricingCampaign {
   comment?: string; // Commentaire libre sur la campagne (ex: météo, pluie, contexte de circulation, etc.)
   comments?: string; // Alias
   timeSlotOverride?: 'auto' | 'morning_peak' | 'midday_peak' | 'evening_peak' | 'off_peak' | 'night' | string;
-  scopeMode?: 'city' | 'intra' | 'inter' | 'global';
+  scopeMode?: 'city' | 'intra' | 'inter' | 'global' | 'airport';
   arrondissement?: string;
   originArrondissement?: string;
   destArrondissement?: string;

@@ -1,5 +1,16 @@
 import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings, StatisticsData, StoredStatsSnapshot, ShortagesResponse, CampaignShortageRecord } from '../types';
-import { getCachedCampaignTrips, setCachedCampaignTrips, invalidateCampaignTripsCache, invalidateAllTripsCache } from './dbCache';
+import {
+  getCachedCampaignTrips,
+  setCachedCampaignTrips,
+  invalidateCampaignTripsCache,
+  invalidateAllTripsCache,
+  getCachedCities,
+  setCachedCities,
+  invalidateCitiesCache,
+  getCachedNeighborhoods,
+  setCachedNeighborhoods,
+  invalidateNeighborhoodsCache
+} from './dbCache';
 
 const BASE_URL = '/api';
 
@@ -98,27 +109,33 @@ export const api = {
     }
   },
 
-  // Cities (avec cache navigateur 24h et 0 lecture Firestore)
-  // Cities (Toujours frais depuis le serveur)
+  // Cities (avec cache 30 jours et réinitialisation immédiate à la modification)
   async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
-    try {
-      // Purge proactive des anciens caches persistants
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_cities_cache') || k.startsWith('citrine_nbs_cache_v')).forEach(k => localStorage.removeItem(k));
-    } catch {}
+    if (!forceRefresh) {
+      const cached = getCachedCities();
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
+    }
 
     try {
       const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
       const res = await fetch(url);
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setCachedCities(data);
+        }
+        return data;
       }
     } catch (e) {
       console.warn('[API Client] getCities error:', e);
     }
-    return [];
+    return getCachedCities() || [];
   },
 
   async createCity(data: Partial<City>): Promise<City> {
+    invalidateCitiesCache();
     const res = await fetch(`${BASE_URL}/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -128,20 +145,27 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la création de la ville.');
     }
+    invalidateCitiesCache();
     return res.json();
   },
 
   async updateCity(id: string | number, data: Partial<City>): Promise<City> {
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
     const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour de la ville.');
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
     return res.json();
   },
 
   async deleteCity(id: string | number): Promise<void> {
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
     try {
       const idStr = String(id);
       Object.keys(localStorage)
@@ -150,10 +174,19 @@ export const api = {
     } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
   },
 
-  // Neighborhoods (Toujours frais depuis le serveur)
+  // Neighborhoods (avec cache 30 jours par ville et réinitialisation immédiate à la modification)
   async getNeighborhoods(cityId?: string | number, forceRefresh: boolean = false): Promise<Neighborhood[]> {
+    if (!forceRefresh) {
+      const cached = getCachedNeighborhoods(cityId);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
+    }
+
     try {
       const params = new URLSearchParams();
       if (cityId !== undefined && cityId !== null) params.append('cityId', String(cityId));
@@ -161,18 +194,20 @@ export const api = {
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setCachedNeighborhoods(cityId, data);
+        }
+        return data;
       }
     } catch (e) {
       console.warn('[API Client] getNeighborhoods error:', e);
     }
-    return [];
+    return getCachedNeighborhoods(cityId) || [];
   },
 
   async createNeighborhood(data: Partial<Neighborhood>): Promise<Neighborhood> {
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
-    } catch {}
+    invalidateNeighborhoodsCache(data.cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -182,32 +217,35 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de l’ajout du quartier.');
     }
+    invalidateNeighborhoodsCache(data.cityId);
     return res.json();
   },
 
   async updateNeighborhood(id: string | number, data: Partial<Neighborhood>): Promise<Neighborhood> {
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
-    } catch {}
+    invalidateNeighborhoodsCache(data.cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour du quartier.');
+    invalidateNeighborhoodsCache(data.cityId);
     return res.json();
   },
 
-  async deleteNeighborhood(id: string | number): Promise<void> {
+  async deleteNeighborhood(id: string | number, cityId?: string | number): Promise<void> {
+    invalidateNeighborhoodsCache(cityId);
     try {
       const idStr = String(id);
       Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(idStr)).forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression du quartier.');
+    invalidateNeighborhoodsCache(cityId);
   },
 
   async clearCityNeighborhoods(cityId: string | number): Promise<{ success: boolean; deletedCount: number }> {
+    invalidateNeighborhoodsCache(cityId);
     try {
       const idStr = String(cityId);
       Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(idStr)).forEach(k => localStorage.removeItem(k));
@@ -216,26 +254,31 @@ export const api = {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Erreur lors de la suppression des quartiers de la ville.');
+    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
   async batchToggleNeighborhoods(cityId: string | number, active: boolean): Promise<{ success: boolean; updatedCount: number; active: boolean }> {
+    invalidateNeighborhoodsCache(cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods/batch-toggle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cityId: String(cityId), active })
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour globale des quartiers.');
+    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
   async seedCityNeighborhoods(cityId: string | number): Promise<{ neighborhoods: Neighborhood[] }> {
+    invalidateNeighborhoodsCache(cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods/seed-city`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cityId: String(cityId) })
     });
     if (!res.ok) throw new Error('Erreur de réinitialisation des quartiers.');
+    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
@@ -338,7 +381,7 @@ export const api = {
     triggerType?: 'manual' | 'scheduled';
     selectedClasses?: string[];
     sampleLimit?: number | 'all';
-    scopeMode?: 'global' | 'intra' | 'inter';
+    scopeMode?: 'global' | 'intra' | 'inter' | 'airport' | 'city';
     arrondissement?: string;
     originArrondissement?: string;
     destArrondissement?: string;

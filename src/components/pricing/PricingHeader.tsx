@@ -1,7 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { City, PricingCampaign } from '../../types';
-import { Play, RotateCw, Trash2, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock, MessageSquare, Zap, UserCircle, AlertTriangle } from 'lucide-react';
+import { Play, RotateCw, Trash2, Building2, SlidersHorizontal, Sparkles, Navigation, ArrowRight, Clock, MessageSquare, Zap, UserCircle, AlertTriangle, Plane } from 'lucide-react';
 import { computeCampaignDuration, getCampaignPeakHourInfo } from '../../utils/durationUtils';
 import { SearchableSelect } from '../SearchableSelect';
 import { api } from '../../services/api';
@@ -15,8 +15,8 @@ interface PricingHeaderProps {
   onCampaignChange: (campaignId: string) => void;
   onRefresh?: () => void;
   onDeleteCampaign?: () => void;
-  activeTesterPanel: 'none' | 'single' | 'intra' | 'inter';
-  onToggleTesterPanel: (panel: 'single' | 'intra' | 'inter') => void;
+  activeTesterPanel: 'none' | 'single' | 'intra' | 'inter' | 'airport';
+  onToggleTesterPanel: (panel: 'single' | 'intra' | 'inter' | 'airport') => void;
   totalCombinations: number;
   launchingTarget: string | null;
   onLaunch: (overrideLimit: number | 'all') => void;
@@ -116,7 +116,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-base font-bold text-slate-900 tracking-tight">
-              Tarification & Benchmark VTC
+              Tarification & Pricing VTC
             </h1>
           </div>
           <div className="flex items-center gap-2 mt-1">
@@ -292,7 +292,21 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <span className="truncate">2 Arrond.</span>
           </button>
 
-          {/* 4. Test Sample (25 pairs) */}
+          {/* 4. Destinations Aéroport */}
+          <button
+            onClick={() => onToggleTesterPanel('airport')}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-semibold rounded-lg border transition cursor-pointer min-h-[40px] sm:min-h-0 ${
+              activeTesterPanel === 'airport'
+                ? 'bg-sky-700 text-white border-sky-700 shadow-2xs'
+                : 'bg-sky-50/80 text-sky-800 border-sky-300 hover:bg-sky-100'
+            }`}
+            title="Pricing de tous les quartiers actifs vers l'aéroport"
+          >
+            <Plane className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+            <span className="truncate">Pricing Aéroport</span>
+          </button>
+
+          {/* 5. Test Sample (25 pairs) */}
           <button
             onClick={() => onLaunch(25)}
             disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
@@ -303,7 +317,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <span className="truncate">{launchingTarget === '25' ? 'Démarrage...' : 'Test 25'}</span>
           </button>
 
-          {/* 5. Full Benchmark Launch */}
+          {/* 5. Full Pricing Launch */}
           <button
             onClick={() => onLaunch('all')}
             disabled={isRunning || launchingTarget !== null || totalCombinations === 0}

@@ -196770,6 +196770,1125 @@
       "uuid": "f781088d-eb42-42ca-af2d-d09a60f891b5"
     }
   ],
+  "26": {
+    "trips": [
+      {
+        "id": 20001,
+        "uuid": "c411ee08-19df-4231-8da0-c5ed08c4269c",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bessengué",
+        "distanceKm": 0.46,
+        "durationMinutes": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 27,
+            "perKm": 1109
+          },
+          "tripMaster": {
+            "eco": 1000,
+            "confort": 1000,
+            "moto": 200
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:37.460Z"
+      },
+      {
+        "id": 20002,
+        "uuid": "da8d7462-8791-4615-aa4d-a6c139370b86",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bonalékè",
+        "distanceKm": 0.58,
+        "durationMinutes": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 28,
+            "perKm": 879
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.112Z"
+      },
+      {
+        "id": 20003,
+        "uuid": "fcfc8058-b3e1-4367-bb58-7116a61da35c",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bépanda Yoyo",
+        "distanceKm": 2.31,
+        "durationMinutes": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 652,
+            "confort": 910,
+            "suv": 44,
+            "perKm": 282
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.182Z"
+      },
+      {
+        "id": 20004,
+        "uuid": "12e94209-a210-48c9-a2cb-05e9558bcab9",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Madagascar",
+        "distanceKm": 2.38,
+        "durationMinutes": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 664,
+            "confort": 910,
+            "suv": 44,
+            "perKm": 279
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.286Z"
+      },
+      {
+        "id": 20005,
+        "uuid": "6586929f-dc23-4bfc-aa93-8cf91a5dc0a3",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bonamouti-Akwa 2",
+        "distanceKm": 0.5,
+        "durationMinutes": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 27,
+            "perKm": 1020
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.409Z"
+      },
+      {
+        "id": 20006,
+        "uuid": "a5284270-399c-476d-8856-ffcc2ca7fcde",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bépanda Ambiance",
+        "distanceKm": 2.55,
+        "durationMinutes": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 694,
+            "confort": 910,
+            "suv": 46,
+            "perKm": 272
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.097Z"
+      },
+      {
+        "id": 20007,
+        "uuid": "361eb946-236f-4412-aa6e-7f0437fb017a",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bonakeke Akwa",
+        "distanceKm": 0.47,
+        "durationMinutes": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 27,
+            "perKm": 1085
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.307Z"
+      },
+      {
+        "id": 20008,
+        "uuid": "a352f68e-5a3a-4229-a43e-4d381c4f2fb6",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Djebale 1",
+        "distanceKm": 2.01,
+        "durationMinutes": 5,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 600,
+            "confort": 910,
+            "suv": 40,
+            "perKm": 299
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.380Z"
+      },
+      {
+        "id": 20009,
+        "uuid": "8886d054-2c57-4ce6-a7e3-febadc87b95b",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bépanda Sans Pareil",
+        "distanceKm": 2.55,
+        "durationMinutes": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 694,
+            "confort": 910,
+            "suv": 46,
+            "perKm": 272
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.427Z"
+      },
+      {
+        "id": 20010,
+        "uuid": "9306df74-bfab-4d75-9173-56148fe03a94",
+        "campaignId": "26",
+        "origin": "Akwa",
+        "destination": "Bonassama",
+        "distanceKm": 3.07,
+        "durationMinutes": 7,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 784,
+            "confort": 991,
+            "suv": 51,
+            "perKm": 255
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.482Z"
+      }
+    ],
+    "canonicalTrips": [
+      {
+        "id": 20001,
+        "uuid": "c411ee08-19df-4231-8da0-c5ed08c4269c",
+        "origin": "Akwa",
+        "destination": "Bessengué",
+        "distanceKm": 0.46,
+        "durationMin": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 27,
+            "perKm": 1109
+          },
+          "tripMaster": {
+            "eco": 1000,
+            "confort": 1000,
+            "moto": 200
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:37.460Z"
+      },
+      {
+        "id": 20002,
+        "uuid": "da8d7462-8791-4615-aa4d-a6c139370b86",
+        "origin": "Akwa",
+        "destination": "Bonalékè",
+        "distanceKm": 0.58,
+        "durationMin": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 28,
+            "perKm": 879
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.112Z"
+      },
+      {
+        "id": 20003,
+        "uuid": "fcfc8058-b3e1-4367-bb58-7116a61da35c",
+        "origin": "Akwa",
+        "destination": "Bépanda Yoyo",
+        "distanceKm": 2.31,
+        "durationMin": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 652,
+            "confort": 910,
+            "suv": 44,
+            "perKm": 282
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.182Z"
+      },
+      {
+        "id": 20004,
+        "uuid": "12e94209-a210-48c9-a2cb-05e9558bcab9",
+        "origin": "Akwa",
+        "destination": "Madagascar",
+        "distanceKm": 2.38,
+        "durationMin": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 664,
+            "confort": 910,
+            "suv": 44,
+            "perKm": 279
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.286Z"
+      },
+      {
+        "id": 20005,
+        "uuid": "6586929f-dc23-4bfc-aa93-8cf91a5dc0a3",
+        "origin": "Akwa",
+        "destination": "Bonamouti-Akwa 2",
+        "distanceKm": 0.5,
+        "durationMin": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 27,
+            "perKm": 1020
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:38.409Z"
+      },
+      {
+        "id": 20006,
+        "uuid": "a5284270-399c-476d-8856-ffcc2ca7fcde",
+        "origin": "Akwa",
+        "destination": "Bépanda Ambiance",
+        "distanceKm": 2.55,
+        "durationMin": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 694,
+            "confort": 910,
+            "suv": 46,
+            "perKm": 272
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.097Z"
+      },
+      {
+        "id": 20007,
+        "uuid": "361eb946-236f-4412-aa6e-7f0437fb017a",
+        "origin": "Akwa",
+        "destination": "Bonakeke Akwa",
+        "distanceKm": 0.47,
+        "durationMin": 2,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 510,
+            "confort": 910,
+            "suv": 27,
+            "perKm": 1085
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.307Z"
+      },
+      {
+        "id": 20008,
+        "uuid": "a352f68e-5a3a-4229-a43e-4d381c4f2fb6",
+        "origin": "Akwa",
+        "destination": "Djebale 1",
+        "distanceKm": 2.01,
+        "durationMin": 5,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 600,
+            "confort": 910,
+            "suv": 40,
+            "perKm": 299
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.380Z"
+      },
+      {
+        "id": 20009,
+        "uuid": "8886d054-2c57-4ce6-a7e3-febadc87b95b",
+        "origin": "Akwa",
+        "destination": "Bépanda Sans Pareil",
+        "distanceKm": 2.55,
+        "durationMin": 6,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 694,
+            "confort": 910,
+            "suv": 46,
+            "perKm": 272
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.427Z"
+      },
+      {
+        "id": 20010,
+        "uuid": "9306df74-bfab-4d75-9173-56148fe03a94",
+        "origin": "Akwa",
+        "destination": "Bonassama",
+        "distanceKm": 3.07,
+        "durationMin": 7,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 700,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 784,
+            "confort": 991,
+            "suv": 51,
+            "perKm": 255
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:07:39.481Z"
+      }
+    ],
+    "updatedAt": "2026-10-10T21:07:39.627Z"
+  },
+  "27": {
+    "trips": [
+      {
+        "id": 20011,
+        "uuid": "4ad0c8a7-df46-457b-9c19-b83920e8a3b3",
+        "campaignId": "27",
+        "origin": "Bali",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 4.69,
+        "durationMinutes": 11,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 650,
+            "confort": 1050,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1066,
+            "confort": 1329,
+            "suv": 68,
+            "perKm": 227
+          },
+          "tripMaster": {
+            "eco": 2463,
+            "confort": 2890,
+            "moto": 1087
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.056Z"
+      },
+      {
+        "id": 20012,
+        "uuid": "546f766e-09f5-47cc-a673-fc80e3df4fbe",
+        "campaignId": "27",
+        "origin": "Akwa",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 5.2,
+        "durationMinutes": 12,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 750,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1155,
+            "confort": 1436,
+            "suv": 73,
+            "perKm": 222
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.342Z"
+      },
+      {
+        "id": 20013,
+        "uuid": "400f3b45-daef-4836-9a1b-b71254572d95",
+        "campaignId": "27",
+        "origin": "Bépanda Ambiance",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 6.24,
+        "durationMinutes": 15,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 1350,
+            "confort": 850,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1336,
+            "confort": 1653,
+            "suv": 84,
+            "perKm": 214
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.388Z"
+      }
+    ],
+    "canonicalTrips": [
+      {
+        "id": 20011,
+        "uuid": "4ad0c8a7-df46-457b-9c19-b83920e8a3b3",
+        "origin": "Bali",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 4.69,
+        "durationMin": 11,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 650,
+            "confort": 1050,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1066,
+            "confort": 1329,
+            "suv": 68,
+            "perKm": 227
+          },
+          "tripMaster": {
+            "eco": 2463,
+            "confort": 2890,
+            "moto": 1087
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.056Z"
+      },
+      {
+        "id": 20012,
+        "uuid": "546f766e-09f5-47cc-a673-fc80e3df4fbe",
+        "origin": "Akwa",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 5.2,
+        "durationMin": 12,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 750,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1155,
+            "confort": 1436,
+            "suv": 73,
+            "perKm": 222
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.342Z"
+      },
+      {
+        "id": 20013,
+        "uuid": "400f3b45-daef-4836-9a1b-b71254572d95",
+        "origin": "Bépanda Ambiance",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 6.24,
+        "durationMin": 15,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 1350,
+            "confort": 850,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1336,
+            "confort": 1653,
+            "suv": 84,
+            "perKm": 214
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.388Z"
+      }
+    ],
+    "updatedAt": "2026-10-10T21:08:31.532Z"
+  },
   "fa05d14c-c5be-4f67-bbda-1cb9dc6a455c": [
     {
       "id": 20001,
@@ -393540,5 +394659,267 @@
       "createdAt": "2026-10-07T11:46:13.090Z",
       "uuid": "f781088d-eb42-42ca-af2d-d09a60f891b5"
     }
-  ]
+  ],
+  "7d6baa5f-494e-4bcb-8dcf-3e0ea80e450a": {
+    "trips": [
+      {
+        "id": 20011,
+        "uuid": "4ad0c8a7-df46-457b-9c19-b83920e8a3b3",
+        "campaignId": "27",
+        "origin": "Bali",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 4.69,
+        "durationMinutes": 11,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 650,
+            "confort": 1050,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1066,
+            "confort": 1329,
+            "suv": 68,
+            "perKm": 227
+          },
+          "tripMaster": {
+            "eco": 2463,
+            "confort": 2890,
+            "moto": 1087
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.056Z"
+      },
+      {
+        "id": 20012,
+        "uuid": "546f766e-09f5-47cc-a673-fc80e3df4fbe",
+        "campaignId": "27",
+        "origin": "Akwa",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 5.2,
+        "durationMinutes": 12,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 750,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1155,
+            "confort": 1436,
+            "suv": 73,
+            "perKm": 222
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.342Z"
+      },
+      {
+        "id": 20013,
+        "uuid": "400f3b45-daef-4836-9a1b-b71254572d95",
+        "campaignId": "27",
+        "origin": "Bépanda Ambiance",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 6.24,
+        "durationMinutes": 15,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 1350,
+            "confort": 850,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1336,
+            "confort": 1653,
+            "suv": 84,
+            "perKm": 214
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.388Z"
+      }
+    ],
+    "canonicalTrips": [
+      {
+        "id": 20011,
+        "uuid": "4ad0c8a7-df46-457b-9c19-b83920e8a3b3",
+        "origin": "Bali",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 4.69,
+        "durationMin": 11,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 650,
+            "confort": 1050,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1066,
+            "confort": 1329,
+            "suv": 68,
+            "perKm": 227
+          },
+          "tripMaster": {
+            "eco": 2463,
+            "confort": 2890,
+            "moto": 1087
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.056Z"
+      },
+      {
+        "id": 20012,
+        "uuid": "546f766e-09f5-47cc-a673-fc80e3df4fbe",
+        "origin": "Akwa",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 5.2,
+        "durationMin": 12,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 750,
+            "confort": 900,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1155,
+            "confort": 1436,
+            "suv": 73,
+            "perKm": 222
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "yango",
+          "confort": "yango",
+          "overall": "yango"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.342Z"
+      },
+      {
+        "id": 20013,
+        "uuid": "400f3b45-daef-4836-9a1b-b71254572d95",
+        "origin": "Bépanda Ambiance",
+        "destination": "Aéroport International de Douala",
+        "distanceKm": 6.24,
+        "durationMin": 15,
+        "jams": false,
+        "yangoUnavailable": true,
+        "yangoUnavailableClasses": [
+          "econom",
+          "business"
+        ],
+        "prices": {
+          "yango": {
+            "eco": 1350,
+            "confort": 850,
+            "confortPlus": 800,
+            "moto": 300,
+            "jams": false,
+            "yangoUnavailable": true
+          },
+          "heroCab": {
+            "eco": 1336,
+            "confort": 1653,
+            "suv": 84,
+            "perKm": 214
+          },
+          "tripMaster": {
+            "eco": null,
+            "confort": null,
+            "moto": null
+          }
+        },
+        "cheapest": {
+          "eco": "hero",
+          "confort": "yango",
+          "overall": "hero"
+        },
+        "status": "success",
+        "createdAt": "2026-10-10T21:08:31.388Z"
+      }
+    ],
+    "updatedAt": "2026-10-10T21:08:31.532Z"
+  }
 }

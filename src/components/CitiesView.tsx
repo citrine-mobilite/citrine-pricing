@@ -4,7 +4,7 @@ import { City } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { DataTable, Column } from './DataTable';
-import { Edit3, Play, Compass } from 'lucide-react';
+import { Edit3, Play, Compass, Plane } from 'lucide-react';
 import { CitiesHeader } from './cities/CitiesHeader';
 import { CityModal } from './cities/CityModal';
 import { CityLaunchChoiceModal } from './cities/CityLaunchChoiceModal';
@@ -34,6 +34,9 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
   const [editLng, setEditLng] = useState('9.7679');
   const [editActive, setEditActive] = useState(true);
   const [editCurrency, setEditCurrency] = useState('XAF');
+  const [editAirportName, setEditAirportName] = useState('');
+  const [editAirportLat, setEditAirportLat] = useState('');
+  const [editAirportLng, setEditAirportLng] = useState('');
 
   const [selectedCityForLaunch, setSelectedCityForLaunch] = useState<(City & { possiblePairs?: number; activeNeighborhoodsCount?: number }) | null>(null);
   const [isStartingCampaign, setIsStartingCampaign] = useState(false);
@@ -41,6 +44,9 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
   const [newCityLat, setNewCityLat] = useState('4.0511');
   const [newCityLng, setNewCityLng] = useState('9.7679');
   const [newCityCurrency, setNewCityCurrency] = useState('XAF');
+  const [newAirportName, setNewAirportName] = useState('');
+  const [newAirportLat, setNewAirportLat] = useState('');
+  const [newAirportLng, setNewAirportLng] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -51,6 +57,15 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
     setEditLng(city.center?.lng?.toString() || '9.7679');
     setEditActive(city.active ?? true);
     setEditCurrency(city.currency || 'XAF');
+    
+    // Initialiser les coordonnées aéroportuaires enregistrées en base
+    const defaultAirportName = city.airport?.name || (city.name.toLowerCase().includes('douala') ? 'Aéroport International de Douala' : city.name.toLowerCase().includes('yaound') ? 'Aéroport International de Yaoundé-Nsimalen' : '');
+    const defaultAirportLat = city.airport?.lat?.toString() || (city.name.toLowerCase().includes('douala') ? '4.0061' : city.name.toLowerCase().includes('yaound') ? '3.7226' : '');
+    const defaultAirportLng = city.airport?.lng?.toString() || (city.name.toLowerCase().includes('douala') ? '9.7195' : city.name.toLowerCase().includes('yaound') ? '11.5532' : '');
+    
+    setEditAirportName(defaultAirportName);
+    setEditAirportLat(defaultAirportLat);
+    setEditAirportLng(defaultAirportLng);
     setErrorMsg(null);
   };
 
@@ -60,6 +75,13 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
+      const airportPayload = (editAirportLat && editAirportLng) ? {
+        name: editAirportName.trim() || `Aéroport de ${editName.trim()}`,
+        lat: parseFloat(editAirportLat),
+        lng: parseFloat(editAirportLng),
+        active: true
+      } : undefined;
+
       await api.updateCity(editingCity.id, {
         name: editName.trim(),
         active: editActive,
@@ -67,7 +89,8 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
         center: {
           lat: parseFloat(editLat) || editingCity.center.lat,
           lng: parseFloat(editLng) || editingCity.center.lng
-        }
+        },
+        airport: airportPayload
       });
       setEditingCity(null);
       onRefresh();
@@ -84,6 +107,13 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
+      const airportPayload = (newAirportLat && newAirportLng) ? {
+        name: newAirportName.trim() || `Aéroport de ${newCityName.trim()}`,
+        lat: parseFloat(newAirportLat),
+        lng: parseFloat(newAirportLng),
+        active: true
+      } : undefined;
+
       await api.createCity({
         name: newCityName.trim(),
         country: 'Cameroun',
@@ -94,10 +124,14 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
           lat: parseFloat(newCityLat) || 4.0511,
           lng: parseFloat(newCityLng) || 9.7679
         },
+        airport: airportPayload,
         autoSchedule: { enabled: false, slots: [] }
       });
       setShowAddModal(false);
       setNewCityName('');
+      setNewAirportName('');
+      setNewAirportLat('');
+      setNewAirportLng('');
       onRefresh();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erreur lors de la création.');
@@ -188,6 +222,26 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
       )
     },
     {
+      key: 'airport',
+      label: 'Aéroport (BD)',
+      sortable: false,
+      render: (c) => (
+        c.airport && c.airport.lat && c.airport.lng ? (
+          <div className="flex flex-col">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-sky-800">
+              <Plane className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+              <span className="truncate max-w-[170px]">{c.airport.name || 'Aéroport'}</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {c.airport.lat}, {c.airport.lng}
+            </span>
+          </div>
+        ) : (
+          <span className="text-[11px] text-slate-400 italic">Non configuré</span>
+        )
+      )
+    },
+    {
       key: 'currency',
       label: 'Devise',
       sortable: true,
@@ -258,6 +312,12 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
         onLngChange={setNewCityLng}
         currency={newCityCurrency}
         onCurrencyChange={setNewCityCurrency}
+        airportName={newAirportName}
+        onAirportNameChange={setNewAirportName}
+        airportLat={newAirportLat}
+        onAirportLatChange={setNewAirportLat}
+        airportLng={newAirportLng}
+        onAirportLngChange={setNewAirportLng}
         isSubmitting={isSubmitting}
         onSubmit={handleCreateCity}
         error={errorMsg}
@@ -275,6 +335,12 @@ export const CitiesView: React.FC<CitiesViewProps> = ({
         onLngChange={setEditLng}
         currency={editCurrency}
         onCurrencyChange={setEditCurrency}
+        airportName={editAirportName}
+        onAirportNameChange={setEditAirportName}
+        airportLat={editAirportLat}
+        onAirportLatChange={setEditAirportLat}
+        airportLng={editAirportLng}
+        onAirportLngChange={setEditAirportLng}
         active={editActive}
         onActiveChange={setEditActive}
         isSubmitting={isSubmitting}

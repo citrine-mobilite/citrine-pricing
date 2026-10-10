@@ -9,6 +9,13 @@
       "lat": 4.0511,
       "lng": 9.7679
     },
+    "airport": {
+      "name": "Aéroport International de Douala",
+      "lat": 4.0061,
+      "lng": 9.7195,
+      "code": "DLA",
+      "active": true
+    },
     "active": true,
     "autoSchedule": {
       "enabled": false,
@@ -29,6 +36,13 @@
     "center": {
       "lat": 3.848,
       "lng": 11.5021
+    },
+    "airport": {
+      "name": "Aéroport International de Yaoundé-Nsimalen",
+      "lat": 3.7226,
+      "lng": 11.5532,
+      "code": "NSI",
+      "active": true
     },
     "active": true,
     "autoSchedule": {

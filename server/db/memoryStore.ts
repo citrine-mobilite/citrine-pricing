@@ -16,7 +16,101 @@ const NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/db/defaultNeighbo
 const ROOT_NEIGHBORHOOD_FILE = path.resolve(process.cwd(), 'server/neighboorhood.json');
 const ROOT_NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/neighborhoods.json');
 
-export function saveNeighborhoodsDiskBackup() {
+const CITIES_FILE = path.resolve(DATA_DIR, 'cities.json');
+const CACHE_META_FILE = path.resolve(DATA_DIR, 'cache_meta.json');
+
+export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours (1 mois)
+
+interface CacheMetadata {
+  citiesUpdatedAt: number;
+  globalNeighborhoodsUpdatedAt: number;
+  neighborhoodsByCityUpdatedAt: Record<string, number>;
+}
+
+function loadCacheMetadata(): CacheMetadata {
+  const now = Date.now();
+  try {
+    if (fs.existsSync(CACHE_META_FILE)) {
+      const raw = fs.readFileSync(CACHE_META_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      return {
+        citiesUpdatedAt: typeof parsed.citiesUpdatedAt === 'number' ? parsed.citiesUpdatedAt : now,
+        globalNeighborhoodsUpdatedAt: typeof parsed.globalNeighborhoodsUpdatedAt === 'number' ? parsed.globalNeighborhoodsUpdatedAt : now,
+        neighborhoodsByCityUpdatedAt: parsed.neighborhoodsByCityUpdatedAt || {}
+      };
+    }
+  } catch {}
+  return {
+    citiesUpdatedAt: now,
+    globalNeighborhoodsUpdatedAt: now,
+    neighborhoodsByCityUpdatedAt: {}
+  };
+}
+
+let cacheMetadata: CacheMetadata = loadCacheMetadata();
+
+function saveCacheMetadata() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CACHE_META_FILE, JSON.stringify(cacheMetadata, null, 2), 'utf8');
+  } catch (e: any) {
+    console.warn('[Cache Metadata] Warning saving cache metadata:', e.message);
+  }
+}
+
+export function isCitiesCacheValid(): boolean {
+  return Date.now() - (cacheMetadata.citiesUpdatedAt || 0) < THIRTY_DAYS_MS;
+}
+
+export function touchCitiesCache() {
+  cacheMetadata.citiesUpdatedAt = Date.now();
+  saveCacheMetadata();
+}
+
+export function invalidateCitiesCache() {
+  cacheMetadata.citiesUpdatedAt = 0;
+  saveCacheMetadata();
+  console.log('[Cache Reinit] Cache des villes réinitialisé (modification effectuée).');
+}
+
+export function isNeighborhoodsCacheValid(cityId?: string): boolean {
+  if (cityId) {
+    const cityTs = cacheMetadata.neighborhoodsByCityUpdatedAt[String(cityId)];
+    if (cityTs && Date.now() - cityTs < THIRTY_DAYS_MS) return true;
+  }
+  return Date.now() - (cacheMetadata.globalNeighborhoodsUpdatedAt || 0) < THIRTY_DAYS_MS;
+}
+
+export function touchNeighborhoodsCache(cityId?: string) {
+  const now = Date.now();
+  cacheMetadata.globalNeighborhoodsUpdatedAt = now;
+  if (cityId) {
+    cacheMetadata.neighborhoodsByCityUpdatedAt[String(cityId)] = now;
+  }
+  saveCacheMetadata();
+}
+
+export function invalidateNeighborhoodsCache(cityId?: string) {
+  if (cityId) {
+    delete cacheMetadata.neighborhoodsByCityUpdatedAt[String(cityId)];
+  }
+  cacheMetadata.globalNeighborhoodsUpdatedAt = 0;
+  saveCacheMetadata();
+  console.log(`[Cache Reinit] Cache des quartiers réinitialisé${cityId ? ` pour la ville ${cityId}` : ''}.`);
+}
+
+export function saveCitiesDiskBackup() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CITIES_FILE, JSON.stringify(cities, null, 2), 'utf8');
+    touchCitiesCache();
+    console.log(`[Disk Backup] ${cities.length} villes persistées dans server/data/cities.json`);
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing cities to disk:', e.message);
+  }
+}
+
+export function saveNeighborhoodsDiskBackup(cityId?: string) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     const json = JSON.stringify(neighborhoods, null, 2);
@@ -24,7 +118,8 @@ export function saveNeighborhoodsDiskBackup() {
     fs.writeFileSync(NEIGHBORHOODS_FILE, json, 'utf8');
     fs.writeFileSync(ROOT_NEIGHBORHOOD_FILE, json, 'utf8');
     fs.writeFileSync(ROOT_NEIGHBORHOODS_FILE, json, 'utf8');
-    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans server/data/neighborhoods.json et server/neighborhoods.json`);
+    touchNeighborhoodsCache(cityId);
+    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans server/data/neighborhoods.json (validité 30 jours)`);
   } catch (e: any) {
     console.warn('[Disk Backup] Warning writing neighborhoods to disk:', e.message);
   }
@@ -348,38 +443,74 @@ export const defaultUsers: User[] = [
 // Reactive state cache for users loaded from database (initialisé avec les comptes par défaut)
 export let users: User[] = defaultUsers.map(u => ({ ...u }));
 
-export let cities: City[] = [
-  {
-    id: 1,
-    uuid: 'city_douala',
-    name: 'Douala',
-    country: 'Cameroun',
-    currency: 'XAF',
-    currencySymbol: 'FCFA',
-    center: { lat: 4.0511, lng: 9.7679 },
-    active: true,
-    autoSchedule: {
-      enabled: false,
-      slots: ['08:00', '13:00', '18:00'],
-      lastRunAt: undefined
+function loadInitialCities(): City[] {
+  try {
+    if (fs.existsSync(CITIES_FILE)) {
+      const raw = fs.readFileSync(CITIES_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((c: City) => {
+          if (!c.airport) {
+            if (c.name.toLowerCase().includes('douala')) {
+              c.airport = { name: 'Aéroport International de Douala', lat: 4.0061, lng: 9.7195, code: 'DLA', active: true };
+            } else if (c.name.toLowerCase().includes('yaound')) {
+              c.airport = { name: 'Aéroport International de Yaoundé-Nsimalen', lat: 3.7226, lng: 11.5532, code: 'NSI', active: true };
+            }
+          }
+          return c;
+        });
+      }
     }
-  },
-  {
-    id: 2,
-    uuid: 'city_yaounde',
-    name: 'Yaoundé',
-    country: 'Cameroun',
-    currency: 'XAF',
-    currencySymbol: 'FCFA',
-    center: { lat: 3.8480, lng: 11.5021 },
-    active: true,
-    autoSchedule: {
-      enabled: false,
-      slots: ['08:00', '18:00'],
-      lastRunAt: undefined
+  } catch {}
+  return [
+    {
+      id: 1,
+      uuid: 'city_douala',
+      name: 'Douala',
+      country: 'Cameroun',
+      currency: 'XAF',
+      currencySymbol: 'FCFA',
+      center: { lat: 4.0511, lng: 9.7679 },
+      airport: {
+        name: 'Aéroport International de Douala',
+        lat: 4.0061,
+        lng: 9.7195,
+        code: 'DLA',
+        active: true
+      },
+      active: true,
+      autoSchedule: {
+        enabled: false,
+        slots: ['08:00', '13:00', '18:00'],
+        lastRunAt: undefined
+      }
+    },
+    {
+      id: 2,
+      uuid: 'city_yaounde',
+      name: 'Yaoundé',
+      country: 'Cameroun',
+      currency: 'XAF',
+      currencySymbol: 'FCFA',
+      center: { lat: 3.8480, lng: 11.5021 },
+      airport: {
+        name: 'Aéroport International de Yaoundé-Nsimalen',
+        lat: 3.7226,
+        lng: 11.5532,
+        code: 'NSI',
+        active: true
+      },
+      active: true,
+      autoSchedule: {
+        enabled: false,
+        slots: ['08:00', '18:00'],
+        lastRunAt: undefined
+      }
     }
-  }
-];
+  ];
+}
+
+export let cities: City[] = loadInitialCities();
 
 function loadInitialNeighborhoods(): Neighborhood[] {
   try {
@@ -496,6 +627,18 @@ export async function syncFromFirestore() {
 
     if (citiesRes.status === 'fulfilled' && !citiesRes.value.empty) {
       cities = citiesRes.value.docs.map(d => ({ id: d.id, ...d.data() } as City));
+      for (const c of cities) {
+        if (!c.airport) {
+          if (c.name.toLowerCase().includes('douala')) {
+            c.airport = { name: 'Aéroport International de Douala', lat: 4.0061, lng: 9.7195, code: 'DLA', active: true };
+            safeFirestoreWrite('syncCityAirport', () => setDoc(doc(db!, 'cities', c.uuid || String(c.id)), { airport: c.airport }, { merge: true }));
+          } else if (c.name.toLowerCase().includes('yaound')) {
+            c.airport = { name: 'Aéroport International de Yaoundé-Nsimalen', lat: 3.7226, lng: 11.5532, code: 'NSI', active: true };
+            safeFirestoreWrite('syncCityAirport', () => setDoc(doc(db!, 'cities', c.uuid || String(c.id)), { airport: c.airport }, { merge: true }));
+          }
+        }
+      }
+      saveCitiesDiskBackup();
     } else if (citiesRes.status === 'fulfilled' && citiesRes.value.empty) {
       // Seed default cities
       for (const c of cities) {

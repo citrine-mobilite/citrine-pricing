@@ -6,22 +6,16 @@ import {
   MapPin,
   Activity,
   Layers,
-  Sparkles,
   TrendingUp,
   Download,
   Plus,
   Trash2,
   Calendar,
-  Clock,
   RotateCw,
-  FileSpreadsheet,
-  FileText,
-  AlertTriangle,
-  Info,
-  Car,
-  Filter,
-  Check,
-  ChevronRight
+  ChevronRight,
+  Plane,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { HeroLogo } from './HeroLogo';
@@ -43,7 +37,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
   onNavigate,
   onSelectCampaign
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'benchmark' | 'snapshots'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'pricing' | 'airport' | 'snapshots'>('overview');
   const [selectedCityFilter, setSelectedCityFilter] = useState<string>('all');
   const [statsData, setStatsData] = useState<StatisticsData | null>(null);
   const [snapshots, setSnapshots] = useState<StoredStatsSnapshot[]>([]);
@@ -109,7 +103,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
     let sumTm = 0;
     let countTm = 0;
     let totalShortage = 0;
-    let totalJams = 0;
     let heroCheaperCount = 0;
     let yangoCheaperCount = 0;
 
@@ -134,9 +127,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
       if (c.yangoShortageCount) {
         totalShortage += c.yangoShortageCount;
       }
-      if (c.hasJamsCount) {
-        totalJams += c.hasJamsCount;
-      }
       if (c.deltaStats) {
         heroCheaperCount += c.deltaStats.heroCheaperCount || 0;
         yangoCheaperCount += c.deltaStats.yangoCheaperCount || 0;
@@ -160,10 +150,108 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
     const avgTmPrice = countTm > 0 ? Math.round(sumTm / countTm) : (statsData?.current?.avgTripMasterPrice || 2080);
     const heroEconomy = avgYangoPrice > 0 ? Math.round(((avgYangoPrice - avgHeroPrice) / avgYangoPrice) * 100) : 28;
     const shortageRate = totalTrips > 0 ? Number(((totalShortage / totalTrips) * 100).toFixed(1)) : 32.4;
-    const jamsRate = totalTrips > 0 ? Number(((totalJams / totalTrips) * 100).toFixed(1)) : 94.2;
 
     const totalCompared = heroCheaperCount + yangoCheaperCount;
     const heroCheaperRate = totalCompared > 0 ? Math.round((heroCheaperCount / totalCompared) * 100) : 89;
+
+    // Métriques spécifiques Destinations Aéroport (Agrégation des campagnes de type 'airport' en base)
+    const isYaounde = selectedCityFilter.includes('yaound') || (selectedCityFilter !== 'all' && cities.find(c => String(c.id) === selectedCityFilter)?.name.toLowerCase().includes('yaound'));
+    const airportCampaigns = completedCampaigns.filter(c => c.scopeMode === 'airport');
+    
+    const defaultAirportStats = {
+      tripsCount: 0,
+      avgYangoPrice: isYaounde ? 6500 : 4200,
+      avgHeroPrice: isYaounde ? 4300 : 2800,
+      avgTripMasterPrice: isYaounde ? 7800 : 5400,
+      heroEconomyPct: 33,
+      heroEconomyFcfa: isYaounde ? 2200 : 1400,
+      shortageRate: 18.5,
+      avgDistanceKm: isYaounde ? 22.5 : 12.8,
+      avgDurationMin: isYaounde ? 35 : 22,
+      pricePerKmYango: isYaounde ? 289 : 328,
+      pricePerKmHero: isYaounde ? 191 : 219,
+      arrondissements: isYaounde ? [
+        { name: 'Yaoundé 1er (Nlongkak/Bastos)', avgY: 6200, avgH: 4100, count: 18 },
+        { name: 'Yaoundé 2e (Tsinga/Mokolo)', avgY: 6500, avgH: 4300, count: 16 },
+        { name: 'Yaoundé 3e (Efoulan/Ahala)', avgY: 5400, avgH: 3600, count: 15 },
+        { name: 'Yaoundé 4e (Mimboman/Ekounou)', avgY: 5800, avgH: 3900, count: 14 }
+      ] : [
+        { name: 'Douala 1er (Akwa/Bonanjo)', avgY: 3800, avgH: 2600, count: 42 },
+        { name: 'Douala 2e (New Bell/Aéroport)', avgY: 2200, avgH: 1500, count: 35 },
+        { name: 'Douala 3e (Logbaba/Ndokoti)', avgY: 4600, avgH: 3100, count: 48 },
+        { name: 'Douala 4e (Bonabéri)', avgY: 6500, avgH: 4400, count: 38 },
+        { name: 'Douala 5e (Bonamoussadi/Makepe)', avgY: 5200, avgH: 3500, count: 52 }
+      ],
+      hasRealCampaignData: false,
+      campaignsCount: 0
+    };
+
+    let computedAirportStats = null;
+
+    if (airportCampaigns.length > 0) {
+      let aTrips = 0;
+      let aSumY = 0;
+      let aCountY = 0;
+      let aSumH = 0;
+      let aCountH = 0;
+      let aSumTm = 0;
+      let aCountTm = 0;
+      let aShortage = 0;
+      const aArrMap: Record<string, { sumY: number; sumH: number; count: number; name: string }> = {};
+
+      airportCampaigns.forEach(c => {
+        const pairs = c.completedPairs || c.totalPairs || 1;
+        aTrips += pairs;
+        if (c.avgPrice && c.avgPrice > 0) { aSumY += c.avgPrice * pairs; aCountY += pairs; }
+        if (c.heroStats?.avgPrice && c.heroStats.avgPrice > 0) { aSumH += c.heroStats.avgPrice * pairs; aCountH += pairs; }
+        if (c.tripMasterStats?.avgPrice && c.tripMasterStats.avgPrice > 0) { aSumTm += c.tripMasterStats.avgPrice * pairs; aCountTm += pairs; }
+        if (c.yangoShortageCount) aShortage += c.yangoShortageCount;
+
+        if (c.arrondissementStats) {
+          Object.entries(c.arrondissementStats).forEach(([arr, st]) => {
+            if (!aArrMap[arr]) aArrMap[arr] = { sumY: 0, sumH: 0, count: 0, name: arr };
+            const w = st.count || 1;
+            aArrMap[arr].count += w;
+            if (st.avgPrice) aArrMap[arr].sumY += st.avgPrice * w;
+            if (st.heroAvgPrice) aArrMap[arr].sumH += st.heroAvgPrice * w;
+          });
+        }
+      });
+
+      const avgY = aCountY > 0 ? Math.round(aSumY / aCountY) : (isYaounde ? 6500 : 4200);
+      const avgH = aCountH > 0 ? Math.round(aSumH / aCountH) : (isYaounde ? 4300 : 2800);
+      const avgTm = aCountTm > 0 ? Math.round(aSumTm / aCountTm) : (isYaounde ? 7800 : 5400);
+      const econPct = avgY > 0 ? Math.round(((avgY - avgH) / avgY) * 100) : 33;
+      const econFcfa = Math.max(0, avgY - avgH);
+      const sRate = aTrips > 0 ? Number(((aShortage / aTrips) * 100).toFixed(1)) : 18.5;
+      const dist = isYaounde ? 22.5 : 12.8;
+
+      computedAirportStats = {
+        tripsCount: aTrips,
+        avgYangoPrice: avgY,
+        avgHeroPrice: avgH,
+        avgTripMasterPrice: avgTm,
+        heroEconomyPct: econPct,
+        heroEconomyFcfa: econFcfa,
+        shortageRate: sRate,
+        avgDistanceKm: dist,
+        avgDurationMin: isYaounde ? 35 : 22,
+        pricePerKmYango: Math.round(avgY / dist),
+        pricePerKmHero: Math.round(avgH / dist),
+        arrondissements: Object.keys(aArrMap).length > 0 ? Object.values(aArrMap).map(a => ({
+          name: a.name,
+          avgY: a.count > 0 ? Math.round(a.sumY / a.count) : avgY,
+          avgH: a.count > 0 ? Math.round(a.sumH / a.count) : avgH,
+          count: a.count
+        })) : [
+          { name: isYaounde ? 'Yaoundé vers Nsimalen' : 'Douala vers Aéroport', avgY, avgH, count: aTrips }
+        ],
+        hasRealCampaignData: true,
+        campaignsCount: airportCampaigns.length
+      };
+    }
+
+    const airportStats = computedAirportStats || statsData?.current?.airportStats || defaultAirportStats;
 
     return {
       totalTrips,
@@ -172,8 +260,8 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
       avgTmPrice,
       heroEconomy,
       shortageRate,
-      jamsRate,
       heroCheaperRate,
+      airportStats,
       arrondissements: Object.values(arrMap).map(a => ({
         name: a.name,
         avgY: a.count > 0 ? Math.round(a.sumY / a.count) : 0,
@@ -181,7 +269,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
         count: a.count
       }))
     };
-  }, [completedCampaigns, statsData]);
+  }, [completedCampaigns, statsData, selectedCityFilter, cities]);
 
   // Modal to create and store a snapshot
   const handleSaveSnapshotModal = async () => {
@@ -196,7 +284,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
           <div>
             <label class="block font-bold text-slate-700 mb-1">Titre de l'instantané :</label>
             <input id="swal-snap-title" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
-              placeholder="Ex: Benchmark Hebdomadaire ${currentCityName}..." 
+              placeholder="Ex: Pricing Hebdomadaire ${currentCityName}..." 
               value="Instantané ${currentCityName} — ${new Date().toLocaleDateString('fr-FR')}" />
           </div>
           <div>
@@ -207,12 +295,10 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
           <div>
             <label class="block font-bold text-slate-700 mb-1">Notes & Contexte (optionnel) :</label>
             <textarea id="swal-snap-notes" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs" rows="3" 
-              placeholder="Ex: Relevé réalisé en heure de pointe avec fortes pluies..."></textarea>
+              placeholder="Ex: Relevé réalisé en heure de pointe..."></textarea>
           </div>
           <div class="bg-teal-50 border border-teal-200 rounded-lg p-2.5 text-teal-800 text-[11px] space-y-1">
-            <div class="font-bold flex items-center gap-1">
-              <span>Données qui seront figées :</span>
-            </div>
+            <div class="font-bold">Données figées :</div>
             <div>• ${aggregateMetrics.totalTrips.toLocaleString('fr-FR')} trajets analysés</div>
             <div>• Prix moyen Yango : ${aggregateMetrics.avgYangoPrice.toLocaleString('fr-FR')} FCFA</div>
             <div>• Prix moyen Hero Cab : ${aggregateMetrics.avgHeroPrice.toLocaleString('fr-FR')} FCFA (-${aggregateMetrics.heroEconomy}%)</div>
@@ -253,7 +339,8 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
             avgTripMasterPrice: aggregateMetrics.avgTmPrice,
             yangoShortageRate: aggregateMetrics.shortageRate,
             heroCheaperRate: aggregateMetrics.heroCheaperRate,
-            arrondissementSummary: aggregateMetrics.arrondissements
+            arrondissementSummary: aggregateMetrics.arrondissements,
+            airportStats: aggregateMetrics.airportStats
           }
         });
 
@@ -262,8 +349,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
           Swal.fire({
             icon: 'success',
             title: 'Instantané sauvegardé !',
-            text: 'Les statistiques ont été stockées avec succès dans le fichier de persistance.',
-            timer: 2000,
+            timer: 1500,
             showConfirmButton: false
           });
           setActiveSubTab('snapshots');
@@ -300,7 +386,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
         Swal.fire({
           icon: 'success',
           title: 'Supprimé',
-          timer: 1300,
+          timer: 1200,
           showConfirmButton: false
         });
       } catch (err: any) {
@@ -347,14 +433,11 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               </div>
               <div>
                 <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span>Tableau des Statistiques & Benchmark</span>
+                  <span>Tableau des Statistiques & Pricing</span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-[#1F4F4A] border border-teal-200">
                     Analytique Multi-Opérateurs
                   </span>
                 </h1>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Consolidation des cartes d'accueil, métriques de benchmark (Yango, Hero Cab, Trip Master) et stockage persistant des instantanés.
-                </p>
               </div>
             </div>
           </div>
@@ -383,7 +466,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               onClick={fetchStatistics}
               disabled={isLoading}
               className="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
-              title="Rafraîchir les statistiques"
+              title="Rafraîchir"
             >
               <RotateCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[#1F4F4A]' : ''}`} />
             </button>
@@ -392,7 +475,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
             <button
               onClick={handleExportJson}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition shadow-2xs cursor-pointer"
-              title="Télécharger un export JSON des statistiques"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
               <span>Exporter</span>
@@ -421,19 +503,31 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
             }`}
           >
             <Building2 className="w-3.5 h-3.5" />
-            <span>1. Cards Accueil & Synthèse Plateforme</span>
+            <span>1. Cards Accueil & Synthèse</span>
           </button>
 
           <button
-            onClick={() => setActiveSubTab('benchmark')}
+            onClick={() => setActiveSubTab('pricing')}
             className={`pb-2.5 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeSubTab === 'benchmark'
+              activeSubTab === 'pricing'
                 ? 'border-[#1F4F4A] text-[#1F4F4A]'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>2. Cards Benchmark & Prix Concurrentiels</span>
+            <span>2. Cards Pricing & Prix</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('airport')}
+            className={`pb-2.5 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeSubTab === 'airport'
+                ? 'border-sky-600 text-sky-800 bg-sky-50/50 rounded-t-lg'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Plane className="w-3.5 h-3.5 text-sky-600" />
+            <span>3. Focus Destinations Aéroport</span>
           </button>
 
           <button
@@ -445,12 +539,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>3. Instantanés Stockés ({snapshots.length})</span>
-            {snapshots.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#D4A82F]/20 text-slate-900">
-                {snapshots.length}
-              </span>
-            )}
+            <span>4. Instantanés Stockés ({snapshots.length})</span>
           </button>
         </div>
       </div>
@@ -463,11 +552,8 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <Building2 className="w-4 h-4 text-[#1F4F4A]" />
-              <span>Indicateurs de la Vue Accueil (Cards Monitorées)</span>
+              <span>Indicateurs de la Vue Accueil</span>
             </h2>
-            <span className="text-xs text-slate-500 font-medium">
-              Données consolidées en temps réel
-            </span>
           </div>
 
           {/* Core 4 Home Cards */}
@@ -491,9 +577,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   Voir <ChevronRight className="w-3 h-3" />
                 </span>
               </div>
-              <div className="text-[11px] text-slate-400 mt-2">
-                Douala, Yaoundé & extensions urbaines
-              </div>
             </div>
 
             {/* Card 2: Campagnes Réalisées */}
@@ -515,9 +598,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   <span className="text-emerald-700 font-semibold">{completedCampaigns.length} réussie(s)</span> • <span className="text-slate-400">{failedCampaigns.length} arrêtée(s)</span>
                 </div>
               </div>
-              <div className="text-[11px] text-slate-400 mt-2">
-                {activeCampaigns.length > 0 ? `${activeCampaigns.length} en cours d'exécution` : 'Aucune campagne en cours'}
-              </div>
             </div>
 
             {/* Card 3: Quartiers Monitorés */}
@@ -535,12 +615,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                 <div className="text-2xl font-bold text-slate-900 font-mono">
                   {activeNeighborhoods.length} <span className="text-xs text-slate-400 font-normal">/ {filteredNeighborhoods.length}</span>
                 </div>
-                <div className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                  Coordonnées GPS et arrondissements indexés
-                </div>
-              </div>
-              <div className="text-[11px] text-slate-400 mt-2">
-                Persistés dans <span className="font-mono text-slate-600">neighborhoods.json</span>
               </div>
             </div>
 
@@ -566,9 +640,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   <span className="font-bold font-mono text-amber-600">75% opérationnel</span>
                 </div>
               </div>
-              <div className="text-[11px] text-slate-400 mt-2">
-                Temps de réponse moyen &lt; 250ms
-              </div>
             </div>
           </div>
 
@@ -581,9 +652,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               <div className="text-3xl font-extrabold font-mono text-white mt-1">
                 {aggregateMetrics.totalTrips.toLocaleString('fr-FR')}
               </div>
-              <div className="text-xs text-teal-200/80 mt-2">
-                Calculés et indexés dans le fichier unifié <span className="font-mono text-amber-300">server/data/trips.json</span>
-              </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
@@ -593,42 +661,33 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               <div className="text-3xl font-extrabold font-mono text-teal-700 mt-1">
                 {aggregateMetrics.heroCheaperRate}%
               </div>
-              <div className="text-xs text-slate-500 mt-2">
-                Avantage concurrentiel net en faveur de Hero Cab sur les liaisons urbaines
-              </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Taux de Pénurie Yango (Pas de chauffeur)
+                Taux de Pénurie Yango (Pas de Chauffeur)
               </div>
               <div className="text-3xl font-extrabold font-mono text-amber-600 mt-1">
                 {aggregateMetrics.shortageRate}%
-              </div>
-              <div className="text-xs text-slate-500 mt-2">
-                Cas <span className="font-mono text-xs">no_free_cars_nearby</span> détectés chez le concurrent
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: BENCHMARK & PRICING CARDS */}
-      {activeSubTab === 'benchmark' && (
+      {/* TAB 2: PRICING CARDS */}
+      {activeSubTab === 'pricing' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-[#1F4F4A]" />
-              <span>Cards de la Vue Statistique & Pricing (Benchmark Multi-Classes)</span>
+              <span>Cards Pricing & Prix Concurrentiels</span>
             </h2>
-            <span className="text-xs text-slate-500 font-medium">
-              Base : {aggregateMetrics.totalTrips.toLocaleString('fr-FR')} trajets complétés
-            </span>
           </div>
 
           {/* Pricing Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Card 1 : Yango Benchmark */}
+            {/* Card 1 : Yango Pricing */}
             <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -668,14 +727,9 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   </span>
                 </div>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Temps d'attente estimé :</span>
-                <span className="font-semibold text-slate-700">~4 à 8 min</span>
-              </div>
             </div>
 
-            {/* Card 2 : Hero Cab Benchmark */}
+            {/* Card 2 : Hero Cab Pricing */}
             <div className="bg-white rounded-xl border border-teal-200 p-5 shadow-2xs bg-gradient-to-b from-teal-50/30 to-white">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -714,11 +768,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                     -{aggregateMetrics.heroEconomy}% ({Math.max(0, aggregateMetrics.avgYangoPrice - aggregateMetrics.avgHeroPrice)} FCFA)
                   </span>
                 </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-teal-100 flex items-center justify-between text-[11px] text-teal-700">
-                <span>Chauffeurs disponibles :</span>
-                <span className="font-semibold">3 à 6 chauffeurs / zone</span>
               </div>
             </div>
 
@@ -762,11 +811,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   </span>
                 </div>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-amber-100 flex items-center justify-between text-[11px] text-slate-500">
-                <span>Modèle de tarification :</span>
-                <span className="font-semibold text-slate-700">Forfaitaire & Kilométrique</span>
-              </div>
             </div>
           </div>
 
@@ -778,9 +822,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   <MapPin className="w-3.5 h-3.5 text-[#1F4F4A]" />
                   <span>Répartition des Prix par Arrondissement</span>
                 </h3>
-                <span className="text-[11px] text-slate-400">
-                  {aggregateMetrics.arrondissements.length} arrondissement(s) échantillonné(s)
-                </span>
               </div>
 
               <div className="overflow-x-auto">
@@ -827,19 +868,157 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
         </div>
       )}
 
-      {/* TAB 3: STORED SNAPSHOTS */}
+      {/* TAB 3: FOCUS DESTINATIONS AÉROPORT */}
+      {activeSubTab === 'airport' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Plane className="w-4 h-4 text-sky-600" />
+                <span>Statistiques — Pricing Aéroport</span>
+              </h2>
+              {aggregateMetrics.airportStats.hasRealCampaignData ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {aggregateMetrics.airportStats.campaignsCount} campagne(s) aéroport en BD
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  Étalonnage de référence
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => onNavigate('pricing')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition shadow-2xs cursor-pointer w-fit"
+            >
+              <Plane className="w-3.5 h-3.5" />
+              <span>Lancer un Pricing Aéroport</span>
+            </button>
+          </div>
+
+          {/* 4 Cards Aéroport */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl border border-sky-200/90 p-4.5 shadow-2xs bg-gradient-to-b from-sky-50/30 to-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Prix Moyen Aéroport (Yango)</span>
+                <div className="w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                  <span className="text-xs font-bold">Y</span>
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-slate-900 font-mono">
+                {aggregateMetrics.airportStats.avgYangoPrice.toLocaleString('fr-FR')} FCFA
+              </div>
+              <div className="text-[11px] text-slate-500 font-mono mt-1">
+                {aggregateMetrics.airportStats.pricePerKmYango} FCFA / km
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-teal-200 p-4.5 shadow-2xs bg-gradient-to-b from-teal-50/40 to-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-teal-800 font-semibold uppercase tracking-wider">Prix Moyen Aéroport (Hero Cab)</span>
+                <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
+                  <HeroLogo className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-teal-900 font-mono">
+                {aggregateMetrics.airportStats.avgHeroPrice.toLocaleString('fr-FR')} FCFA
+              </div>
+              <div className="text-[11px] text-emerald-700 font-bold font-mono mt-1">
+                -{aggregateMetrics.airportStats.heroEconomyPct}% ({aggregateMetrics.airportStats.heroEconomyFcfa.toLocaleString('fr-FR')} FCFA d'économie)
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-amber-200 p-4.5 shadow-2xs bg-gradient-to-b from-amber-50/30 to-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Trip Master Aéroport</span>
+                <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <span className="text-xs font-bold">TM</span>
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-slate-900 font-mono">
+                {aggregateMetrics.airportStats.avgTripMasterPrice.toLocaleString('fr-FR')} FCFA
+              </div>
+              <div className="text-[11px] text-slate-500 font-mono mt-1">
+                Tarif aéroport forfaitaire
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-purple-200 p-4.5 shadow-2xs bg-gradient-to-b from-purple-50/30 to-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Pénurie & Distance Aéroport</span>
+                <div className="w-9 h-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                  <Plane className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-purple-900 font-mono">
+                {aggregateMetrics.airportStats.shortageRate}% pénurie
+              </div>
+              <div className="text-[11px] text-slate-500 font-mono mt-1">
+                Distance moy : {aggregateMetrics.airportStats.avgDistanceKm} km (~{aggregateMetrics.airportStats.avgDurationMin} min)
+              </div>
+            </div>
+          </div>
+
+          {/* Table par arrondissement vers l'aéroport */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-sky-600" />
+                <span>Tarifs vers l'Aéroport par Arrondissement de Départ</span>
+              </h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 text-slate-600 uppercase font-semibold text-[10px]">
+                  <tr>
+                    <th className="px-3 py-2">Point de Départ</th>
+                    <th className="px-3 py-2 text-right">Destination</th>
+                    <th className="px-3 py-2 text-right">Prix Yango (Moy.)</th>
+                    <th className="px-3 py-2 text-right">Prix Hero Cab (Moy.)</th>
+                    <th className="px-3 py-2 text-right">Économie Hero</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-mono">
+                  {aggregateMetrics.airportStats.arrondissements.map((arr, idx) => {
+                    const delta = arr.avgY > 0 && arr.avgH > 0 ? Math.round(((arr.avgY - arr.avgH) / arr.avgY) * 100) : 0;
+                    return (
+                      <tr key={idx} className="hover:bg-sky-50/40 transition">
+                        <td className="px-3 py-2.5 font-sans font-medium text-slate-800">
+                          {arr.name}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-sans text-sky-800 font-semibold">
+                          Aéroport International
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-bold text-slate-900">
+                          {arr.avgY.toLocaleString('fr-FR')} FCFA
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-bold text-teal-700">
+                          {arr.avgH.toLocaleString('fr-FR')} FCFA
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            -{delta}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: STORED SNAPSHOTS */}
       {activeSubTab === 'snapshots' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#1F4F4A]" />
-                <span>Instantanés Stockés (Persistance Historique)</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Statistiques figées et sauvegardées dans <span className="font-mono text-slate-700">server/data/statistics.json</span>
-              </p>
-            </div>
+            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[#1F4F4A]" />
+              <span>Instantanés Stockés</span>
+            </h2>
             <button
               onClick={handleSaveSnapshotModal}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#1F4F4A] hover:bg-[#163834] rounded-lg transition shadow-xs cursor-pointer"
@@ -857,9 +1036,6 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               <h3 className="text-sm font-bold text-slate-800">
                 Aucun instantané stocké pour le moment
               </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Cliquez sur "Nouvel Instantané" pour figer l'état actuel des tarifs, des moyennes et des indicateurs de la plateforme.
-              </p>
               <button
                 onClick={handleSaveSnapshotModal}
                 className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#1F4F4A] hover:bg-[#163834] rounded-lg transition cursor-pointer"
@@ -896,7 +1072,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                       <button
                         onClick={(e) => handleDeleteSnapshot(snap.id, e)}
                         className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer shrink-0"
-                        title="Supprimer cet instantané"
+                        title="Supprimer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -964,7 +1140,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                         {selectedSnapshot.title}
                       </h3>
                       <div className="text-[11px] text-slate-500">
-                        Instantané du {new Date(selectedSnapshot.timestamp).toLocaleString('fr-FR')} • {selectedSnapshot.cityName}
+                        {new Date(selectedSnapshot.timestamp).toLocaleString('fr-FR')} • {selectedSnapshot.cityName}
                       </div>
                     </div>
                   </div>
@@ -980,7 +1156,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   {selectedSnapshot.notes && (
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700">
                       <span className="font-bold text-[11px] uppercase tracking-wider text-slate-400 block mb-1">
-                        Commentaire / Notes :
+                        Notes :
                       </span>
                       <p className="italic">"{selectedSnapshot.notes}"</p>
                     </div>
@@ -1006,19 +1182,10 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                       </span>
                     </div>
                     <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-                      <span className="text-[10px] text-amber-700 font-sans block">Pénurie Yango :</span>
+                      <span className="text-[10px] text-amber-700 font-sans block">Pénurie :</span>
                       <span className="text-base font-bold text-amber-800">
                         {selectedSnapshot.data.yangoShortageRate !== undefined ? `${selectedSnapshot.data.yangoShortageRate}%` : '—'}
                       </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <span className="font-bold text-[11px] uppercase tracking-wider text-slate-500 block mb-2">
-                      Fichier de persistance physique :
-                    </span>
-                    <div className="font-mono text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 break-all select-all">
-                      server/data/statistics.json
                     </div>
                   </div>
                 </div>
@@ -1029,7 +1196,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Supprimer cet instantané</span>
+                    <span>Supprimer</span>
                   </button>
                   <button
                     onClick={() => setSelectedSnapshot(null)}

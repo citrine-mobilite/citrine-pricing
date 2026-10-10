@@ -99,7 +99,7 @@ export interface RouteMatrixOptions {
 }
 
 /**
- * Génère la matrice intelligente et équilibrée de trajets pour un benchmark VTC multi-villes.
+ * Génère la matrice intelligente et équilibrée de trajets pour un pricing VTC multi-villes.
  * 
  * RÈGLE D'OR UNIVERSELLE :
  * 1. Isolation stricte par ville :
@@ -112,7 +112,7 @@ export interface RouteMatrixOptions {
  *    - Si la ville n'a pas de sous-découpage, les trajets sont échantillonnés par distance progressive.
  * 4. Paires bidirectionnelles et uniques (A -> B et B -> A ne sont pas dupliquées).
  */
-export function generateBenchmarkPairs(
+export function generatePricingPairs(
   neighborhoods: Neighborhood[],
   options?: RouteMatrixOptions
 ): Array<{ origin: Neighborhood; dest: Neighborhood }> {
@@ -281,9 +281,9 @@ export function generateBenchmarkPairs(
 /**
  * Calcule rapidement le nombre de combinaisons effectives selon la matrice intelligente.
  */
-export function calculatePossibleBenchmarkPairsCount(
+export function calculatePossiblePricingPairsCount(
   neighborhoods: Neighborhood[],
   options?: RouteMatrixOptions
 ): number {
-  return generateBenchmarkPairs(neighborhoods, options).length;
+  return generatePricingPairs(neighborhoods, options).length;
 }
