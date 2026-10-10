@@ -22,7 +22,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'Citrine Pricing - Plateforme VTC',
           short_name: 'Citrine',
-          description: 'Benchmark et tarification VTC temps réel multi-opérateurs (Yango, Hero Cab, Trip Master) au Cameroun.',
+          description: 'Pricing et tarification VTC temps réel multi-opérateurs (Yango, Hero Cab, Trip Master) au Cameroun.',
           theme_color: '#1F4F4A',
           background_color: '#FFFFFF',
           display: 'standalone',

@@ -27,6 +27,7 @@ import {
   saveLocalCampaignsDiskBackup,
   saveCampaignTripsDiskBackup,
   loadCampaignTripsDiskBackup,
+  loadCanonicalTripsDiskBackup,
   deleteCampaignTripsDiskBackup,
   deleteAllCampaignTripsDiskBackup
 } from '../db/memoryStore.js';
@@ -575,16 +576,16 @@ router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Respon
 
   let canonicalTrips: CanonicalTrip[] = [];
 
-  const session = activePricingSessions.get(id);
-  if (session) {
+  const session = campaignSessions.get(id) || activePricingSessions.get(id);
+  if (session && session.canonicalTrips && session.canonicalTrips.length > 0) {
     canonicalTrips = session.canonicalTrips;
-  } else if (memoryCampaignCanonicalTrips[id]) {
+  } else if (memoryCampaignCanonicalTrips[id] && memoryCampaignCanonicalTrips[id].length > 0) {
     canonicalTrips = memoryCampaignCanonicalTrips[id];
   } else {
-    canonicalTrips = await loadCanonicalCampaignResults(id);
+    canonicalTrips = loadCanonicalTripsDiskBackup(id) || await loadCanonicalCampaignResults(id);
   }
 
-  let campaign = memoryCampaigns.find(c => c.id === id);
+  let campaign = findCampaign(id);
   if (!campaign && db) {
     try {
       const snap = await getDoc(doc(db, 'campaigns', id));
@@ -610,9 +611,18 @@ router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Respon
 // 9. Export CSV / Excel
 router.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const canonicalTrips = await loadCanonicalCampaignResults(id);
+  let canonicalTrips: CanonicalTrip[] = [];
 
-  let campaign = memoryCampaigns.find(c => c.id === id);
+  const session = campaignSessions.get(id) || activePricingSessions.get(id);
+  if (session && session.canonicalTrips && session.canonicalTrips.length > 0) {
+    canonicalTrips = session.canonicalTrips;
+  } else if (memoryCampaignCanonicalTrips[id] && memoryCampaignCanonicalTrips[id].length > 0) {
+    canonicalTrips = memoryCampaignCanonicalTrips[id];
+  } else {
+    canonicalTrips = loadCanonicalTripsDiskBackup(id) || await loadCanonicalCampaignResults(id);
+  }
+
+  let campaign = findCampaign(id);
   if (!campaign && db) {
     try {
       const snap = await getDoc(doc(db, 'campaigns', id));

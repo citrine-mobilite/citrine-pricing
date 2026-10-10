@@ -517,7 +517,9 @@ export async function finalizeCampaignExecution(
     campaign = rawCampaign;
   }
 
-  let canonicalTrips = session ? session.canonicalTrips : memoryCampaignCanonicalTrips[campaignId] || [];
+  let canonicalTrips = session
+    ? session.canonicalTrips
+    : (memoryCampaignCanonicalTrips[campaignId] || loadCanonicalTripsDiskBackup(campaignId) || []);
   if (canonicalTrips.length === 0 && db && !isFirestoreQuotaExceeded()) {
     try {
       canonicalTrips = await loadCanonicalCampaignResults(campaignId);

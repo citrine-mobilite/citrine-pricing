@@ -28,7 +28,9 @@ console.error = (...args: any[]) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const portArgIndex = process.argv.indexOf('--port');
+const portArg = portArgIndex !== -1 ? parseInt(process.argv[portArgIndex + 1], 10) : null;
+const PORT = portArg || (process.env.PORT && process.env.PORT !== '8080' ? parseInt(process.env.PORT, 10) : 3000);
 
 // Servir Vite en Développement ou dist en Production
 async function startServer() {

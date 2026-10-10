@@ -470,7 +470,11 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la finalisation de la campagne.');
     }
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(trips) && trips.length > 0) {
+      setCachedCampaignTrips(String(campaignId), trips).catch(() => {});
+    }
+    return data;
   },
 
   async cancelCampaign(id: string | number): Promise<{ campaign: PricingCampaign }> {

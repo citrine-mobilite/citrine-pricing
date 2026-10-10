@@ -136,7 +136,7 @@
     },
     "PricingCampaign": {
       "title": "PricingCampaign",
-      "description": "Batch pricing execution benchmark run for a city",
+      "description": "Batch pricing execution pricing run for a city",
       "type": "object",
       "properties": {
         "id": {
@@ -352,7 +352,7 @@
     },
     "/campaigns/{campaignId}": {
       "schema": { "$ref": "#/entities/PricingCampaign" },
-      "description": "Pricing benchmark runs (immutable execution records)"
+      "description": "Pricing runs (immutable execution records)"
     },
     "/campaign_results/{campaignId}": {
       "schema": { "$ref": "#/entities/CampaignResults" },
