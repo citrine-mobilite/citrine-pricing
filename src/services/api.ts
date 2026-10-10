@@ -301,7 +301,7 @@ export const api = {
     return [];
   },
 
-  async getCampaign(id: string): Promise<PricingCampaign | null> {
+  async getCampaign(id: string | number): Promise<PricingCampaign | null> {
     try {
       const res = await fetch(`${BASE_URL}/campaigns/${id}`);
       if (res.status === 404) return null;
@@ -374,7 +374,7 @@ export const api = {
   },
 
   async processCampaignChunk(
-    campaignId: string, 
+    campaignId: string | number, 
     chunkIndex: number, 
     signal?: AbortSignal,
     meta?: {
@@ -409,7 +409,7 @@ export const api = {
   },
 
   async finalizeCampaign(
-    campaignId: string, 
+    campaignId: string | number, 
     canonicalTrips?: any[], 
     trips?: TripResult[]
   ): Promise<{ success: boolean; campaign: PricingCampaign }> {
@@ -425,13 +425,13 @@ export const api = {
     return res.json();
   },
 
-  async cancelCampaign(id: string): Promise<{ campaign: PricingCampaign }> {
+  async cancelCampaign(id: string | number): Promise<{ campaign: PricingCampaign }> {
     const res = await fetch(`${BASE_URL}/campaigns/${id}/cancel`, { method: 'POST' });
     if (!res.ok) throw new Error('Erreur lors de l’interruption de la campagne.');
     return res.json();
   },
 
-  async updateCampaignComment(id: string, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
+  async updateCampaignComment(id: string | number, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
     const res = await fetch(`${BASE_URL}/campaigns/${id}/comment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -477,8 +477,8 @@ export const api = {
     return { success: false };
   },
 
-  async deleteCampaign(id: string): Promise<void> {
-    await invalidateCampaignTripsCache(id);
+  async deleteCampaign(id: string | number): Promise<void> {
+    await invalidateCampaignTripsCache(String(id));
     try {
       localStorage.removeItem(`citrine_campaigns_${id}`);
       localStorage.removeItem(`citrine_trips_${id}`);
@@ -493,10 +493,10 @@ export const api = {
             try {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed.data)) {
-                parsed.data = parsed.data.filter((c: any) => c.id !== id);
+                parsed.data = parsed.data.filter((c: any) => String(c.id) !== String(id) && c.uuid !== id);
                 localStorage.setItem(key, JSON.stringify(parsed));
               } else if (Array.isArray(parsed)) {
-                const filtered = parsed.filter((c: any) => c.id !== id);
+                const filtered = parsed.filter((c: any) => String(c.id) !== String(id) && c.uuid !== id);
                 localStorage.setItem(key, JSON.stringify(filtered));
               }
             } catch {}
@@ -530,7 +530,7 @@ export const api = {
 
   // Trip Results avec Cache Local PWA IndexedDB (0 lecture Firestore)
   async getCampaignResults(
-    campaignId: string,
+    campaignId: string | number,
     filters?: {
       startNeighborhood?: string;
       endNeighborhood?: string;
@@ -552,7 +552,7 @@ export const api = {
     );
 
     if (!hasCustomFilters) {
-      const cached = await getCachedCampaignTrips(campaignId);
+      const cached = await getCachedCampaignTrips(String(campaignId));
       if (cached && cached.length > 0) {
         // En arrière-plan non-bloquant, synchroniser le serveur si nécessaire
         fetch(`${BASE_URL}/campaigns/${campaignId}/sync-trips`, {

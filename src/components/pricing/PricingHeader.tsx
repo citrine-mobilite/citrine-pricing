@@ -147,8 +147,8 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
                 options={campaigns.map((c) => {
                   const peak = getCampaignPeakHourInfo(c);
                   return {
-                    value: c.id,
-                    label: `${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+                    value: c.uuid || String(c.id),
+                    label: `#${c.id} • ${c.cityName} — ${new Date(c.startedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
                     sublabel: `${peak.shortLabel} • ${c.completedPairs || 0} tr. • ⏱️ ${computeCampaignDuration(c)}${c.comment ? ` • 💬 ${c.comment}` : ''}`
                   };
                 })}
@@ -169,11 +169,12 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border shrink-0 cursor-pointer hover:opacity-80 transition ${peak.badgeClass}`}
                   title={`${peak.slotLabel} — Cliquer pour modifier le créneau`}
                 >
+                  <span className="font-mono bg-white/40 px-1 py-0.2 rounded text-[10px]">#{activeCampaign.id}</span>
                   <span>{peak.shortLabel}</span>
                 </button>
                 {peak.surgePct > 0 && (
                   <span
-                    className="hidden md:inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
+                    className="hidden sm:inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 px-2 py-1 rounded-lg text-xs font-bold shrink-0"
                     title="Forte demande / hausse tarifaire Yango par rapport au tarif creux"
                   >
                     <Zap className="w-3 h-3 text-amber-700" />
@@ -185,7 +186,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
           })()}
 
           {activeCampaign && (
-            <span className="hidden sm:inline-flex items-center gap-1 bg-[#1F4F4A]/10 text-[#1F4F4A] px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0" title="Durée totale calculée">
+            <span className="hidden md:inline-flex items-center gap-1 bg-[#1F4F4A]/10 text-[#1F4F4A] px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0" title="Durée totale calculée">
               <Clock className="w-3.5 h-3.5" />
               <span>{computeCampaignDuration(activeCampaign)}</span>
             </span>
@@ -193,7 +194,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
 
           {activeCampaign?.triggeredByUserName && (
             <span
-              className="hidden md:inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-2 py-1 rounded-lg text-xs font-semibold shrink-0"
+              className="hidden lg:inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-2 py-1 rounded-lg text-xs font-semibold shrink-0"
               title={`Campagne lancée par ${activeCampaign.triggeredByUserName}`}
             >
               <UserCircle className="w-3.5 h-3.5 text-[#1F4F4A]" />
@@ -204,7 +205,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
           {activeCampaign && (
             <button
               onClick={handleEditComment}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer shrink-0 ${
+              className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer shrink-0 ${
                 activeCampaign.comment || activeCampaign.comments
                   ? 'bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100/70'
                   : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900'
@@ -212,8 +213,8 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
               title={activeCampaign.comment || 'Ajouter une note / contexte sur cette campagne'}
             >
               <MessageSquare className="w-3.5 h-3.5 text-amber-600" />
-              <span className="max-w-[150px] truncate">
-                {activeCampaign.comment || activeCampaign.comments || '+ Ajouter commentaire'}
+              <span className="max-w-[130px] truncate">
+                {activeCampaign.comment || activeCampaign.comments || '+ Note'}
               </span>
             </button>
           )}
@@ -233,7 +234,7 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <button
               onClick={onRefresh}
               title="Rafraîchir les données"
-              className="p-2 sm:p-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition cursor-pointer shrink-0"
+              className="p-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition cursor-pointer shrink-0"
             >
               <RotateCw className="w-4 h-4" />
             </button>
@@ -244,15 +245,15 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <button
               onClick={onDeleteCampaign}
               title="Supprimer définitivement ce relevé"
-              className="p-2 sm:p-2 border border-slate-200 hover:border-rose-300 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer shrink-0"
+              className="p-2 border border-slate-200 hover:border-rose-300 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer shrink-0"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Buttons Row / Grid on Mobile */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        {/* Buttons Grid on Mobile / Flex on Desktop */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full lg:w-auto">
           {/* 1. Test Trajet Unique */}
           <button
             onClick={() => onToggleTesterPanel('single')}
@@ -303,11 +304,11 @@ export const PricingHeader: React.FC<PricingHeaderProps> = ({
             <span className="truncate">{launchingTarget === '25' ? 'Démarrage...' : 'Test 25'}</span>
           </button>
 
-          {/* 5. Full Benchmark Launch */}
+          {/* 5. Full Benchmark Launch (full width on small mobile, compact on tablet/pc) */}
           <button
             onClick={() => onLaunch('all')}
             disabled={isRunning || launchingTarget !== null || totalCombinations === 0}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg shadow-2xs transition disabled:opacity-50 cursor-pointer min-h-[38px] sm:min-h-0 active:scale-95"
+            className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg shadow-2xs transition disabled:opacity-50 cursor-pointer min-h-[38px] sm:min-h-0 active:scale-95"
             title={`Lancer la tarification de TOUS les ${totalCombinations.toLocaleString('fr-FR')} trajets`}
           >
             <Play className="w-3.5 h-3.5 fill-white shrink-0" />

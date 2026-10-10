@@ -8,10 +8,7 @@ import {
   setDoc,
   getDoc,
   collection,
-  getDocs,
   deleteDoc,
-  query,
-  where,
   writeBatch
 } from 'firebase/firestore';
 import fs from 'fs';
@@ -83,35 +80,49 @@ export { db };
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
 const QUOTA_STATE_FILE = path.resolve(DATA_DIR, 'quota_state.json');
 
-function loadPersistentQuotaState(): { readUntil: number; writeUntil: number } {
+// Plafond strict absolu de lectures par tranche de 24 heures (bien en-dessous du seuil Free Tier de 50 000)
+export const MAX_DAILY_READ_LIMIT = 200;
+
+interface PersistentQuotaState {
+  readUntil: number;
+  writeUntil: number;
+  readCountToday: number;
+  readCountResetTime: number;
+}
+
+function loadPersistentQuotaState(): PersistentQuotaState {
+  const now = Date.now();
   try {
     if (fs.existsSync(QUOTA_STATE_FILE)) {
       const raw = fs.readFileSync(QUOTA_STATE_FILE, 'utf8');
       const data = JSON.parse(raw);
-      const now = Date.now();
+      const isSameDay = typeof data.readCountResetTime === 'number' && now < data.readCountResetTime;
       return {
         readUntil: typeof data.readUntil === 'number' && data.readUntil > now ? data.readUntil : 0,
-        writeUntil: typeof data.writeUntil === 'number' && data.writeUntil > now ? data.writeUntil : 0
+        writeUntil: typeof data.writeUntil === 'number' && data.writeUntil > now ? data.writeUntil : 0,
+        readCountToday: isSameDay && typeof data.readCountToday === 'number' ? data.readCountToday : 0,
+        readCountResetTime: isSameDay ? data.readCountResetTime : now + 24 * 60 * 60 * 1000
       };
     }
   } catch {}
-  return { readUntil: 0, writeUntil: 0 };
+  return { readUntil: 0, writeUntil: 0, readCountToday: 0, readCountResetTime: now + 24 * 60 * 60 * 1000 };
 }
 
-function savePersistentQuotaState(readUntil: number, writeUntil: number) {
+function savePersistentQuotaState(state: PersistentQuotaState) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(QUOTA_STATE_FILE, JSON.stringify({
-      readUntil,
-      writeUntil,
+      ...state,
       updatedAt: new Date().toISOString()
     }, null, 2), 'utf8');
   } catch {}
 }
 
-const initialQuota = loadPersistentQuotaState();
-let firestoreReadQuotaExceededUntil = initialQuota.readUntil;
-let firestoreWriteQuotaExceededUntil = initialQuota.writeUntil;
+let persistentQuota = loadPersistentQuotaState();
+let firestoreReadQuotaExceededUntil = persistentQuota.readUntil;
+let firestoreWriteQuotaExceededUntil = persistentQuota.writeUntil;
+let firestoreDailyReadCount = persistentQuota.readCountToday;
+let firestoreDailyResetTime = persistentQuota.readCountResetTime;
 let warnedQuotaExceeded = false;
 
 export function isQuotaExceededError(err: any): boolean {
@@ -135,7 +146,22 @@ export function isWriteQuotaError(err: any): boolean {
 }
 
 export function isFirestoreReadQuotaExceeded(): boolean {
-  return Date.now() < firestoreReadQuotaExceededUntil;
+  const now = Date.now();
+  // Réinitialisation automatique du compteur journalier si 24h écoulées
+  if (now > firestoreDailyResetTime) {
+    firestoreDailyReadCount = 0;
+    firestoreDailyResetTime = now + 24 * 60 * 60 * 1000;
+    firestoreReadQuotaExceededUntil = 0;
+    savePersistentQuotaState({
+      readUntil: 0,
+      writeUntil: firestoreWriteQuotaExceededUntil,
+      readCountToday: 0,
+      readCountResetTime: firestoreDailyResetTime
+    });
+  }
+
+  // Bloquer si le quota Google est atteint ou si notre compteur de sécurité a atteint la limite fixée
+  return now < firestoreReadQuotaExceededUntil || firestoreDailyReadCount >= MAX_DAILY_READ_LIMIT;
 }
 
 export function isFirestoreWriteQuotaExceeded(): boolean {
@@ -146,19 +172,40 @@ export function isFirestoreQuotaExceeded(): boolean {
   return isFirestoreReadQuotaExceeded();
 }
 
+export function getFirestoreReadStats(): { count: number; limit: number; remaining: number } {
+  return {
+    count: firestoreDailyReadCount,
+    limit: MAX_DAILY_READ_LIMIT,
+    remaining: Math.max(0, MAX_DAILY_READ_LIMIT - firestoreDailyReadCount)
+  };
+}
+
 export function flagFirestoreReadQuotaExceeded(err?: any) {
-  // Cooldown de 24 heures pour le quota journalier Free Tier Google Cloud Firestore
   firestoreReadQuotaExceededUntil = Date.now() + 24 * 60 * 60 * 1000;
-  savePersistentQuotaState(firestoreReadQuotaExceededUntil, firestoreWriteQuotaExceededUntil);
+  savePersistentQuotaState({
+    readUntil: firestoreReadQuotaExceededUntil,
+    writeUntil: firestoreWriteQuotaExceededUntil,
+    readCountToday: firestoreDailyReadCount,
+    readCountResetTime: firestoreDailyResetTime
+  });
   if (!warnedQuotaExceeded) {
     warnedQuotaExceeded = true;
-    console.warn('[Firestore Read Shield] Quota journalier de lecture atteint (Free Tier). Bascule transparente en lecture locale RAM + Disque. Les écritures Firestore continuent.');
+    console.warn(`[Firestore Read Shield] Quota journalier atteint (Lu: ${firestoreDailyReadCount}/${MAX_DAILY_READLimitNotice()}). Bascule 100% sur le cache local RAM + Disque.`);
   }
+}
+
+function MAX_DAILY_READLimitNotice(): string {
+  return String(MAX_DAILY_READ_LIMIT);
 }
 
 export function flagFirestoreWriteQuotaExceeded(err?: any) {
   firestoreWriteQuotaExceededUntil = Date.now() + 24 * 60 * 60 * 1000;
-  savePersistentQuotaState(firestoreReadQuotaExceededUntil, firestoreWriteQuotaExceededUntil);
+  savePersistentQuotaState({
+    readUntil: firestoreReadQuotaExceededUntil,
+    writeUntil: firestoreWriteQuotaExceededUntil,
+    readCountToday: firestoreDailyReadCount,
+    readCountResetTime: firestoreDailyResetTime
+  });
   console.warn('[Firestore Write Shield] Quota journalier d\'écriture atteint. Bascule en sauvegarde locale persistante (RAM + Disque).');
 }
 
@@ -167,6 +214,42 @@ export function flagFirestoreQuotaExceeded(err?: any) {
     flagFirestoreWriteQuotaExceeded(err);
   } else {
     flagFirestoreReadQuotaExceeded(err);
+  }
+}
+
+/**
+ * Exécution ultra-protégée de TOUTE lecture Firestore
+ * Empêche formellement de dépasser le quota : coupe-circuit immédiat !
+ */
+export async function safeFirestoreRead<T>(opName: string, op: () => Promise<T>, estimatedDocs: number = 1): Promise<T | null> {
+  if (!db || isFirestoreReadQuotaExceeded()) {
+    return null;
+  }
+
+  // Vérifier si cette opération dépasserait la limite journalière
+  if (firestoreDailyReadCount + estimatedDocs > MAX_DAILY_READ_LIMIT) {
+    flagFirestoreReadQuotaExceeded();
+    return null;
+  }
+
+  try {
+    const result = await op();
+    firestoreDailyReadCount += estimatedDocs;
+    savePersistentQuotaState({
+      readUntil: firestoreReadQuotaExceededUntil,
+      writeUntil: firestoreWriteQuotaExceededUntil,
+      readCountToday: firestoreDailyReadCount,
+      readCountResetTime: firestoreDailyResetTime
+    });
+    console.log(`[Firestore Shield] Lecture Firestore '${opName}': +${estimatedDocs} doc(s) (Total aujourd'hui: ${firestoreDailyReadCount}/${MAX_DAILY_READ_LIMIT})`);
+    return result;
+  } catch (err: any) {
+    if (isQuotaExceededError(err)) {
+      flagFirestoreReadQuotaExceeded(err);
+      return null;
+    }
+    console.warn(`[Firestore Read Shield - ${opName}]:`, err?.message || err);
+    return null;
   }
 }
 
@@ -299,97 +382,78 @@ export async function saveCanonicalCampaignResults(
 }
 
 /**
- * Chargement direct (1 seule lecture Firestore pour récupérer l'intégralité des trajets de la campagne)
+ * Chargement direct (Exactement 1 seule lecture Firestore O(1), avec sauvegarde disque immédiate)
+ * ZÉRO scan de sous-collections, ZÉRO getDocs multi-documents.
  */
 export async function loadCanonicalCampaignResults(campaignId: string): Promise<CanonicalTrip[]> {
-  if (!db || isFirestoreQuotaExceeded()) return [];
+  // 1. Contrôle préalable : Vérifier le cache disque local (0 lecture Firestore)
+  try {
+    const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
+    const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+    if (fs.existsSync(canonPath)) {
+      const raw = fs.readFileSync(canonPath, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+    const filePath = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map(legacyToCanonical);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Disk Cache] Warning reading local trips:', e.message);
+  }
+
+  // 2. Si le quota de lecture est atteint ou si Firestore est indisponible : stop immédiat
+  if (!db || isFirestoreReadQuotaExceeded()) {
+    return [];
+  }
 
   try {
     let allTrips: CanonicalTrip[] = [];
 
-    // 1. Recherche directe ultra-rapide par ID de document (1 seule lecture directe O(1))
-    const firstSnap = await getDoc(doc(db, 'campaign_results', campaignId));
-    if (firstSnap.exists()) {
-      const firstData = firstSnap.data();
+    // 3. Lecture O(1) directe du document consolidé (consomme exactement 1 lecture Firestore)
+    const firstSnap = await safeFirestoreRead('getDocCanonicalResults', () =>
+      getDoc(doc(db!, 'campaign_results', campaignId)), 1
+    );
 
-      if (Array.isArray(firstData.canonicalTrips)) {
-        allTrips = allTrips.concat(firstData.canonicalTrips);
+    if (firstSnap && firstSnap.exists()) {
+      const firstData = firstSnap.data();
+      if (Array.isArray(firstData.canonicalTrips) && firstData.canonicalTrips.length > 0) {
+        allTrips = firstData.canonicalTrips;
       } else if (firstData.data && typeof firstData.data === 'object') {
-        // Rétrocompatibilité avec les anciennes campagnes partitionnées par worker
         const rawWorkers = Object.values(firstData.data).flat() as any[];
         allTrips = rawWorkers.map(legacyToCanonical);
       }
-
-      if (firstData.hasMoreParts && firstData.totalParts > 1) {
-        for (let p = 2; p <= firstData.totalParts; p++) {
-          const partSnap = await getDoc(doc(db, 'campaign_results', `${campaignId}_part${p}`));
-          if (partSnap.exists()) {
-            const partData = partSnap.data();
-            if (Array.isArray(partData.canonicalTrips)) {
-              allTrips = allTrips.concat(partData.canonicalTrips);
-            } else if (partData.data) {
-              const rawWorkers = Object.values(partData.data).flat() as any[];
-              allTrips = allTrips.concat(rawWorkers.map(legacyToCanonical));
-            }
-          }
-        }
-      }
-
-      if (allTrips.length > 0) {
-        return allTrips;
-      }
     }
 
-    // 2. Rétrocompatibilité avec les anciens lots si le document maître n'existe pas
-    try {
-      const batchQuery = query(
-        collection(db, 'campaign_results'),
-        where('campaignId', '==', campaignId)
+    // 4. Si non trouvé dans campaign_results, vérification directe du document maître campaigns (1 lecture O(1))
+    if (allTrips.length === 0 && !isFirestoreReadQuotaExceeded()) {
+      const campSnap = await safeFirestoreRead('getDocCampaign', () =>
+        getDoc(doc(db!, 'campaigns', campaignId)), 1
       );
-      const batchSnap = await getDocs(batchQuery);
-      if (!batchSnap.empty) {
-        const batchDocs = batchSnap.docs.map(d => d.data());
-        const pureLots = batchDocs.filter(b => typeof b.chunkIndex === 'number');
-        if (pureLots.length > 0) {
-          pureLots.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
-          for (const b of pureLots) {
-            if (Array.isArray(b.canonicalTrips)) {
-              allTrips.push(...b.canonicalTrips);
-            }
-          }
+      if (campSnap && campSnap.exists()) {
+        const cData = campSnap.data();
+        if (Array.isArray(cData.canonicalTrips) && cData.canonicalTrips.length > 0) {
+          allTrips = cData.canonicalTrips;
+        } else if (Array.isArray(cData.trips) && cData.trips.length > 0) {
+          allTrips = cData.trips.map(legacyToCanonical);
         }
-      }
-    } catch (e: any) {
-      console.warn(`[Firestore] loadCanonicalCampaignResults batch search:`, e?.message);
-    }
-
-    // 3. Rétrocompatibilité : Document direct campaigns/${campaignId} (anciennes versions avec trajets embarqués)
-    if (allTrips.length === 0) {
-      try {
-        const campSnap = await getDoc(doc(db, 'campaigns', campaignId));
-        if (campSnap.exists()) {
-          const cData = campSnap.data();
-          if (Array.isArray(cData.canonicalTrips) && cData.canonicalTrips.length > 0) {
-            allTrips = cData.canonicalTrips;
-          } else if (Array.isArray(cData.trips) && cData.trips.length > 0) {
-            allTrips = cData.trips.map(legacyToCanonical);
-          }
-        }
-      } catch (e: any) {
-        console.warn(`[Firestore] loadCanonicalCampaignResults camp direct search:`, e?.message);
       }
     }
 
-    // 4. Rétrocompatibilité : Ancienne sous-collection campaigns/${campaignId}/trip_results
-    if (allTrips.length === 0) {
+    // 5. Sauvegarde immédiate sur disque local pour que les prochains accès soient à 0 lecture Firestore !
+    if (allTrips.length > 0) {
       try {
-        const subSnap = await getDocs(collection(db, 'campaigns', campaignId, 'trip_results'));
-        if (!subSnap.empty) {
-          allTrips = subSnap.docs.map(d => legacyToCanonical(d.data()));
-        }
-      } catch (e: any) {
-        console.warn(`[Firestore] loadCanonicalCampaignResults subcollection search:`, e?.message);
-      }
+        const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
+        if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
+        fs.writeFileSync(path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`), JSON.stringify(allTrips, null, 2), 'utf8');
+      } catch {}
     }
 
     return allTrips;
@@ -469,25 +533,6 @@ export async function deleteCanonicalCampaign(campaignId: string): Promise<void>
     // 4. Supprimer les lots prévisibles
     for (let lot = 0; lot <= 30; lot++) {
       deleteDoc(doc(db!, 'campaign_results', `${campaignId}_lot_${lot}`)).catch(() => {});
-    }
-
-    // 5. Uniquement si la lecture est permise et non plafonnée, faire un nettoyage de sécurité complémentaire
-    if (!isFirestoreReadQuotaExceeded()) {
-      try {
-        const q = query(collection(db!, 'campaign_results'), where('campaignId', '==', campaignId));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const batch = writeBatch(db!);
-          snap.docs.forEach((d) => {
-            batch.delete(d.ref);
-          });
-          await batch.commit();
-        }
-      } catch (e: any) {
-        if (isQuotaExceededError(e)) {
-          flagFirestoreQuotaExceeded(e);
-        }
-      }
     }
   });
 }

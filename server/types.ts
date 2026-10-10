@@ -4,7 +4,8 @@ export interface GeoCoordinate {
 }
 
 export interface Neighborhood {
-  id: string;
+  id: number;
+  uuid: string;
   cityId: string;
   name: string;
   ville?: string;
@@ -24,7 +25,8 @@ export interface Neighborhood {
 }
 
 export interface City {
-  id: string;
+  id: number;
+  uuid: string;
   name: string;
   country: string;
   currency: string;
@@ -62,7 +64,8 @@ export interface CanonicalTripPrices {
 }
 
 export interface CanonicalTrip {
-  id: string;
+  id: number;
+  uuid: string;
   origin: string;
   destination: string;
   distanceKm: number;
@@ -82,7 +85,8 @@ export interface CanonicalTrip {
 }
 
 export interface User {
-  id: string;
+  id: number;
+  uuid: string;
   email: string;
   name: string;
   role: 'admin' | 'responsable' | 'employe';
@@ -145,7 +149,8 @@ export interface TripMasterQuote {
 }
 
 export interface TripResult {
-  id: string;
+  id: number;
+  uuid: string;
   campaignId: string;
   cityId?: string;
   cityName?: string;
@@ -230,7 +235,8 @@ export interface TripResult {
 }
 
 export interface PricingCampaign {
-  id: string;
+  id: number;
+  uuid: string;
   cityId: string;
   cityName: string;
   currency: string;

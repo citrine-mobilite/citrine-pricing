@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
-import { users, setUsers, defaultUsers, recordHistory, CITRINE_ADMIN_PASSWORD, saveUsersDiskBackup } from '../db/memoryStore.js';
+import { users, setUsers, recordHistory, CITRINE_ADMIN_PASSWORD, saveUsersDiskBackup, loadUsersDiskBackup } from '../db/memoryStore.js';
 import { User } from '../types.js';
+import { getNextSequence } from '../db/counters.js';
 
 const router = Router();
 
@@ -12,33 +13,17 @@ const DEFAULT_SALT_ROUNDS = 10;
 const DEFAULT_PASSWORD = CITRINE_ADMIN_PASSWORD;
 const LEGACY_DEFAULT_PASSWORD = 'c!tr!n$@2026';
 
-// Synchronisation au démarrage depuis la base de données Firestore
+// Synchronisation au démarrage depuis le stockage local persistant (0 lecture Firestore)
 export async function bootstrapCitrineAdmin() {
-  if (db && !isFirestoreQuotaExceeded()) {
-    try {
-      const snap = await getDocs(collection(db, 'users'));
-      if (!snap.empty) {
-        const dbUsers = snap.docs
-          .map(d => ({ id: d.id, ...d.data() } as any))
-          .filter(u => !u.deleted && u.email && u.role) as User[];
-        if (dbUsers.length > 0) {
-          setUsers(dbUsers);
-        }
-      }
-    } catch (e: any) {
-      if (isQuotaExceededError(e)) {
-        flagFirestoreQuotaExceeded(e);
-      } else {
-        console.warn('[Firestore] bootstrap admin notice:', e.message);
-      }
-    }
+  if (users.length === 0) {
+    loadUsersDiskBackup();
   }
 }
 
-// Lancement de la synchronisation
-bootstrapCitrineAdmin().catch(err => console.warn('[Auth] Bootstrap admin notice:', err.message));
+// Lancement de la synchronisation locale
+bootstrapCitrineAdmin().catch(err => console.warn('[Auth] Bootstrap notice:', err.message));
 
-// 1. Auth routes
+// 1. Auth routes (100% servi depuis le cache RAM - 0 lecture Firestore)
 router.post('/api/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -46,45 +31,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  let user = users.find(u => u.email.toLowerCase() === cleanEmail);
-
-  // Si l'utilisateur n'est pas encore en mémoire locale et que Firestore est dispo, tentative de récupération
-  if (db && !user && !isFirestoreQuotaExceeded()) {
-    try {
-      const snap = await getDocs(collection(db, 'users'));
-      if (!snap.empty) {
-        const found = snap.docs.find(d => {
-          const data = d.data();
-          return data.email && data.email.toLowerCase() === cleanEmail && !data.deleted;
-        });
-        if (found) {
-          const fetchedUser = { id: found.id, ...found.data() } as User;
-          if (user) {
-            const idx = users.findIndex(u => u.id === (user as User).id);
-            users[idx] = { ...(user as User), ...fetchedUser };
-            user = users[idx];
-          } else {
-            user = fetchedUser;
-            users.push(user);
-          }
-        }
-      }
-    } catch (e: any) {
-      if (isQuotaExceededError(e)) {
-        flagFirestoreQuotaExceeded(e);
-      } else {
-        console.warn('[Firestore] error finding user on login:', e.message);
-      }
-    }
-  }
-
-  if (!user) {
-    const defaultMatch = defaultUsers.find(u => u.email.toLowerCase() === cleanEmail);
-    if (defaultMatch) {
-      user = { ...defaultMatch };
-      users.push(user);
-    }
-  }
+  const user = users.find(u => u.email.toLowerCase() === cleanEmail);
 
   if (!user) {
     return res.status(401).json({ error: 'Utilisateur introuvable. Veuillez vérifier vos identifiants.' });
@@ -112,7 +59,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     user.passwordHash = await bcrypt.hash(password, DEFAULT_SALT_ROUNDS);
     if (db) {
       await safeFirestoreWrite('updateUserPasswordHash', () => 
-        setDoc(doc(db!, 'users', user!.id), { passwordHash: user!.passwordHash }, { merge: true })
+        setDoc(doc(db!, 'users', user!.uuid || String(user!.id)), { passwordHash: user!.passwordHash }, { merge: true })
       );
     }
   }
@@ -124,7 +71,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
   user.lastLoginAt = new Date().toISOString();
   if (db) {
     await safeFirestoreWrite('updateLastLogin', () => 
-      setDoc(doc(db!, 'users', user!.id), { lastLoginAt: user!.lastLoginAt }, { merge: true })
+      setDoc(doc(db!, 'users', user!.uuid || String(user!.id)), { lastLoginAt: user!.lastLoginAt }, { merge: true })
     );
   }
 
@@ -133,32 +80,13 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
 
   return res.json({
     user: safeUser,
-    token: `token_${user.id}_${Date.now()}`
+    token: `token_${user.uuid || user.id}_${Date.now()}`
   });
 });
 
-// 2. User management (Servis depuis la RAM en priorité - 0 lecture Firestore)
-router.get('/api/users', async (req: Request, res: Response) => {
-  const forceRefresh = req.query.forceRefresh === 'true';
-  if (db && !isFirestoreQuotaExceeded() && (users.length === 0 || forceRefresh)) {
-    try {
-      const snap = await getDocs(collection(db, 'users'));
-      if (!snap.empty) {
-        const dbUsers = snap.docs
-          .map(d => ({ id: d.id, ...d.data() } as any))
-          .filter(u => !u.deleted && u.email && u.role);
-        if (dbUsers.length > 0) {
-          setUsers(dbUsers);
-        }
-      }
-    } catch (e: any) {
-      if (isQuotaExceededError(e)) {
-        flagFirestoreQuotaExceeded(e);
-      } else {
-        console.warn('[Firestore] get users notice:', e.message);
-      }
-    }
-  }
+// 2. User management (Servis à 100% depuis la RAM - 0 lecture Firestore)
+router.get('/api/users', async (_req: Request, res: Response) => {
+  res.setHeader('X-Cache', 'HIT-RAM');
   // Ne jamais exposer les hashs de mot de passe publiquement
   return res.json(users.map(({ passwordHash: _, ...u }) => u));
 });
@@ -178,7 +106,8 @@ router.post('/api/users', async (req: Request, res: Response) => {
   const passwordHash = await bcrypt.hash(rawPassword, DEFAULT_SALT_ROUNDS);
 
   const newUser: User = {
-    id: randomUUID(),
+    id: getNextSequence('users'),
+    uuid: `usr_${randomUUID()}`,
     name: name.trim(),
     email: cleanEmail,
     role,
@@ -189,7 +118,7 @@ router.post('/api/users', async (req: Request, res: Response) => {
 
   users.push(newUser);
   saveUsersDiskBackup();
-  await safeFirestoreWrite('createUser', () => setDoc(doc(db!, 'users', newUser.id), cleanFirestoreDoc(newUser)));
+  await safeFirestoreWrite('createUser', () => setDoc(doc(db!, 'users', newUser.uuid), cleanFirestoreDoc(newUser)));
 
   await recordHistory({
     action: 'create_user',
@@ -205,7 +134,7 @@ router.post('/api/users', async (req: Request, res: Response) => {
 
 router.put('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const user = users.find(u => u.id === id);
+  const user = users.find(u => String(u.id) === String(id) || u.uuid === id);
   if (!user) {
     return res.status(404).json({ error: 'Utilisateur introuvable.' });
   }
@@ -214,7 +143,7 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
   if (name !== undefined) user.name = name.trim();
   if (email !== undefined) {
     const cleanEmail = email.trim().toLowerCase();
-    const duplicate = users.find(u => u.id !== id && u.email.toLowerCase() === cleanEmail);
+    const duplicate = users.find(u => String(u.id) !== String(id) && u.uuid !== id && u.email.toLowerCase() === cleanEmail);
     if (duplicate) {
       return res.status(409).json({ error: 'Un autre utilisateur utilise déjà cette adresse email.' });
     }
@@ -231,7 +160,7 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
   }
 
   saveUsersDiskBackup();
-  await safeFirestoreWrite('updateUser', () => setDoc(doc(db!, 'users', id), cleanFirestoreDoc(user), { merge: true }));
+  await safeFirestoreWrite('updateUser', () => setDoc(doc(db!, 'users', user.uuid), cleanFirestoreDoc(user), { merge: true }));
 
   await recordHistory({
     action: 'update_user',

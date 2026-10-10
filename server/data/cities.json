@@ -1,0 +1,43 @@
+[
+  {
+    "id": 1,
+    "name": "Douala",
+    "country": "Cameroun",
+    "currency": "XAF",
+    "currencySymbol": "FCFA",
+    "center": {
+      "lat": 4.0511,
+      "lng": 9.7679
+    },
+    "active": true,
+    "autoSchedule": {
+      "enabled": false,
+      "slots": [
+        "08:00",
+        "13:00",
+        "18:00"
+      ]
+    },
+    "uuid": "city_douala"
+  },
+  {
+    "id": 2,
+    "name": "Yaoundé",
+    "country": "Cameroun",
+    "currency": "XAF",
+    "currencySymbol": "FCFA",
+    "center": {
+      "lat": 3.848,
+      "lng": 11.5021
+    },
+    "active": true,
+    "autoSchedule": {
+      "enabled": false,
+      "slots": [
+        "08:00",
+        "18:00"
+      ]
+    },
+    "uuid": "city_yaounde"
+  }
+]

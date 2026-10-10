@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import {
   cities,
@@ -226,27 +226,9 @@ router.get('/api/export/db-structure', async (_req: Request, res: Response) => {
   }
 });
 
-// 2. Export Full Database with Data
+// 2. Export Full Database with Data (Servi depuis la RAM et stockage local - 0 lecture Firestore)
 router.get('/api/export/db-full', async (_req: Request, res: Response) => {
   try {
-    let campaignsList: any[] = [];
-    let tripsList: any[] = [];
-
-    if (db) {
-      try {
-        const campSnap = await getDocs(collection(db, 'campaigns'));
-        if (!campSnap.empty) {
-          campaignsList = campSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
-        const tripsSnap = await getDocs(collection(db, 'trips'));
-        if (!tripsSnap.empty) {
-          tripsList = tripsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
-      } catch (err: any) {
-        console.warn('[Export] Firestore read warning:', err.message);
-      }
-    }
-
     const fullData = {
       exportType: 'full_database_with_data',
       exportedAt: new Date().toISOString(),
@@ -259,8 +241,7 @@ router.get('/api/export/db-full', async (_req: Request, res: Response) => {
         hero: heroSettings,
         tripmaster: tripMasterSettings
       },
-      campaigns: campaignsList,
-      trips: tripsList
+      campaigns: memoryCampaigns
     };
 
     res.setHeader('Content-Type', 'application/json');

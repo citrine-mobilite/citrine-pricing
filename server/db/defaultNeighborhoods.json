@@ -1,6 +1,6 @@
 [
   {
-    "id": "nb_dla_akwa",
+    "id": 1,
     "cityId": "city_douala",
     "lng": 9.7042,
     "active": true,
@@ -12,10 +12,11 @@
     "arrondissement": "Douala 1er",
     "zone": "commercial",
     "fullAddress": "Akwa, Douala 1er, Wouri, Cameroun",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_akwa"
   },
   {
-    "id": "nb_dla_bali",
+    "id": 2,
     "zoneType": "residential",
     "cityId": "city_douala",
     "lat": 4.0394,
@@ -28,10 +29,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_bali"
   },
   {
-    "id": "nb_dla_bepanda",
+    "id": 3,
     "name": "Bépanda Ambiance",
     "active": true,
     "zoneType": "popular",
@@ -44,10 +46,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "popular"
+    "zone": "popular",
+    "uuid": "nb_dla_bepanda"
   },
   {
-    "id": "nb_dla_bonanjo",
+    "id": 4,
     "name": "Bonanjo",
     "lng": 9.6865,
     "active": true,
@@ -60,10 +63,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "center",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_bonanjo"
   },
   {
-    "id": "nb_dla_bonapriso",
+    "id": 5,
     "lat": 4.02562,
     "zoneType": "residential",
     "lng": 9.69302,
@@ -76,10 +80,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_bonapriso"
   },
   {
-    "id": "nb_dla_deido",
+    "id": 6,
     "zoneType": "popular",
     "lng": 9.712,
     "cityId": "city_douala",
@@ -91,10 +96,11 @@
     "arrondissement": "Douala 1er",
     "zone": "popular",
     "fullAddress": "Deido, Douala 1er, Wouri, Cameroun",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_deido"
   },
   {
-    "id": "nb_dla_full_1",
+    "id": 7,
     "cityId": "city_douala",
     "lng": 9.6936,
     "lat": 4.0394,
@@ -109,10 +115,11 @@
     "arrondissement": "Douala 1er",
     "fullAddress": "Bali, DOUALA 1ER, LITTORAL, Cameroun, Douala 1ER, Wouri, Cameroun",
     "status": "actif",
-    "zone": "residential"
+    "zone": "residential",
+    "uuid": "nb_dla_full_1"
   },
   {
-    "id": "nb_dla_full_10",
+    "id": 8,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-09-25T17:10:55.727Z",
     "name": "Bonanjo, DOUALA 1ER, LITTORAL, Cameroun",
@@ -127,10 +134,11 @@
     "arrondissement": "Douala 1er",
     "fullAddress": "Bonanjo, DOUALA 1ER, LITTORAL, Cameroun, Douala 1ER, Wouri, Cameroun",
     "status": "actif",
-    "zone": "center"
+    "zone": "center",
+    "uuid": "nb_dla_full_10"
   },
   {
-    "id": "nb_dla_full_100",
+    "id": 9,
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "lat": 4.0695,
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -145,10 +153,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_100"
   },
   {
-    "id": "nb_dla_full_101",
+    "id": 10,
     "cityName": "Douala",
     "cityId": "city_douala",
     "zoneType": "popular",
@@ -163,10 +172,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_101"
   },
   {
-    "id": "nb_dla_full_102",
+    "id": 11,
     "cityId": "city_douala",
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -181,10 +191,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_102"
   },
   {
-    "id": "nb_dla_full_103",
+    "id": 12,
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -199,10 +210,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "center",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_103"
   },
   {
-    "id": "nb_dla_full_104",
+    "id": 13,
     "zoneType": "commercial",
     "lat": 4.072,
     "lng": 9.678,
@@ -217,10 +229,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_104"
   },
   {
-    "id": "nb_dla_full_105",
+    "id": 14,
     "active": true,
     "zoneType": "popular",
     "name": "Mambanda",
@@ -235,10 +248,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_105"
   },
   {
-    "id": "nb_dla_full_106",
+    "id": 15,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "lat": 4.089,
@@ -253,10 +267,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_106"
   },
   {
-    "id": "nb_dla_full_107",
+    "id": 16,
     "lng": 9.658,
     "lat": 4.095,
     "zoneType": "popular",
@@ -271,10 +286,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_107"
   },
   {
-    "id": "nb_dla_full_108",
+    "id": 17,
     "name": "Nkomba",
     "active": true,
     "cityName": "Douala",
@@ -289,10 +305,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_108"
   },
   {
-    "id": "nb_dla_full_109",
+    "id": 18,
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityName": "Douala",
@@ -307,10 +324,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_109"
   },
   {
-    "id": "nb_dla_full_11",
+    "id": 19,
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lng": 9.6991,
@@ -325,10 +343,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_11"
   },
   {
-    "id": "nb_dla_full_110",
+    "id": 20,
     "lat": 4.077,
     "cityName": "Douala",
     "lng": 9.689,
@@ -343,10 +362,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_110"
   },
   {
-    "id": "nb_dla_full_111",
+    "id": 21,
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "cityId": "city_douala",
     "name": "Bojongo",
@@ -361,10 +381,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_111"
   },
   {
-    "id": "nb_dla_full_112",
+    "id": 22,
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lat": 4.0695,
@@ -379,10 +400,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_112"
   },
   {
-    "id": "nb_dla_full_113",
+    "id": 23,
     "active": true,
     "name": "Bonendale I",
     "zoneType": "residential",
@@ -397,10 +419,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_113"
   },
   {
-    "id": "nb_dla_full_114",
+    "id": 24,
     "name": "Bonendale II",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "zoneType": "residential",
@@ -415,10 +438,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_114"
   },
   {
-    "id": "nb_dla_full_115",
+    "id": 25,
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.646Z",
@@ -433,10 +457,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_115"
   },
   {
-    "id": "nb_dla_full_116",
+    "id": 26,
     "cityName": "Douala",
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -451,10 +476,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_116"
   },
   {
-    "id": "nb_dla_full_117",
+    "id": 27,
     "active": true,
     "cityName": "Douala",
     "name": "Sodiko Village",
@@ -469,10 +495,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_117"
   },
   {
-    "id": "nb_dla_full_118",
+    "id": 28,
     "cityId": "city_douala",
     "lng": 9.725,
     "lat": 4.063,
@@ -487,10 +514,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_118"
   },
   {
-    "id": "nb_dla_full_119",
+    "id": 29,
     "cityId": "city_douala",
     "zoneType": "popular",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -505,10 +533,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_119"
   },
   {
-    "id": "nb_dla_full_12",
+    "id": 30,
     "lng": 9.69302,
     "lat": 4.02562,
     "cityId": "city_douala",
@@ -523,10 +552,11 @@
     "arrondissement": "Douala 1er",
     "fullAddress": "Bonapriso, DOUALA 1ER, LITTORAL, Cameroun, Douala 1ER, Wouri, Cameroun",
     "status": "actif",
-    "zone": "residential"
+    "zone": "residential",
+    "uuid": "nb_dla_full_12"
   },
   {
-    "id": "nb_dla_full_120",
+    "id": 31,
     "cityId": "city_douala",
     "lng": 9.728,
     "lat": 4.062,
@@ -541,10 +571,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_120"
   },
   {
-    "id": "nb_dla_full_121",
+    "id": 32,
     "cityName": "Douala",
     "cityId": "city_douala",
     "lng": 9.725,
@@ -559,10 +590,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_121"
   },
   {
-    "id": "nb_dla_full_122",
+    "id": 33,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityId": "city_douala",
@@ -577,10 +609,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_122"
   },
   {
-    "id": "nb_dla_full_123",
+    "id": 34,
     "active": true,
     "name": "Bépanda TSF",
     "zoneType": "popular",
@@ -595,10 +628,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_123"
   },
   {
-    "id": "nb_dla_full_124",
+    "id": 35,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lat": 4.063,
@@ -613,10 +647,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_124"
   },
   {
-    "id": "nb_dla_full_125",
+    "id": 36,
     "name": "Bonamoussadi Cité",
     "cityId": "city_douala",
     "zoneType": "residential",
@@ -631,10 +666,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_125"
   },
   {
-    "id": "nb_dla_full_126",
+    "id": 37,
     "cityId": "city_douala",
     "lat": 4.0605,
     "updatedAt": "2026-10-10T00:01:06.646Z",
@@ -649,10 +685,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_126"
   },
   {
-    "id": "nb_dla_full_127",
+    "id": 38,
     "cityId": "city_douala",
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "cityName": "Douala",
@@ -667,10 +704,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_127"
   },
   {
-    "id": "nb_dla_full_128",
+    "id": 39,
     "cityId": "city_douala",
     "cityName": "Douala",
     "lat": 4.082,
@@ -685,10 +723,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_128"
   },
   {
-    "id": "nb_dla_full_129",
+    "id": 40,
     "zoneType": "residential",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.646Z",
@@ -703,10 +742,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_129"
   },
   {
-    "id": "nb_dla_full_13",
+    "id": 41,
     "name": "Bonajinjè",
     "active": true,
     "zoneType": "popular",
@@ -721,10 +761,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_13"
   },
   {
-    "id": "nb_dla_full_130",
+    "id": 42,
     "cityName": "Douala",
     "active": true,
     "lat": 4.0496845,
@@ -739,10 +780,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_130"
   },
   {
-    "id": "nb_dla_full_131",
+    "id": 43,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityId": "city_douala",
@@ -757,10 +799,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_131"
   },
   {
-    "id": "nb_dla_full_132",
+    "id": 44,
     "cityName": "Douala",
     "cityId": "city_douala",
     "lng": 9.7062018,
@@ -775,10 +818,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_132"
   },
   {
-    "id": "nb_dla_full_133",
+    "id": 45,
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.646Z",
@@ -793,10 +837,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_133"
   },
   {
-    "id": "nb_dla_full_134",
+    "id": 46,
     "cityId": "city_douala",
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -811,10 +856,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_134"
   },
   {
-    "id": "nb_dla_full_135",
+    "id": 47,
     "zoneType": "residential",
     "lat": 4.078,
     "lng": 9.741,
@@ -829,10 +875,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_135"
   },
   {
-    "id": "nb_dla_full_136",
+    "id": 48,
     "cityId": "city_douala",
     "cityName": "Douala",
     "zoneType": "residential",
@@ -847,10 +894,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_136"
   },
   {
-    "id": "nb_dla_full_137",
+    "id": 49,
     "active": true,
     "name": "Makèpè Recasement",
     "zoneType": "residential",
@@ -865,10 +913,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_137"
   },
   {
-    "id": "nb_dla_full_138",
+    "id": 50,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityId": "city_douala",
@@ -883,10 +932,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_138"
   },
   {
-    "id": "nb_dla_full_139",
+    "id": 51,
     "cityId": "city_douala",
     "zoneType": "popular",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -901,10 +951,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_139"
   },
   {
-    "id": "nb_dla_full_14",
+    "id": 52,
     "zoneType": "popular",
     "cityId": "city_douala",
     "lng": 9.7045,
@@ -919,10 +970,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_14"
   },
   {
-    "id": "nb_dla_full_140",
+    "id": 53,
     "lat": 3.9945698,
     "cityId": "city_douala",
     "zoneType": "residential",
@@ -937,10 +989,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_140"
   },
   {
-    "id": "nb_dla_full_141",
+    "id": 54,
     "cityName": "Douala",
     "lat": 4.0429389,
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -955,10 +1008,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_141"
   },
   {
-    "id": "nb_dla_full_142",
+    "id": 55,
     "zoneType": "popular",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-09T23:31:57.793Z",
@@ -973,10 +1027,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "popular"
+    "zone": "popular",
+    "uuid": "nb_dla_full_142"
   },
   {
-    "id": "nb_dla_full_143",
+    "id": 56,
     "zoneType": "popular",
     "active": true,
     "lat": 4.0665,
@@ -991,10 +1046,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "popular"
+    "zone": "popular",
+    "uuid": "nb_dla_full_143"
   },
   {
-    "id": "nb_dla_full_144",
+    "id": 57,
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "name": "PK 15",
@@ -1009,10 +1065,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_144"
   },
   {
-    "id": "nb_dla_full_145",
+    "id": 58,
     "active": true,
     "name": "PK 20",
     "cityName": "Douala",
@@ -1027,10 +1084,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "popular"
+    "zone": "popular",
+    "uuid": "nb_dla_full_145"
   },
   {
-    "id": "nb_dla_full_146",
+    "id": 59,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "name": "Sobikago",
@@ -1045,10 +1103,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_146"
   },
   {
-    "id": "nb_dla_full_147",
+    "id": 60,
     "name": "Sodikomb",
     "cityId": "city_douala",
     "cityName": "Douala",
@@ -1063,10 +1122,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_147"
   },
   {
-    "id": "nb_dla_full_148",
+    "id": 61,
     "lat": 4.0829325,
     "lng": 9.721624,
     "zoneType": "residential",
@@ -1081,10 +1141,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_148"
   },
   {
-    "id": "nb_dla_full_149",
+    "id": 62,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lng": 9.739,
     "cityName": "Douala",
@@ -1099,10 +1160,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_149"
   },
   {
-    "id": "nb_dla_full_15",
+    "id": 63,
     "name": "Bonakouamouang",
     "active": true,
     "zoneType": "commercial",
@@ -1117,10 +1179,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_15"
   },
   {
-    "id": "nb_dla_full_150",
+    "id": 64,
     "active": true,
     "zoneType": "residential",
     "name": "Bonangando",
@@ -1135,10 +1198,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_150"
   },
   {
-    "id": "nb_dla_full_151",
+    "id": 65,
     "zoneType": "residential",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lat": 4.088,
@@ -1153,10 +1217,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_151"
   },
   {
-    "id": "nb_dla_full_152",
+    "id": 66,
     "cityName": "Douala",
     "name": "canton Bassa : Beedi",
     "active": true,
@@ -1171,10 +1236,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_152"
   },
   {
-    "id": "nb_dla_full_153",
+    "id": 67,
     "cityId": "city_douala",
     "lat": 4.088,
     "lng": 9.754,
@@ -1189,10 +1255,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_153"
   },
   {
-    "id": "nb_dla_full_154",
+    "id": 68,
     "active": true,
     "name": "Lendi",
     "cityName": "Douala",
@@ -1207,10 +1274,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_154"
   },
   {
-    "id": "nb_dla_full_155",
+    "id": 69,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1225,10 +1293,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_155"
   },
   {
-    "id": "nb_dla_full_156",
+    "id": 70,
     "name": "Logpom",
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1243,10 +1312,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_156"
   },
   {
-    "id": "nb_dla_full_157",
+    "id": 71,
     "active": true,
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "cityName": "Douala",
@@ -1261,10 +1331,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_157"
   },
   {
-    "id": "nb_dla_full_158",
+    "id": 72,
     "zoneType": "residential",
     "name": "Makèpè II et III",
     "cityId": "city_douala",
@@ -1279,10 +1350,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_158"
   },
   {
-    "id": "nb_dla_full_159",
+    "id": 73,
     "zoneType": "popular",
     "cityId": "city_douala",
     "cityName": "Douala",
@@ -1297,10 +1369,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_159"
   },
   {
-    "id": "nb_dla_full_16",
+    "id": 74,
     "cityId": "city_douala",
     "lng": 9.7092,
     "lat": 4.0635,
@@ -1315,10 +1388,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_16"
   },
   {
-    "id": "nb_dla_full_160",
+    "id": 75,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.646Z",
     "zoneType": "commercial",
@@ -1333,10 +1407,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_160"
   },
   {
-    "id": "nb_dla_full_161",
+    "id": 76,
     "lng": 9.744,
     "lat": 4.073,
     "cityName": "Douala",
@@ -1351,10 +1426,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_161"
   },
   {
-    "id": "nb_dla_full_17",
+    "id": 77,
     "name": "Bonalembè",
     "active": true,
     "zoneType": "popular",
@@ -1369,10 +1445,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_17"
   },
   {
-    "id": "nb_dla_full_18",
+    "id": 78,
     "zoneType": "popular",
     "updatedAt": "2026-10-10T00:01:06.643Z",
     "cityId": "city_douala",
@@ -1387,10 +1464,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_18"
   },
   {
-    "id": "nb_dla_full_19",
+    "id": 79,
     "cityId": "city_douala",
     "zoneType": "commercial",
     "cityName": "Douala",
@@ -1405,10 +1483,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_19"
   },
   {
-    "id": "nb_dla_full_2",
+    "id": 80,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityId": "city_douala",
     "name": "Bonamikengué",
@@ -1423,10 +1502,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_2"
   },
   {
-    "id": "nb_dla_full_20",
+    "id": 81,
     "zoneType": "commercial",
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1441,10 +1521,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_20"
   },
   {
-    "id": "nb_dla_full_21",
+    "id": 82,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.643Z",
     "zoneType": "popular",
@@ -1459,10 +1540,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_21"
   },
   {
-    "id": "nb_dla_full_22",
+    "id": 83,
     "cityName": "Douala",
     "name": "Joss",
     "active": true,
@@ -1477,10 +1559,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "center",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_22"
   },
   {
-    "id": "nb_dla_full_23",
+    "id": 84,
     "lat": 4.0551,
     "lng": 9.7062,
     "cityName": "Douala",
@@ -1495,10 +1578,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_23"
   },
   {
-    "id": "nb_dla_full_24",
+    "id": 85,
     "cityId": "city_douala",
     "cityName": "Douala",
     "lat": 4.03579,
@@ -1513,10 +1597,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_24"
   },
   {
-    "id": "nb_dla_full_25",
+    "id": 86,
     "cityId": "city_douala",
     "cityName": "Douala",
     "lat": 4.0524,
@@ -1531,10 +1616,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_25"
   },
   {
-    "id": "nb_dla_full_26",
+    "id": 87,
     "cityName": "Douala",
     "cityId": "city_douala",
     "lng": 9.7082,
@@ -1549,10 +1635,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_26"
   },
   {
-    "id": "nb_dla_full_27",
+    "id": 88,
     "cityId": "city_douala",
     "zoneType": "commercial",
     "cityName": "Douala",
@@ -1567,10 +1654,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_27"
   },
   {
-    "id": "nb_dla_full_28",
+    "id": 89,
     "lat": 4.0402,
     "lng": 9.7061,
     "cityId": "city_douala",
@@ -1585,10 +1673,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_28"
   },
   {
-    "id": "nb_dla_full_29",
+    "id": 90,
     "cityName": "Douala",
     "cityId": "city_douala",
     "name": "Nouvelle zone d'Akwa Nord",
@@ -1603,10 +1692,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_29"
   },
   {
-    "id": "nb_dla_full_3",
+    "id": 91,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.643Z",
     "active": true,
@@ -1621,10 +1711,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_3"
   },
   {
-    "id": "nb_dla_full_30",
+    "id": 92,
     "lng": 9.7182,
     "zoneType": "popular",
     "cityId": "city_douala",
@@ -1639,10 +1730,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_30"
   },
   {
-    "id": "nb_dla_full_31",
+    "id": 93,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lng": 9.7194,
     "active": true,
@@ -1657,10 +1749,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "airport",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_31"
   },
   {
-    "id": "nb_dla_full_32",
+    "id": 94,
     "cityId": "city_douala",
     "cityName": "Douala",
     "name": "Babylone I",
@@ -1675,10 +1768,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_32"
   },
   {
-    "id": "nb_dla_full_33",
+    "id": 95,
     "name": "Babylone II",
     "cityId": "city_douala",
     "cityName": "Douala",
@@ -1693,10 +1787,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_33"
   },
   {
-    "id": "nb_dla_full_34",
+    "id": 96,
     "updatedAt": "2026-10-10T00:01:06.643Z",
     "zoneType": "popular",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1711,10 +1806,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_34"
   },
   {
-    "id": "nb_dla_full_35",
+    "id": 97,
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityId": "city_douala",
@@ -1729,10 +1825,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_35"
   },
   {
-    "id": "nb_dla_full_36",
+    "id": 98,
     "cityId": "city_douala",
     "lat": 4.0345,
     "zoneType": "popular",
@@ -1747,10 +1844,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_36"
   },
   {
-    "id": "nb_dla_full_37",
+    "id": 99,
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1765,10 +1863,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_37"
   },
   {
-    "id": "nb_dla_full_38",
+    "id": 100,
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "lat": 4.0298,
     "lng": 9.7092,
@@ -1783,10 +1882,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_38"
   },
   {
-    "id": "nb_dla_full_39",
+    "id": 101,
     "cityId": "city_douala",
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1801,10 +1901,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_39"
   },
   {
-    "id": "nb_dla_full_4",
+    "id": 102,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.643Z",
     "lng": 9.69805,
@@ -1819,10 +1920,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_4"
   },
   {
-    "id": "nb_dla_full_40",
+    "id": 103,
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "name": "Ndjong-Mebi",
@@ -1837,10 +1939,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_40"
   },
   {
-    "id": "nb_dla_full_41",
+    "id": 104,
     "zoneType": "commercial",
     "cityId": "city_douala",
     "lat": 4.0391,
@@ -1855,10 +1958,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_41"
   },
   {
-    "id": "nb_dla_full_42",
+    "id": 105,
     "active": true,
     "name": "Ngangue",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1873,10 +1977,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_42"
   },
   {
-    "id": "nb_dla_full_43",
+    "id": 106,
     "lng": 9.702,
     "lat": 4.034,
     "cityId": "city_douala",
@@ -1891,10 +1996,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "center",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_43"
   },
   {
-    "id": "nb_dla_full_44",
+    "id": 107,
     "zoneType": "popular",
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1909,10 +2015,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_44"
   },
   {
-    "id": "nb_dla_full_45",
+    "id": 108,
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "zoneType": "popular",
@@ -1927,10 +2034,11 @@
     "arrondissement": "Douala 2e",
     "fullAddress": "Source, T.S.F, DOUALA 2E, LITTORAL, Cameroun, Douala 2E, Wouri, Cameroun",
     "status": "actif",
-    "zone": "popular"
+    "zone": "popular",
+    "uuid": "nb_dla_full_45"
   },
   {
-    "id": "nb_dla_full_46",
+    "id": 109,
     "cityId": "city_douala",
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -1945,10 +2053,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_46"
   },
   {
-    "id": "nb_dla_full_47",
+    "id": 110,
     "cityId": "city_douala",
     "zoneType": "popular",
     "lng": 9.7345,
@@ -1963,10 +2072,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_47"
   },
   {
-    "id": "nb_dla_full_48",
+    "id": 111,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "cityName": "Douala",
@@ -1981,10 +2091,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_48"
   },
   {
-    "id": "nb_dla_full_49",
+    "id": 112,
     "active": true,
     "name": "Bonaloka",
     "zoneType": "popular",
@@ -1999,10 +2110,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_49"
   },
   {
-    "id": "nb_dla_full_5",
+    "id": 113,
     "name": "Bonabékombo",
     "cityName": "Douala",
     "cityId": "city_douala",
@@ -2017,10 +2129,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_5"
   },
   {
-    "id": "nb_dla_full_50",
+    "id": 114,
     "name": "Bonewouda",
     "zoneType": "popular",
     "cityId": "city_douala",
@@ -2035,10 +2148,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_50"
   },
   {
-    "id": "nb_dla_full_51",
+    "id": 115,
     "zoneType": "popular",
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "name": "Brazzaville",
@@ -2053,10 +2167,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_51"
   },
   {
-    "id": "nb_dla_full_52",
+    "id": 116,
     "zoneType": "popular",
     "lat": 4.021,
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2071,10 +2186,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_52"
   },
   {
-    "id": "nb_dla_full_53",
+    "id": 117,
     "cityName": "Douala",
     "lat": 4.045,
     "lng": 9.745,
@@ -2089,10 +2205,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_53"
   },
   {
-    "id": "nb_dla_full_54",
+    "id": 118,
     "zoneType": "residential",
     "active": true,
     "name": "Cité de la Paix",
@@ -2107,10 +2224,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_54"
   },
   {
-    "id": "nb_dla_full_55",
+    "id": 119,
     "active": true,
     "zoneType": "residential",
     "name": "Cité des Enseignants",
@@ -2125,10 +2243,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_55"
   },
   {
-    "id": "nb_dla_full_56",
+    "id": 120,
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lat": 4.0385,
@@ -2143,10 +2262,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_56"
   },
   {
-    "id": "nb_dla_full_57",
+    "id": 121,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "zoneType": "popular",
     "updatedAt": "2026-10-10T00:01:06.644Z",
@@ -2161,10 +2281,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_57"
   },
   {
-    "id": "nb_dla_full_58",
+    "id": 122,
     "active": true,
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "lat": 4.03233,
@@ -2179,10 +2300,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_58"
   },
   {
-    "id": "nb_dla_full_59",
+    "id": 123,
     "cityId": "city_douala",
     "lat": 4.03285,
     "zoneType": "commercial",
@@ -2197,10 +2319,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_59"
   },
   {
-    "id": "nb_dla_full_6",
+    "id": 124,
     "updatedAt": "2026-10-10T00:01:06.643Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "zoneType": "commercial",
@@ -2215,10 +2338,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_6"
   },
   {
-    "id": "nb_dla_full_60",
+    "id": 125,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityName": "Douala",
     "updatedAt": "2026-10-10T00:01:06.644Z",
@@ -2233,10 +2357,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_60"
   },
   {
-    "id": "nb_dla_full_61",
+    "id": 126,
     "active": true,
     "name": "Madagascar",
     "zoneType": "popular",
@@ -2251,10 +2376,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_61"
   },
   {
-    "id": "nb_dla_full_62",
+    "id": 127,
     "active": true,
     "zoneType": "popular",
     "name": "Mbanga Mpongo",
@@ -2269,10 +2395,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_62"
   },
   {
-    "id": "nb_dla_full_63",
+    "id": 128,
     "lng": 9.738,
     "active": true,
     "lat": 4.0435,
@@ -2287,10 +2414,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_63"
   },
   {
-    "id": "nb_dla_full_64",
+    "id": 129,
     "cityId": "city_douala",
     "cityName": "Douala",
     "zoneType": "commercial",
@@ -2305,10 +2433,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_64"
   },
   {
-    "id": "nb_dla_full_65",
+    "id": 130,
     "cityId": "city_douala",
     "lat": 4.041,
     "lng": 9.755,
@@ -2323,10 +2452,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_65"
   },
   {
-    "id": "nb_dla_full_66",
+    "id": 131,
     "cityId": "city_douala",
     "cityName": "Douala",
     "lng": 9.758,
@@ -2341,10 +2471,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_66"
   },
   {
-    "id": "nb_dla_full_67",
+    "id": 132,
     "cityName": "Douala",
     "active": true,
     "zoneType": "popular",
@@ -2359,10 +2490,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_67"
   },
   {
-    "id": "nb_dla_full_68",
+    "id": 133,
     "active": true,
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "name": "Ndokoti",
@@ -2377,10 +2509,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_68"
   },
   {
-    "id": "nb_dla_full_69",
+    "id": 134,
     "lng": 9.7435,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "lat": 4.0555,
@@ -2395,10 +2528,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_69"
   },
   {
-    "id": "nb_dla_full_7",
+    "id": 135,
     "cityId": "city_douala",
     "lat": 4.04105,
     "lng": 9.69802,
@@ -2413,10 +2547,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_7"
   },
   {
-    "id": "nb_dla_full_70",
+    "id": 136,
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2431,10 +2566,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_70"
   },
   {
-    "id": "nb_dla_full_71",
+    "id": 137,
     "active": true,
     "name": "Ndogpassi I",
     "zoneType": "popular",
@@ -2449,10 +2585,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_71"
   },
   {
-    "id": "nb_dla_full_72",
+    "id": 138,
     "lat": 4.0255,
     "cityName": "Douala",
     "lng": 9.778,
@@ -2467,10 +2604,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_72"
   },
   {
-    "id": "nb_dla_full_73",
+    "id": 139,
     "lat": 4.036,
     "lng": 9.765,
     "cityId": "city_douala",
@@ -2485,10 +2623,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_73"
   },
   {
-    "id": "nb_dla_full_74",
+    "id": 140,
     "active": true,
     "lng": 9.741,
     "lat": 4.042,
@@ -2503,10 +2642,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_74"
   },
   {
-    "id": "nb_dla_full_75",
+    "id": 141,
     "cityId": "city_douala",
     "zoneType": "popular",
     "updatedAt": "2026-10-10T00:01:06.645Z",
@@ -2521,10 +2661,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_75"
   },
   {
-    "id": "nb_dla_full_76",
+    "id": 142,
     "cityName": "Douala",
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2539,10 +2680,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_76"
   },
   {
-    "id": "nb_dla_full_77",
+    "id": 143,
     "cityId": "city_douala",
     "zoneType": "popular",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2557,10 +2699,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_77"
   },
   {
-    "id": "nb_dla_full_78",
+    "id": 144,
     "cityId": "city_douala",
     "zoneType": "popular",
     "lng": 9.745,
@@ -2575,10 +2718,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_78"
   },
   {
-    "id": "nb_dla_full_79",
+    "id": 145,
     "name": "Ngoma",
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2593,10 +2737,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_79"
   },
   {
-    "id": "nb_dla_full_8",
+    "id": 146,
     "name": "Bonamouti-Deido",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "updatedAt": "2026-10-10T00:01:06.643Z",
@@ -2611,10 +2756,11 @@
     "ville": "DOUALA 1ER",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_8"
   },
   {
-    "id": "nb_dla_full_80",
+    "id": 147,
     "name": "Nyalla",
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "cityId": "city_douala",
@@ -2629,10 +2775,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_80"
   },
   {
-    "id": "nb_dla_full_81",
+    "id": 148,
     "lat": 4.0325,
     "cityName": "Douala",
     "lng": 9.729,
@@ -2647,10 +2794,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_81"
   },
   {
-    "id": "nb_dla_full_82",
+    "id": 149,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityName": "Douala",
     "updatedAt": "2026-10-10T00:01:06.645Z",
@@ -2665,10 +2813,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_82"
   },
   {
-    "id": "nb_dla_full_83",
+    "id": 150,
     "cityName": "Douala",
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "active": true,
@@ -2683,10 +2832,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_83"
   },
   {
-    "id": "nb_dla_full_84",
+    "id": 151,
     "active": true,
     "cityName": "Douala",
     "name": "P.K.12",
@@ -2701,10 +2851,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_84"
   },
   {
-    "id": "nb_dla_full_85",
+    "id": 152,
     "active": true,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "zoneType": "popular",
@@ -2719,10 +2870,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_85"
   },
   {
-    "id": "nb_dla_full_86",
+    "id": 153,
     "lng": 9.835,
     "cityId": "city_douala",
     "zoneType": "popular",
@@ -2737,10 +2889,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_86"
   },
   {
-    "id": "nb_dla_full_87",
+    "id": 154,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "cityId": "city_douala",
     "lng": 9.852,
@@ -2755,10 +2908,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_87"
   },
   {
-    "id": "nb_dla_full_88",
+    "id": 155,
     "name": "P.K.21",
     "cityName": "Douala",
     "cityId": "city_douala",
@@ -2773,10 +2927,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_88"
   },
   {
-    "id": "nb_dla_full_89",
+    "id": 156,
     "name": "P.K.J.6",
     "active": true,
     "cityName": "Douala",
@@ -2791,10 +2946,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_89"
   },
   {
-    "id": "nb_dla_full_9",
+    "id": 157,
     "updatedAt": "2026-10-10T00:01:06.644Z",
     "createdAt": "2026-09-25T17:10:55.304Z",
     "zoneType": "residential",
@@ -2809,10 +2965,11 @@
     "ville": "DOUALA 2E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_9"
   },
   {
-    "id": "nb_dla_full_90",
+    "id": 158,
     "name": "Soboum",
     "zoneType": "popular",
     "cityId": "city_douala",
@@ -2827,10 +2984,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_90"
   },
   {
-    "id": "nb_dla_full_91",
+    "id": 159,
     "lng": 9.746,
     "active": true,
     "lat": 4.041,
@@ -2845,10 +3003,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_91"
   },
   {
-    "id": "nb_dla_full_92",
+    "id": 160,
     "zoneType": "popular",
     "active": true,
     "updatedAt": "2026-10-10T00:01:06.645Z",
@@ -2863,10 +3022,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_92"
   },
   {
-    "id": "nb_dla_full_93",
+    "id": 161,
     "createdAt": "2026-09-25T17:10:55.304Z",
     "name": "Yassa",
     "cityName": "Douala",
@@ -2881,10 +3041,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_93"
   },
   {
-    "id": "nb_dla_full_94",
+    "id": 162,
     "name": "Yatchika",
     "cityId": "city_douala",
     "updatedAt": "2026-10-10T00:01:06.645Z",
@@ -2899,10 +3060,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_94"
   },
   {
-    "id": "nb_dla_full_95",
+    "id": 163,
     "cityId": "city_douala",
     "cityName": "Douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2917,10 +3079,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_95"
   },
   {
-    "id": "nb_dla_full_96",
+    "id": 164,
     "active": true,
     "updatedAt": "2026-10-10T00:01:06.645Z",
     "zoneType": "popular",
@@ -2935,10 +3098,11 @@
     "ville": "DOUALA 3E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_96"
   },
   {
-    "id": "nb_dla_full_97",
+    "id": 165,
     "cityName": "Douala",
     "lat": 4.085,
     "active": true,
@@ -2953,10 +3117,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "residential",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_97"
   },
   {
-    "id": "nb_dla_full_98",
+    "id": 166,
     "name": "Besseke",
     "cityId": "city_douala",
     "updatedAt": "2026-10-10T00:01:06.645Z",
@@ -2971,10 +3136,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_98"
   },
   {
-    "id": "nb_dla_full_99",
+    "id": 167,
     "zoneType": "popular",
     "cityId": "city_douala",
     "createdAt": "2026-09-25T17:10:55.304Z",
@@ -2989,10 +3155,11 @@
     "ville": "DOUALA 4E",
     "departement": "WOURI",
     "zone": "popular",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_full_99"
   },
   {
-    "id": "nb_dla_makepe",
+    "id": 168,
     "zoneType": "residential",
     "cityId": "city_douala",
     "active": true,
@@ -3005,10 +3172,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "residential"
+    "zone": "residential",
+    "uuid": "nb_dla_makepe"
   },
   {
-    "id": "nb_dla_ndogbong",
+    "id": 169,
     "cityId": "city_douala",
     "active": true,
     "name": "Ndogbong",
@@ -3021,10 +3189,11 @@
     "zone": "commercial",
     "fullAddress": "Ndogbong, Douala 5e, Wouri, Cameroun",
     "status": "actif",
-    "updatedAt": "2026-10-10T00:12:18.603Z"
+    "updatedAt": "2026-10-10T00:12:18.603Z",
+    "uuid": "nb_dla_ndogbong"
   },
   {
-    "id": "nb_yde_bastos",
+    "id": 170,
     "cityName": "Yaoundé",
     "name": "Bastos",
     "cityId": "city_yaounde",
@@ -3038,10 +3207,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "residential"
+    "zone": "residential",
+    "uuid": "nb_yde_bastos"
   },
   {
-    "id": "nb_yde_biyemassi",
+    "id": 171,
     "cityName": "Yaoundé",
     "active": true,
     "name": "Biyem-Assi",
@@ -3055,10 +3225,11 @@
     "arrondissement": "Yaoundé 1er",
     "fullAddress": "Biyem-Assi, Yaoundé, Mfoundi, Cameroun",
     "status": "actif",
-    "zone": "popular"
+    "zone": "popular",
+    "uuid": "nb_yde_biyemassi"
   },
   {
-    "id": "nb_yde_centre",
+    "id": 172,
     "cityName": "Yaoundé",
     "active": true,
     "name": "Centre-Ville (Poste Centrale)",
@@ -3072,10 +3243,11 @@
     "arrondissement": "Yaoundé 1er",
     "fullAddress": "Centre-Ville (Poste Centrale), Yaoundé, Mfoundi, Cameroun",
     "status": "actif",
-    "zone": "center"
+    "zone": "center",
+    "uuid": "nb_yde_centre"
   },
   {
-    "id": "nb_yde_mvan",
+    "id": 173,
     "cityId": "city_yaounde",
     "cityName": "Yaoundé",
     "active": true,
@@ -3089,10 +3261,11 @@
     "arrondissement": "Yaoundé 1er",
     "fullAddress": "Mvan (Gare Routière), Yaoundé, Mfoundi, Cameroun",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_yde_mvan"
   },
   {
-    "id": "nb_yde_nsimalen",
+    "id": 174,
     "active": true,
     "zoneType": "airport",
     "updatedAt": "2026-09-25T17:10:56.391Z",
@@ -3106,10 +3279,11 @@
     "arrondissement": "Yaoundé 1er",
     "fullAddress": "Aéroport International de Nsimalen, Yaoundé, Mfoundi, Cameroun",
     "status": "actif",
-    "zone": "airport"
+    "zone": "airport",
+    "uuid": "nb_yde_nsimalen"
   },
   {
-    "id": "nb_yde_odza",
+    "id": 175,
     "active": true,
     "name": "Odza",
     "zoneType": "residential",
@@ -3123,10 +3297,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "residential"
+    "zone": "residential",
+    "uuid": "nb_yde_odza"
   },
   {
-    "id": "nb_yde_omnisports",
+    "id": 176,
     "name": "Omnisports",
     "cityId": "city_yaounde",
     "zoneType": "commercial",
@@ -3140,10 +3315,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_yde_omnisports"
   },
   {
-    "id": "nb_yde_tsinga",
+    "id": 177,
     "name": "Tsinga Village",
     "cityName": "Yaoundé",
     "active": true,
@@ -3157,10 +3333,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "residential"
+    "zone": "residential",
+    "uuid": "nb_yde_tsinga"
   },
   {
-    "id": "nb_dla_a4f13d95-3e8d-4c05-afcf-4bdddaa26488",
+    "id": 178,
     "cityId": "city_douala",
     "name": "Youpwé",
     "fullAddress": "Youpwé, DOUALA, LITTORAL, Cameroun",
@@ -3174,10 +3351,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_a4f13d95-3e8d-4c05-afcf-4bdddaa26488"
   },
   {
-    "id": "nb_dla_07089824-4bea-4d27-98db-85968236dc5c",
+    "id": 179,
     "cityId": "city_douala",
     "name": "Bonamikano",
     "fullAddress": "Bonamikano, DOUALA, LITTORAL, Cameroun",
@@ -3191,10 +3369,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_07089824-4bea-4d27-98db-85968236dc5c"
   },
   {
-    "id": "nb_dla_24eef97a-1be2-455e-9e18-c867a4809912",
+    "id": 180,
     "cityId": "city_douala",
     "name": "Mambanda I",
     "fullAddress": "Mambanda I, DOUALA, LITTORAL, Cameroun",
@@ -3208,10 +3387,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_24eef97a-1be2-455e-9e18-c867a4809912"
   },
   {
-    "id": "nb_dla_c37b986c-6401-49da-ada5-cb2e450fcc1c",
+    "id": 181,
     "cityId": "city_douala",
     "name": "Mambanda II",
     "fullAddress": "Mambanda II, DOUALA, LITTORAL, Cameroun",
@@ -3225,10 +3405,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_c37b986c-6401-49da-ada5-cb2e450fcc1c"
   },
   {
-    "id": "nb_dla_fd38a564-8784-45a6-b193-bedd2c38092e",
+    "id": 182,
     "cityId": "city_douala",
     "name": "Mambanda III",
     "fullAddress": "Mambanda III, DOUALA, LITTORAL, Cameroun",
@@ -3242,10 +3423,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_fd38a564-8784-45a6-b193-bedd2c38092e"
   },
   {
-    "id": "nb_dla_8eee744f-968f-49fc-b0a1-9ebe40ca4fd0",
+    "id": 183,
     "cityId": "city_douala",
     "name": "Ngwele I",
     "fullAddress": "Ngwele I, DOUALA, LITTORAL, Cameroun",
@@ -3259,10 +3441,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_8eee744f-968f-49fc-b0a1-9ebe40ca4fd0"
   },
   {
-    "id": "nb_dla_d0f04d8b-12ae-4a7c-ba41-4be3ce0c5562",
+    "id": 184,
     "cityId": "city_douala",
     "name": "Ngwele II",
     "fullAddress": "Ngwele II, DOUALA, LITTORAL, Cameroun",
@@ -3276,10 +3459,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_d0f04d8b-12ae-4a7c-ba41-4be3ce0c5562"
   },
   {
-    "id": "nb_dla_6fc3fd96-d666-44b6-9cff-18dfaabe4221",
+    "id": 185,
     "cityId": "city_douala",
     "name": "Ngwele III",
     "fullAddress": "Ngwele III, DOUALA, LITTORAL, Cameroun",
@@ -3293,10 +3477,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_6fc3fd96-d666-44b6-9cff-18dfaabe4221"
   },
   {
-    "id": "nb_dla_7f2b8907-0fa4-46f0-99f5-6c50de0e31ea",
+    "id": 186,
     "cityId": "city_douala",
     "name": "Nkomba I",
     "fullAddress": "Nkomba I, DOUALA, LITTORAL, Cameroun",
@@ -3310,10 +3495,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_7f2b8907-0fa4-46f0-99f5-6c50de0e31ea"
   },
   {
-    "id": "nb_dla_26eb3d05-d134-454d-a933-ca7ec7ef1fdd",
+    "id": 187,
     "cityId": "city_douala",
     "name": "Nkomba II",
     "fullAddress": "Nkomba II, DOUALA, LITTORAL, Cameroun",
@@ -3327,10 +3513,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_26eb3d05-d134-454d-a933-ca7ec7ef1fdd"
   },
   {
-    "id": "nb_dla_ba5f517c-8335-4c3a-baff-0304fc7da9cb",
+    "id": 188,
     "cityId": "city_douala",
     "name": "Pitié",
     "fullAddress": "Pitié, DOUALA, LITTORAL, Cameroun",
@@ -3344,10 +3531,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_ba5f517c-8335-4c3a-baff-0304fc7da9cb"
   },
   {
-    "id": "nb_dla_58ae526b-ad51-47d8-bea1-aa67560963bf",
+    "id": 189,
     "cityId": "city_douala",
     "name": "Quartier Bamiléké",
     "fullAddress": "Quartier Bamiléké, DOUALA, LITTORAL, Cameroun",
@@ -3361,10 +3549,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_58ae526b-ad51-47d8-bea1-aa67560963bf"
   },
   {
-    "id": "nb_dla_f9cb55c6-c4a7-4d56-bceb-3004dad7c8d4",
+    "id": 190,
     "cityId": "city_douala",
     "name": "Quartier Haoussa",
     "fullAddress": "Quartier Haoussa, DOUALA, LITTORAL, Cameroun",
@@ -3378,10 +3567,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_f9cb55c6-c4a7-4d56-bceb-3004dad7c8d4"
   },
   {
-    "id": "nb_dla_5fc4bb61-6d15-4d2a-bc84-dfee425d1754",
+    "id": 191,
     "cityId": "city_douala",
     "name": "Quartier Cité des Cadres",
     "fullAddress": "Quartier Cité des Cadres, DOUALA, LITTORAL, Cameroun",
@@ -3395,10 +3585,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5fc4bb61-6d15-4d2a-bc84-dfee425d1754"
   },
   {
-    "id": "nb_dla_f47fa664-effc-4fdc-a12d-af983241357f",
+    "id": 192,
     "cityId": "city_douala",
     "name": "Kombe",
     "fullAddress": "Kombe, DOUALA, LITTORAL, Cameroun",
@@ -3412,10 +3603,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_f47fa664-effc-4fdc-a12d-af983241357f"
   },
   {
-    "id": "nb_dla_0da5e851-91a3-498f-a57c-a64f7668a93a",
+    "id": 193,
     "cityId": "city_douala",
     "name": "Bépanda Casmando",
     "fullAddress": "Bépanda Casmando, DOUALA, LITTORAL, Cameroun",
@@ -3429,10 +3621,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_0da5e851-91a3-498f-a57c-a64f7668a93a"
   },
   {
-    "id": "nb_dla_ee45f9b9-8afd-4f71-9e5e-7e8d88ba01f2",
+    "id": 194,
     "cityId": "city_douala",
     "name": "Bépanda Sans Pareil",
     "fullAddress": "Bépanda Sans Pareil, DOUALA, LITTORAL, Cameroun",
@@ -3446,10 +3639,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_ee45f9b9-8afd-4f71-9e5e-7e8d88ba01f2"
   },
   {
-    "id": "nb_dla_b9be1dc9-0a16-4d0b-a5e4-2925e79efbdf",
+    "id": 195,
     "cityId": "city_douala",
     "name": "Bépanda Tonnerre",
     "fullAddress": "Bépanda Tonnerre, DOUALA, LITTORAL, Cameroun",
@@ -3463,10 +3657,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_b9be1dc9-0a16-4d0b-a5e4-2925e79efbdf"
   },
   {
-    "id": "nb_dla_15f664f2-c92a-4b60-b00f-b0fd87dbf3ce",
+    "id": 196,
     "cityId": "city_douala",
     "name": "Bépanda Yoyo",
     "fullAddress": "Bépanda Yoyo, DOUALA, LITTORAL, Cameroun",
@@ -3480,10 +3675,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_15f664f2-c92a-4b60-b00f-b0fd87dbf3ce"
   },
   {
-    "id": "nb_dla_96365702-b147-4a30-8edd-9507264fe1b2",
+    "id": 197,
     "cityId": "city_douala",
     "name": "Denver",
     "fullAddress": "Denver, DOUALA, LITTORAL, Cameroun",
@@ -3497,10 +3693,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_96365702-b147-4a30-8edd-9507264fe1b2"
   },
   {
-    "id": "nb_dla_4e493e82-8aba-49b8-ac73-58e24c947db1",
+    "id": 198,
     "cityId": "city_douala",
     "name": "Kotto Badengue",
     "fullAddress": "Kotto Badengue, DOUALA, LITTORAL, Cameroun",
@@ -3514,10 +3711,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_4e493e82-8aba-49b8-ac73-58e24c947db1"
   },
   {
-    "id": "nb_dla_cbcfc6ee-ac41-43e2-9429-2d456c81e4b1",
+    "id": 199,
     "cityId": "city_douala",
     "name": "Kotto Village",
     "fullAddress": "Kotto Village, DOUALA, LITTORAL, Cameroun",
@@ -3531,10 +3729,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_cbcfc6ee-ac41-43e2-9429-2d456c81e4b1"
   },
   {
-    "id": "nb_dla_09490c66-9114-458a-883f-400a490d7f82",
+    "id": 200,
     "cityId": "city_douala",
     "name": "Bangue",
     "fullAddress": "Bangue, DOUALA, LITTORAL, Cameroun",
@@ -3548,10 +3747,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_09490c66-9114-458a-883f-400a490d7f82"
   },
   {
-    "id": "nb_dla_98f5b2ae-adb8-42e7-9010-d1ca89e9b90a",
+    "id": 201,
     "cityId": "city_douala",
     "name": "Ndoghem 5",
     "fullAddress": "Ndoghem 5, DOUALA, LITTORAL, Cameroun",
@@ -3565,10 +3765,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_98f5b2ae-adb8-42e7-9010-d1ca89e9b90a"
   },
   {
-    "id": "nb_dla_cbb2c1a4-332d-4c92-82f9-527320d4ad0d",
+    "id": 202,
     "cityId": "city_douala",
     "name": "Dahomey",
     "fullAddress": "Dahomey, DOUALA, LITTORAL, Cameroun",
@@ -3582,10 +3783,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_cbb2c1a4-332d-4c92-82f9-527320d4ad0d"
   },
   {
-    "id": "nb_dla_431da5b0-d90f-4caf-9d25-0d0b257e8c7e",
+    "id": 203,
     "cityId": "city_douala",
     "name": "Number One Creek",
     "fullAddress": "Number One Creek, DOUALA, LITTORAL, Cameroun",
@@ -3599,10 +3801,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_431da5b0-d90f-4caf-9d25-0d0b257e8c7e"
   },
   {
-    "id": "nb_dla_2f0dba12-1af9-4224-b03f-875113d26f13",
+    "id": 204,
     "cityId": "city_douala",
     "name": "Nyangadou",
     "fullAddress": "Nyangadou, DOUALA, LITTORAL, Cameroun",
@@ -3616,10 +3819,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_2f0dba12-1af9-4224-b03f-875113d26f13"
   },
   {
-    "id": "nb_dla_e5e7b263-250d-40d7-9687-5c99959f53e8",
+    "id": 205,
     "cityId": "city_douala",
     "name": "Mbénadikoumé",
     "fullAddress": "Mbénadikoumé, DOUALA, LITTORAL, Cameroun",
@@ -3633,10 +3837,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_e5e7b263-250d-40d7-9687-5c99959f53e8"
   },
   {
-    "id": "nb_dla_6941cd5f-0d88-44a6-87d0-a4827d3bf5fc",
+    "id": 206,
     "cityId": "city_douala",
     "name": "Epaka I",
     "fullAddress": "Epaka I, DOUALA, LITTORAL, Cameroun",
@@ -3650,10 +3855,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_6941cd5f-0d88-44a6-87d0-a4827d3bf5fc"
   },
   {
-    "id": "nb_dla_7a8fdc16-775c-40a1-a087-0ba494015833",
+    "id": 207,
     "cityId": "city_douala",
     "name": "Epaka II",
     "fullAddress": "Epaka II, DOUALA, LITTORAL, Cameroun",
@@ -3667,10 +3873,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_7a8fdc16-775c-40a1-a087-0ba494015833"
   },
   {
-    "id": "nb_dla_1801cada-f9dd-40b9-b09b-e8e86df4cacf",
+    "id": 208,
     "cityId": "city_douala",
     "name": "Buea I",
     "fullAddress": "Buea I, DOUALA, LITTORAL, Cameroun",
@@ -3684,10 +3891,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_1801cada-f9dd-40b9-b09b-e8e86df4cacf"
   },
   {
-    "id": "nb_dla_40a42c10-4166-4e7e-800c-ea62e62a0aa4",
+    "id": 209,
     "cityId": "city_douala",
     "name": "Bessoukoudou",
     "fullAddress": "Bessoukoudou, DOUALA, LITTORAL, Cameroun",
@@ -3701,10 +3909,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_40a42c10-4166-4e7e-800c-ea62e62a0aa4"
   },
   {
-    "id": "nb_dla_368b48e1-dfc6-4fa8-aa21-7e11c111d637",
+    "id": 210,
     "cityId": "city_douala",
     "name": "Bwapé",
     "fullAddress": "Bwapé, DOUALA, LITTORAL, Cameroun",
@@ -3718,10 +3927,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_368b48e1-dfc6-4fa8-aa21-7e11c111d637"
   },
   {
-    "id": "nb_dla_63d32dfe-2384-49ae-93c6-faf0836306eb",
+    "id": 211,
     "cityId": "city_douala",
     "name": "Moukala Tanda",
     "fullAddress": "Moukala Tanda, DOUALA, LITTORAL, Cameroun",
@@ -3735,10 +3945,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_63d32dfe-2384-49ae-93c6-faf0836306eb"
   },
   {
-    "id": "nb_dla_2d403500-381e-437f-bc65-b3ba09b967e3",
+    "id": 212,
     "cityId": "city_douala",
     "name": "Kombo",
     "fullAddress": "Kombo, DOUALA, LITTORAL, Cameroun",
@@ -3752,10 +3963,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_2d403500-381e-437f-bc65-b3ba09b967e3"
   },
   {
-    "id": "nb_dla_8eaaf5be-6506-4c32-a1e1-0e02432b302d",
+    "id": 213,
     "cityId": "city_douala",
     "name": "Bouma",
     "fullAddress": "Bouma, DOUALA, LITTORAL, Cameroun",
@@ -3769,10 +3981,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_8eaaf5be-6506-4c32-a1e1-0e02432b302d"
   },
   {
-    "id": "nb_dla_941390bb-8130-4454-9442-819d657b5edf",
+    "id": 214,
     "cityId": "city_douala",
     "name": "Moungangué",
     "fullAddress": "Moungangué, DOUALA, LITTORAL, Cameroun",
@@ -3786,10 +3999,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_941390bb-8130-4454-9442-819d657b5edf"
   },
   {
-    "id": "nb_dla_8e6b4a1c-69bf-4cf4-a34d-73986b7b5c1a",
+    "id": 215,
     "cityId": "city_douala",
     "name": "Kombo Moukoko (île Moundjou)",
     "fullAddress": "Kombo Moukoko (île Moundjou), DOUALA, LITTORAL, Cameroun",
@@ -3803,10 +4017,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_8e6b4a1c-69bf-4cf4-a34d-73986b7b5c1a"
   },
   {
-    "id": "nb_dla_0db0b00c-95bb-4276-860c-eda36421f292",
+    "id": 216,
     "cityId": "city_douala",
     "name": "Poka I",
     "fullAddress": "Poka I, DOUALA, LITTORAL, Cameroun",
@@ -3820,10 +4035,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_0db0b00c-95bb-4276-860c-eda36421f292"
   },
   {
-    "id": "nb_dla_cb5ca596-6e10-4d0b-93e2-05d3f88e3758",
+    "id": 217,
     "cityId": "city_douala",
     "name": "Akra Kombo",
     "fullAddress": "Akra Kombo, DOUALA, LITTORAL, Cameroun",
@@ -3837,10 +4053,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_cb5ca596-6e10-4d0b-93e2-05d3f88e3758"
   },
   {
-    "id": "nb_dla_1b26e2ed-0a1d-43e8-b919-854a6cd1e14c",
+    "id": 218,
     "cityId": "city_douala",
     "name": "Cap Cameroun",
     "fullAddress": "Cap Cameroun, DOUALA, LITTORAL, Cameroun",
@@ -3854,10 +4071,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_1b26e2ed-0a1d-43e8-b919-854a6cd1e14c"
   },
   {
-    "id": "nb_dla_ea257000-6710-4ee1-8008-01ac159c192c",
+    "id": 219,
     "cityId": "city_douala",
     "name": "Petit Toubé",
     "fullAddress": "Petit Toubé, DOUALA, LITTORAL, Cameroun",
@@ -3871,10 +4089,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_ea257000-6710-4ee1-8008-01ac159c192c"
   },
   {
-    "id": "nb_dla_5538aebe-4ae2-43e4-9b39-e57171bd2820",
+    "id": 220,
     "cityId": "city_douala",
     "name": "Bikoro",
     "fullAddress": "Bikoro, DOUALA, LITTORAL, Cameroun",
@@ -3888,10 +4107,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5538aebe-4ae2-43e4-9b39-e57171bd2820"
   },
   {
-    "id": "nb_dla_8c9128ea-7630-4af8-bbf4-4f91d046550e",
+    "id": 221,
     "cityId": "city_douala",
     "name": "Matanda Massadi",
     "fullAddress": "Matanda Massadi, DOUALA, LITTORAL, Cameroun",
@@ -3905,10 +4125,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_8c9128ea-7630-4af8-bbf4-4f91d046550e"
   },
   {
-    "id": "nb_dla_563d16e3-e485-4f1a-a32f-5f0c0d432a07",
+    "id": 222,
     "cityId": "city_douala",
     "name": "PK 16",
     "fullAddress": "PK 16, DOUALA 5E, LITTORAL",
@@ -3922,10 +4143,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_563d16e3-e485-4f1a-a32f-5f0c0d432a07"
   },
   {
-    "id": "nb_dla_5220aef3-8751-4ea0-920e-72b60651ab11",
+    "id": 223,
     "cityId": "city_douala",
     "name": "PK 17",
     "fullAddress": "PK 17, DOUALA 5E, LITTORAL, LITTORAL",
@@ -3939,10 +4161,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_5220aef3-8751-4ea0-920e-72b60651ab11"
   },
   {
-    "id": "nb_dla_8d4a5e5b-255e-401d-805e-dbc3a9d32a3d",
+    "id": 224,
     "cityId": "city_douala",
     "name": "PK 18",
     "fullAddress": "PK 18, DOUALA, Cameroun",
@@ -3956,10 +4179,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_8d4a5e5b-255e-401d-805e-dbc3a9d32a3d"
   },
   {
-    "id": "nb_dla_68d903c8-4a72-4641-bd7b-f6e52d8853b7",
+    "id": 225,
     "cityId": "city_douala",
     "name": "PK 19",
     "fullAddress": "PK 19, DOUALA, LITTORAL, Cameroun",
@@ -3973,10 +4197,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_68d903c8-4a72-4641-bd7b-f6e52d8853b7"
   },
   {
-    "id": "nb_dla_55457798-190d-480c-9b3d-976b81e2b155",
+    "id": 226,
     "cityId": "city_douala",
     "name": "PK 21",
     "fullAddress": "PK 21, DOUALA 5E, LITTORAL, LITTORAL",
@@ -3990,10 +4215,11 @@
     "ville": "DOUALA 5E",
     "departement": "WOURI",
     "zone": "commercial",
-    "status": "actif"
+    "status": "actif",
+    "uuid": "nb_dla_55457798-190d-480c-9b3d-976b81e2b155"
   },
   {
-    "id": "nb_dla_4dcb651d-da8f-4691-a1c4-116b206e4c2c",
+    "id": 227,
     "cityId": "city_douala",
     "name": "Japoma Village",
     "fullAddress": "Japoma Village, DOUALA, LITTORAL, Cameroun",
@@ -4007,10 +4233,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_4dcb651d-da8f-4691-a1c4-116b206e4c2c"
   },
   {
-    "id": "nb_dla_6455f51d-3322-41e4-ad22-abc302eaa318",
+    "id": 228,
     "cityId": "city_douala",
     "name": "Nyalla Camp Militaire",
     "fullAddress": "Nyalla Camp Militaire, DOUALA, LITTORAL, Cameroun",
@@ -4024,10 +4251,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_6455f51d-3322-41e4-ad22-abc302eaa318"
   },
   {
-    "id": "nb_dla_a2bc64f7-083e-4685-a940-4f68919f2e82",
+    "id": 229,
     "cityId": "city_douala",
     "name": "Nkolmbong",
     "fullAddress": "Nkolmbong, DOUALA, LITTORAL, Cameroun",
@@ -4041,10 +4269,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_a2bc64f7-083e-4685-a940-4f68919f2e82"
   },
   {
-    "id": "nb_dla_22bde340-0a60-4205-831c-daaacc3c0e8a",
+    "id": 230,
     "cityId": "city_douala",
     "name": "Ndoghem",
     "fullAddress": "Ndoghem, DOUALA, LITTORAL, Cameroun",
@@ -4058,10 +4287,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_22bde340-0a60-4205-831c-daaacc3c0e8a"
   },
   {
-    "id": "nb_dla_1fca2ace-bf98-48c4-8413-0b5ababc8305",
+    "id": 231,
     "cityId": "city_douala",
     "name": "Logbessou Plateau",
     "fullAddress": "Logbessou Plateau, DOUALA, LITTORAL, Cameroun",
@@ -4075,10 +4305,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_1fca2ace-bf98-48c4-8413-0b5ababc8305"
   },
   {
-    "id": "nb_dla_5894c0d6-92a3-4fef-8970-d6dd7728e43e",
+    "id": 232,
     "cityId": "city_douala",
     "name": "Denver Sud",
     "fullAddress": "Denver Sud, DOUALA, LITTORAL, Cameroun",
@@ -4092,10 +4323,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5894c0d6-92a3-4fef-8970-d6dd7728e43e"
   },
   {
-    "id": "nb_dla_5346b954-d0bc-410e-9e93-ec3d2c3eaab2",
+    "id": 233,
     "cityId": "city_douala",
     "name": "Beedi Malangue",
     "fullAddress": "Beedi Malangue, DOUALA, LITTORAL, Cameroun",
@@ -4109,10 +4341,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5346b954-d0bc-410e-9e93-ec3d2c3eaab2"
   },
   {
-    "id": "nb_dla_d80c8961-c44e-414e-8a61-1732e4145881",
+    "id": 234,
     "cityId": "city_douala",
     "name": "Cité Cicam",
     "fullAddress": "Cité Cicam, DOUALA, Cameroun",
@@ -4126,10 +4359,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_d80c8961-c44e-414e-8a61-1732e4145881"
   },
   {
-    "id": "nb_dla_90449e06-7bba-44b8-90a9-14adf613fd98",
+    "id": 235,
     "cityId": "city_douala",
     "name": "Ndobo Rail",
     "fullAddress": "Ndobo Rail, DOUALA, LITTORAL, Cameroun",
@@ -4143,10 +4377,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_90449e06-7bba-44b8-90a9-14adf613fd98"
   },
   {
-    "id": "nb_dla_0106d13b-419b-4962-8e35-947f4c0d79cf",
+    "id": 236,
     "cityId": "city_douala",
     "name": "Djebale 1",
     "fullAddress": "Djebale 1, DOUALA, Cameroun",
@@ -4160,10 +4395,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_0106d13b-419b-4962-8e35-947f4c0d79cf"
   },
   {
-    "id": "nb_dla_92d178e4-6b10-4d24-a8ba-3c55397e5c1e",
+    "id": 237,
     "cityId": "city_douala",
     "name": "Djebale 2",
     "fullAddress": "Djebale 2, DOUALA, Cameroun",
@@ -4177,10 +4413,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_92d178e4-6b10-4d24-a8ba-3c55397e5c1e"
   },
   {
-    "id": "nb_dla_175faec6-dd41-4054-b1f5-28e5f908840e",
+    "id": 238,
     "cityId": "city_douala",
     "name": "Mbanya",
     "fullAddress": "Mbanya, DOUALA, Cameroun",
@@ -4194,10 +4431,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_175faec6-dd41-4054-b1f5-28e5f908840e"
   },
   {
-    "id": "nb_dla_3d7cb185-b738-4b8b-9854-5debbbfef99b",
+    "id": 239,
     "cityId": "city_douala",
     "name": "Piti",
     "fullAddress": "Piti, DOUALA, LITTORAL, Cameroun",
@@ -4211,10 +4449,11 @@
     "ville": "Douala",
     "departement": "Wouri",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_3d7cb185-b738-4b8b-9854-5debbbfef99b"
   },
   {
-    "id": "nb_dla_1e42d1d0-49b0-48a9-a161-3974fb4fc5cf",
+    "id": 240,
     "cityId": "city_yaounde",
     "name": "Nlongkak",
     "fullAddress": "Nlongkak, YAOUNDÉ, Cameroun",
@@ -4228,10 +4467,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_1e42d1d0-49b0-48a9-a161-3974fb4fc5cf"
   },
   {
-    "id": "nb_dla_bfb00188-2074-4cfe-a79e-0a5ff7e3c53a",
+    "id": 241,
     "cityId": "city_yaounde",
     "name": "Emana",
     "fullAddress": "Emana, YAOUNDÉ, Cameroun",
@@ -4245,10 +4485,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_bfb00188-2074-4cfe-a79e-0a5ff7e3c53a"
   },
   {
-    "id": "nb_dla_37c2ee5e-d965-44a6-85fc-c6e64b62e2d8",
+    "id": 242,
     "cityId": "city_yaounde",
     "name": "Messassi",
     "fullAddress": "Messassi, YAOUNDÉ, Cameroun",
@@ -4262,10 +4503,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_37c2ee5e-d965-44a6-85fc-c6e64b62e2d8"
   },
   {
-    "id": "nb_dla_7f780aae-a55f-4f9a-863c-bf4ddcc80e22",
+    "id": 243,
     "cityId": "city_yaounde",
     "name": "Etoudi",
     "fullAddress": "Etoudi, YAOUNDÉ, Cameroun",
@@ -4279,10 +4521,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_7f780aae-a55f-4f9a-863c-bf4ddcc80e22"
   },
   {
-    "id": "nb_dla_44287558-727d-4dd0-be15-0b522d1fbc94",
+    "id": 244,
     "cityId": "city_yaounde",
     "name": "Olembe",
     "fullAddress": "Olembe, YAOUNDÉ, Cameroun",
@@ -4296,10 +4539,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_44287558-727d-4dd0-be15-0b522d1fbc94"
   },
   {
-    "id": "nb_dla_ea8a4a2e-c95e-41d0-a022-cd287e91c9b2",
+    "id": 245,
     "cityId": "city_yaounde",
     "name": "Mokolo",
     "fullAddress": "Mokolo, YAOUNDÉ, Cameroun",
@@ -4313,10 +4557,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_ea8a4a2e-c95e-41d0-a022-cd287e91c9b2"
   },
   {
-    "id": "nb_dla_fba7fefe-76b7-4ec1-bb52-f905311c269d",
+    "id": 246,
     "cityId": "city_yaounde",
     "name": "Madagascar",
     "fullAddress": "Madagascar, YAOUNDÉ, LITTORAL, Cameroun",
@@ -4330,10 +4575,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_fba7fefe-76b7-4ec1-bb52-f905311c269d"
   },
   {
-    "id": "nb_dla_5e0738df-a464-49cb-9c5c-0f92a7fdc564",
+    "id": 247,
     "cityId": "city_yaounde",
     "name": "Nkomkana",
     "fullAddress": "Nkomkana, YAOUNDÉ, Cameroun",
@@ -4347,10 +4593,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5e0738df-a464-49cb-9c5c-0f92a7fdc564"
   },
   {
-    "id": "nb_dla_3929149c-f862-4312-ba5c-a5a35f8c161e",
+    "id": 248,
     "cityId": "city_yaounde",
     "name": "Briquetterie",
     "fullAddress": "Briquetterie, YAOUNDÉ, Cameroun",
@@ -4364,10 +4611,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_3929149c-f862-4312-ba5c-a5a35f8c161e"
   },
   {
-    "id": "nb_dla_3502de73-8710-41c1-b6e9-0768a9ada247",
+    "id": 249,
     "cityId": "city_yaounde",
     "name": "Carrière",
     "fullAddress": "Carrière, YAOUNDÉ, Cameroun",
@@ -4381,10 +4629,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_3502de73-8710-41c1-b6e9-0768a9ada247"
   },
   {
-    "id": "nb_dla_a1e4b1d5-1b8d-4650-99ef-6c5aa0d295ee",
+    "id": 250,
     "cityId": "city_yaounde",
     "name": "Obili",
     "fullAddress": "Obili, YAOUNDÉ, Cameroun",
@@ -4398,10 +4647,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_a1e4b1d5-1b8d-4650-99ef-6c5aa0d295ee"
   },
   {
-    "id": "nb_dla_3a058d0b-03a0-48f4-b2bb-c545b6aba2af",
+    "id": 251,
     "cityId": "city_yaounde",
     "name": "Melen",
     "fullAddress": "Melen, YAOUNDÉ, Cameroun",
@@ -4415,10 +4665,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_3a058d0b-03a0-48f4-b2bb-c545b6aba2af"
   },
   {
-    "id": "nb_dla_5e717e09-4c27-4bf1-8bde-8fa308879606",
+    "id": 252,
     "cityId": "city_yaounde",
     "name": "Nsam",
     "fullAddress": "Nsam, YAOUNDÉ, Cameroun",
@@ -4432,10 +4683,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5e717e09-4c27-4bf1-8bde-8fa308879606"
   },
   {
-    "id": "nb_dla_d35a85f5-3384-4782-8548-3ae41cbf23c3",
+    "id": 253,
     "cityId": "city_yaounde",
     "name": "Dakar",
     "fullAddress": "Dakar, YAOUNDÉ, Cameroun",
@@ -4449,10 +4701,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_d35a85f5-3384-4782-8548-3ae41cbf23c3"
   },
   {
-    "id": "nb_dla_f6c8343b-9bb0-4444-b60a-686c6763b9d6",
+    "id": 254,
     "cityId": "city_yaounde",
     "name": "Simbock",
     "fullAddress": "Simbock, YAOUNDÉ, Cameroun",
@@ -4466,10 +4719,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_f6c8343b-9bb0-4444-b60a-686c6763b9d6"
   },
   {
-    "id": "nb_dla_ff5cbba3-df56-4370-8f87-9c5bbf35d2b4",
+    "id": 255,
     "cityId": "city_yaounde",
     "name": "Ahala",
     "fullAddress": "Ahala, YAOUNDÉ, Cameroun",
@@ -4483,10 +4737,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_ff5cbba3-df56-4370-8f87-9c5bbf35d2b4"
   },
   {
-    "id": "nb_dla_955543eb-9951-4cb6-a79d-c2544f58d63a",
+    "id": 256,
     "cityId": "city_yaounde",
     "name": "Mimboman",
     "fullAddress": "Mimboman, YAOUNDÉ, Cameroun",
@@ -4500,10 +4755,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_955543eb-9951-4cb6-a79d-c2544f58d63a"
   },
   {
-    "id": "nb_dla_d0adefe4-508d-462b-b393-d74e79ba6a58",
+    "id": 257,
     "cityId": "city_yaounde",
     "name": "Kondengui",
     "fullAddress": "Kondengui, YAOUNDÉ, Cameroun",
@@ -4517,10 +4773,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_d0adefe4-508d-462b-b393-d74e79ba6a58"
   },
   {
-    "id": "nb_dla_9b0584da-a355-4ecc-aa1c-3a52a7e7384b",
+    "id": 258,
     "cityId": "city_yaounde",
     "name": "Nkolndongo",
     "fullAddress": "Nkolndongo, YAOUNDÉ, Cameroun",
@@ -4534,10 +4791,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_9b0584da-a355-4ecc-aa1c-3a52a7e7384b"
   },
   {
-    "id": "nb_dla_9a4ce4ed-9f4d-452f-b930-8ff2e449504c",
+    "id": 259,
     "cityId": "city_yaounde",
     "name": "Emombo",
     "fullAddress": "Emombo, YAOUNDÉ, Cameroun",
@@ -4551,10 +4809,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_9a4ce4ed-9f4d-452f-b930-8ff2e449504c"
   },
   {
-    "id": "nb_dla_71422e49-db33-4706-93ed-c785e7c0408b",
+    "id": 260,
     "cityId": "city_yaounde",
     "name": "Ekounou",
     "fullAddress": "Ekounou, YAOUNDÉ, Cameroun",
@@ -4568,10 +4827,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_71422e49-db33-4706-93ed-c785e7c0408b"
   },
   {
-    "id": "nb_dla_c758a3ea-488c-4986-bf77-5bd686af52bb",
+    "id": 261,
     "cityId": "city_yaounde",
     "name": "Nkoabang",
     "fullAddress": "Nkoabang, YAOUNDÉ, Cameroun",
@@ -4585,10 +4845,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_c758a3ea-488c-4986-bf77-5bd686af52bb"
   },
   {
-    "id": "nb_dla_d2224069-225e-4f68-8cb9-2fbd79618dd9",
+    "id": 262,
     "cityId": "city_yaounde",
     "name": "Essos",
     "fullAddress": "Essos, YAOUNDÉ, Cameroun",
@@ -4602,10 +4863,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_d2224069-225e-4f68-8cb9-2fbd79618dd9"
   },
   {
-    "id": "nb_dla_55821271-024e-4f68-a48c-c8cd8e263414",
+    "id": 263,
     "cityId": "city_yaounde",
     "name": "Ngousso",
     "fullAddress": "Ngousso, YAOUNDÉ, Cameroun",
@@ -4619,10 +4881,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_55821271-024e-4f68-a48c-c8cd8e263414"
   },
   {
-    "id": "nb_dla_5364fa9d-2e17-46f4-aa51-8a845106fa9f",
+    "id": 264,
     "cityId": "city_yaounde",
     "name": "Nkolmesseng",
     "fullAddress": "Nkolmesseng, YAOUNDÉ, Cameroun",
@@ -4636,10 +4899,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_5364fa9d-2e17-46f4-aa51-8a845106fa9f"
   },
   {
-    "id": "nb_dla_c082b3bb-99c1-4090-90b4-4ded8293ab0e",
+    "id": 265,
     "cityId": "city_yaounde",
     "name": "Mendong",
     "fullAddress": "Mendong, YAOUNDÉ, Cameroun",
@@ -4653,10 +4917,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_c082b3bb-99c1-4090-90b4-4ded8293ab0e"
   },
   {
-    "id": "nb_dla_f3fa2044-3db7-49ff-b0a4-f717537822f0",
+    "id": 266,
     "cityId": "city_yaounde",
     "name": "Rond-point Express",
     "fullAddress": "Rond-point Express, YAOUNDÉ, Cameroun",
@@ -4670,10 +4935,11 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_f3fa2044-3db7-49ff-b0a4-f717537822f0"
   },
   {
-    "id": "nb_dla_be49ccaa-ca75-4d39-9625-56debd5a6a6c",
+    "id": 267,
     "cityId": "city_yaounde",
     "name": "Minkama",
     "fullAddress": "Minkama, YAOUNDÉ, Cameroun",
@@ -4687,6 +4953,7 @@
     "ville": "Yaoundé",
     "departement": "Mfoundi",
     "status": "actif",
-    "zone": "commercial"
+    "zone": "commercial",
+    "uuid": "nb_dla_be49ccaa-ca75-4d39-9625-56debd5a6a6c"
   }
 ]

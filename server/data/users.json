@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "name": "Admin Citrine",
+    "email": "citrinemobilite@gmail.com",
+    "role": "admin",
+    "active": true,
+    "passwordHash": "$2b$10$OL26beg1byyr8/gd.cw2wOvDhVq3sO.AXPpiuJkkMFtmIDyeQuT2m",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "uuid": "usr_citrine_admin"
+  },
+  {
+    "id": 2,
+    "name": "Landry Moutongo",
+    "email": "landrymoutongo97@gmail.com",
+    "role": "admin",
+    "active": true,
+    "passwordHash": "$2b$10$OL26beg1byyr8/gd.cw2wOvDhVq3sO.AXPpiuJkkMFtmIDyeQuT2m",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "uuid": "usr_landry"
+  },
+  {
+    "id": 3,
+    "name": "Doleres",
+    "email": "doleres@citrine-pricing.com",
+    "role": "responsable",
+    "active": true,
+    "passwordHash": "$2b$10$OL26beg1byyr8/gd.cw2wOvDhVq3sO.AXPpiuJkkMFtmIDyeQuT2m",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "uuid": "usr_doleres"
+  },
+  {
+    "id": 4,
+    "name": "Marc",
+    "email": "employe@citrine-pricing.cm",
+    "role": "employe",
+    "active": true,
+    "passwordHash": "$2b$10$OL26beg1byyr8/gd.cw2wOvDhVq3sO.AXPpiuJkkMFtmIDyeQuT2m",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "uuid": "usr_marc"
+  }
+]

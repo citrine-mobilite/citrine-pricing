@@ -1,7 +1,8 @@
 export type UserRole = 'admin' | 'responsable' | 'employe';
 
 export interface User {
-  id: string;
+  id: number;
+  uuid: string;
   email: string;
   name: string;
   role: UserRole;
@@ -12,7 +13,8 @@ export interface User {
 }
 
 export interface City {
-  id: string;
+  id: number;
+  uuid: string;
   name: string;
   country: string;
   currency: string;
@@ -32,7 +34,8 @@ export interface City {
 }
 
 export interface Neighborhood {
-  id: string;
+  id: number;
+  uuid: string;
   cityId: string;
   cityName?: string;
   ville?: string;
@@ -112,7 +115,8 @@ export interface HeroQuote {
 }
 
 export interface PricingCampaign {
-  id: string;
+  id: number;
+  uuid: string;
   cityId: string;
   cityName: string;
   currency: string;
@@ -216,7 +220,8 @@ export interface CanonicalTripPrices {
 }
 
 export interface TripResult {
-  id: string;
+  id: number;
+  uuid: string;
   campaignId: string;
   cityId?: string;
   cityName?: string;
