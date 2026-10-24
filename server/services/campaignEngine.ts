@@ -648,3 +648,188 @@ export async function startCampaignExecution(
 ) {
   return await initializeCampaignSession(campaign, city, pairs);
 }
+
+/**
+ * Exécution automatique complète en arrière-plan d'une campagne (appelée par pg_cron / webhooks)
+ */
+export async function runAutomatedServerCampaign(
+  targetCityId?: string | number,
+  triggeredByName: string = 'Cron Supabase (pg_cron)'
+): Promise<{ campaignId: number; totalPairs: number }> {
+  await ensureSynced();
+
+  const city = cities.find(c => 
+    targetCityId 
+      ? (String(c.id) === String(targetCityId) || c.uuid === targetCityId)
+      : c.active
+  ) || cities[0];
+
+  if (!city || !city.active) {
+    throw new Error(`Aucune ville active trouvée pour exécuter le pricing automatique.`);
+  }
+
+  const activeNbs = neighborhoods.filter(n => (String(n.cityId) === String(city.id) || n.cityId === city.uuid) && n.active);
+  if (activeNbs.length < 2) {
+    throw new Error(`Moins de 2 quartiers actifs pour ${city.name}.`);
+  }
+
+  const pairs = generateBenchmarkPairs(activeNbs);
+  const campaignSeqId = getNextSequence('campaigns');
+  const campaignUuid = randomUUID();
+
+  const campaign: PricingCampaign = {
+    id: campaignSeqId,
+    uuid: campaignUuid,
+    cityId: String(city.id),
+    cityName: city.name,
+    currency: city.currency || 'XAF',
+    triggerType: 'scheduled',
+    triggeredByUserId: 'cron_supabase',
+    triggeredByUserName: triggeredByName,
+    triggeredByUserRole: 'system',
+    status: 'in_progress',
+    totalPairs: pairs.length,
+    completedPairs: 0,
+    failedPairs: 0,
+    startedAt: new Date().toISOString(),
+    logs: [
+      {
+        level: 'info',
+        timestamp: new Date().toISOString(),
+        message: `Démarrage de la tarification automatique (${pairs.length} trajets) programmée par ${triggeredByName} pour ${city.name}.`
+      }
+    ]
+  };
+
+  const { totalChunks } = await initializeCampaignSession(campaign, city, pairs);
+
+  // Exécution asynchrone lot par lot sans bloquer la requête HTTP
+  (async () => {
+    try {
+      console.log(`[Cron Pricing] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
+      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+        const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
+        if (!session || session.campaign.status === 'cancelled') {
+          console.log(`[Cron Pricing] Campagne #${campaignSeqId} interrompue.`);
+          break;
+        }
+        await processCampaignChunk(String(campaignSeqId), chunkIdx);
+      }
+
+      await finalizeCampaignExecution(String(campaignSeqId));
+      console.log(`[Cron Pricing] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
+    } catch (err: any) {
+      console.error(`[Cron Pricing] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
+    }
+  })();
+
+  return { campaignId: campaignSeqId, totalPairs: pairs.length };
+}
+
+/**
+ * Exécution automatique complète en arrière-plan d'une campagne aéroport (appelée par pg_cron à 22h)
+ */
+export async function runAutomatedAirportCampaign(
+  targetCityId?: string | number,
+  triggeredByName: string = 'Cron Aéroport (pg_cron)'
+): Promise<{ campaignId: number; totalPairs: number }> {
+  await ensureSynced();
+
+  const city = cities.find(c => 
+    targetCityId 
+      ? (String(c.id) === String(targetCityId) || c.uuid === targetCityId)
+      : c.active
+  ) || cities[0];
+
+  if (!city || !city.active) {
+    throw new Error(`Aucune ville active trouvée pour exécuter le pricing aéroport.`);
+  }
+
+  const cityNbs = neighborhoods.filter(n => (String(n.cityId) === String(city.id) || n.cityId === city.uuid) && n.active);
+  
+  // Identifier le quartier aéroport (zoneType === 'airport' ou nom contenant 'aéroport')
+  const airportNb = cityNbs.find(n => 
+    n.zoneType === 'airport' || 
+    n.zone === 'airport' || 
+    n.name.toLowerCase().includes('aéroport') ||
+    n.name.toLowerCase().includes('aeroport')
+  );
+
+  if (!airportNb && !city.airport) {
+    throw new Error(`Aucun quartier ou configuration aéroport trouvée pour ${city.name}.`);
+  }
+
+  // Créer des paires : de l'aéroport vers tous les autres quartiers, et inversement
+  const pairs: Array<{ origin: Neighborhood; dest: Neighborhood }> = [];
+  const airportNode: Neighborhood = airportNb || {
+    id: 'airport_virtual',
+    uuid: 'uuid_airport',
+    cityId: city.uuid || String(city.id),
+    name: city.airport?.name || `Aéroport de ${city.name}`,
+    lat: city.airport?.lat || city.center.lat,
+    lng: city.airport?.lng || city.center.lng,
+    active: true,
+    zoneType: 'airport'
+  };
+
+  for (const nb of cityNbs) {
+    if (nb.id === airportNode.id) continue;
+    pairs.push({ origin: airportNode, dest: nb });
+    pairs.push({ origin: nb, dest: airportNode });
+  }
+
+  if (pairs.length === 0) {
+    throw new Error(`Aucune paire aéroport n'a pu être générée.`);
+  }
+
+  const campaignSeqId = getNextSequence('campaigns');
+  const campaignUuid = randomUUID();
+
+  const campaign: PricingCampaign = {
+    id: campaignSeqId,
+    uuid: campaignUuid,
+    cityId: String(city.id),
+    cityName: city.name,
+    currency: city.currency || 'XAF',
+    triggerType: 'scheduled',
+    scopeMode: 'airport' as any,
+    triggeredByUserId: 'cron_supabase_airport',
+    triggeredByUserName: triggeredByName,
+    triggeredByUserRole: 'system',
+    status: 'in_progress',
+    totalPairs: pairs.length,
+    completedPairs: 0,
+    failedPairs: 0,
+    startedAt: new Date().toISOString(),
+    logs: [
+      {
+        level: 'info',
+        timestamp: new Date().toISOString(),
+        message: `Démarrage de la tarification spéciale aéroport (${pairs.length} trajets) programmée par ${triggeredByName} pour ${city.name}.`
+      }
+    ]
+  };
+
+  const { totalChunks } = await initializeCampaignSession(campaign, city, pairs);
+
+  // Exécution asynchrone lot par lot
+  (async () => {
+    try {
+      console.log(`[Airport Pricing] Démarrage de la campagne aéroport #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
+      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+        const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
+        if (!session || session.campaign.status === 'cancelled') {
+          break;
+        }
+        await processCampaignChunk(String(campaignSeqId), chunkIdx);
+      }
+
+      await finalizeCampaignExecution(String(campaignSeqId));
+      console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
+    } catch (err: any) {
+      console.error(`[Airport Pricing] Erreur lors de l'exécution automatique aéroport #${campaignSeqId}:`, err.message);
+    }
+  })();
+
+  return { campaignId: campaignSeqId, totalPairs: pairs.length };
+}

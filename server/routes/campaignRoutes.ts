@@ -25,7 +25,9 @@ import {
   finalizeCampaignExecution,
   cancelChunkCampaignSession,
   cleanNeighborhoodName,
-  campaignSessions
+  campaignSessions,
+  runAutomatedServerCampaign,
+  runAutomatedAirportCampaign
 } from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
 import { getNextSequence } from '../db/counters.js';
@@ -650,6 +652,26 @@ router.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="pricing_${cityName.toLowerCase()}_${canonicalTrips.length}_trajets.csv"`);
   return res.send(csvContent);
+});
+
+// 10. Endpoint déclenché par pg_cron de Supabase (pour la campagne aéroport de 22h)
+router.all('/api/cron/trigger-airport', async (req: Request, res: Response) => {
+  try {
+    const { cityId } = req.method === 'POST' ? req.body : req.query;
+    console.log('[Cron Airport Route] Requête reçue pour /api/cron/trigger-airport:', { cityId, method: req.method });
+
+    const result = await runAutomatedAirportCampaign(cityId, 'Cron Aéroport Supabase (pg_cron)');
+    return res.json({
+      success: true,
+      message: 'Tarification aéroport automatique initiée avec succès en arrière-plan.',
+      campaignId: result.campaignId,
+      totalPairs: result.totalPairs,
+      triggeredAt: new Date().toISOString()
+    });
+  } catch (err: any) {
+    console.error('[Cron Airport Route Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 export default router;
