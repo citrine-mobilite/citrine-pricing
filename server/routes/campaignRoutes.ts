@@ -26,6 +26,7 @@ import {
   cancelChunkCampaignSession,
   cleanNeighborhoodName,
   campaignSessions,
+  cancelledCampaignIds,
   runAutomatedServerCampaign,
   runAutomatedAirportCampaign
 } from '../services/campaignEngine.js';
@@ -46,7 +47,8 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
 
   // Fusion avec les campagnes actives en mémoire (Sessions en temps réel)
   for (const [id, session] of campaignSessions.entries()) {
-    const idx = list.findIndex(c => c.id === id);
+    const sUuid = session.campaign.uuid;
+    const idx = list.findIndex(c => String(c.id) === String(id) || (sUuid && c.uuid === sUuid) || c.uuid === String(id));
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...session.campaign };
     } else {
@@ -54,13 +56,26 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
     }
   }
   for (const [id, session] of activePricingSessions.entries()) {
-    const idx = list.findIndex(c => c.id === id);
+    const sUuid = session.campaign.uuid;
+    const idx = list.findIndex(c => String(c.id) === String(id) || (sUuid && c.uuid === sUuid) || c.uuid === String(id));
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...session.campaign };
     } else {
       list.unshift({ ...session.campaign });
     }
   }
+
+  // Dédoublonnage strict par ID et UUID
+  const seenKeys = new Set<string>();
+  const deduplicatedList: PricingCampaign[] = [];
+  for (const camp of list) {
+    const key = camp.uuid || String(camp.id);
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      deduplicatedList.push(camp);
+    }
+  }
+  list = deduplicatedList;
 
   list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
@@ -453,6 +468,12 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const campUuid = targetCamp?.uuid || id;
   const campNumId = targetCamp?.id ? String(targetCamp.id) : null;
 
+  // 1. Interrompre immédiatement la boucle de calcul d'arrière-plan si elle est en cours
+  cancelChunkCampaignSession(id);
+  cancelledCampaignIds.add(String(id));
+  if (campUuid) cancelledCampaignIds.add(campUuid);
+  if (campNumId) cancelledCampaignIds.add(campNumId);
+
   const idx = memoryCampaigns.findIndex(c => String(c.id) === String(id) || c.uuid === id);
   if (idx >= 0) memoryCampaigns.splice(idx, 1);
 
@@ -473,7 +494,12 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   deleteCampaignTripsDiskBackup(campUuid);
   if (campNumId) deleteCampaignTripsDiskBackup(campNumId);
   saveLocalCampaignsDiskBackup();
-  deleteCampaignFromSupabase(campUuid).catch(() => {});
+
+  // Suppression en base Supabase (par UUID et ID numérique)
+  await deleteCampaignFromSupabase(campUuid).catch(() => {});
+  if (campNumId) {
+    await deleteCampaignFromSupabase(campNumId).catch(() => {});
+  }
 
   // Nettoyage de l'historique en mémoire locale
   deleteHistoryForCampaign(campUuid).catch(() => {});

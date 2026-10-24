@@ -62,17 +62,26 @@ function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promi
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-export function cancelChunkCampaignSession(campaignId: string): boolean {
-  const memCamp = memoryCampaigns.find(c => String(c.id) === String(campaignId) || c.uuid === campaignId);
-  const campUuid = memCamp?.uuid || campaignId;
+export const cancelledCampaignIds = new Set<string>();
 
-  const session = campaignSessions.get(campUuid) || campaignSessions.get(campaignId);
+export function cancelChunkCampaignSession(campaignId: string): boolean {
+  const strId = String(campaignId);
+  cancelledCampaignIds.add(strId);
+
+  const memCamp = memoryCampaigns.find(c => String(c.id) === strId || c.uuid === strId);
+  const campUuid = memCamp?.uuid || strId;
+  cancelledCampaignIds.add(campUuid);
+
+  const session = campaignSessions.get(campUuid) || campaignSessions.get(strId);
   if (session) {
     session.campaign.status = 'cancelled';
   }
   if (memCamp) {
     memCamp.status = 'cancelled';
   }
+
+  campaignSessions.delete(campUuid);
+  campaignSessions.delete(strId);
 
   return true;
 }
@@ -435,7 +444,15 @@ export async function finalizeCampaignExecution(
   clientTrips?: TripResult[]
 ): Promise<PricingCampaign> {
   const strId = String(campaignId);
+  if (cancelledCampaignIds.has(strId)) {
+    console.log(`[Pricing] Campagne #${strId} supprimée ou annulée. Finalisation ignorée.`);
+    throw new Error('Campagne annulée ou supprimée');
+  }
   const session = campaignSessions.get(strId) || campaignSessions.get(campaignId);
+  if (session && session.campaign.status === 'cancelled') {
+    console.log(`[Pricing] Session de campagne #${strId} marquée comme annulée. Finalisation ignorée.`);
+    throw new Error('Campagne annulée');
+  }
   const rawCampaign = session ? session.campaign : memoryCampaigns.find(c => String(c.id) === strId || c.uuid === strId);
   let campaign: PricingCampaign;
 
@@ -706,20 +723,39 @@ export async function runAutomatedServerCampaign(
   // Exécution asynchrone lot par lot sans bloquer la requête HTTP
   (async () => {
     try {
-      console.log(`[Cron Pricing] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
-      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-        const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
-        if (!session || session.campaign.status === 'cancelled') {
-          console.log(`[Cron Pricing] Campagne #${campaignSeqId} interrompue.`);
-          break;
+      console.log(`[Cron Pricing] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots - 3 workers parallèles)`);
+      const CONCURRENCY = 3;
+      const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
+      let nextIdx = 0;
+
+      const runWorker = async () => {
+        while (nextIdx < chunkIndices.length) {
+          if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
+            console.log(`[Cron Pricing] Campagne #${campaignSeqId} supprimée/annulée en cours de route. Arrêt immédiat.`);
+            return;
+          }
+          const chunkIdx = chunkIndices[nextIdx++];
+          const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
+          if (!session || session.campaign.status === 'cancelled') {
+            console.log(`[Cron Pricing] Campagne #${campaignSeqId} interrompue.`);
+            return;
+          }
+          await processCampaignChunk(String(campaignSeqId), chunkIdx);
         }
-        await processCampaignChunk(String(campaignSeqId), chunkIdx);
+      };
+
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker()));
+
+      if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
+        return;
       }
 
       await finalizeCampaignExecution(String(campaignSeqId));
       console.log(`[Cron Pricing] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
     } catch (err: any) {
-      console.error(`[Cron Pricing] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
+      if (!cancelledCampaignIds.has(String(campaignSeqId))) {
+        console.error(`[Cron Pricing] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
+      }
     }
   })();
 
@@ -828,19 +864,39 @@ export async function runAutomatedAirportCampaign(
   // Exécution asynchrone lot par lot
   (async () => {
     try {
-      console.log(`[Airport Pricing] Démarrage de la campagne aéroport #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
-      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-        const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
-        if (!session || session.campaign.status === 'cancelled') {
-          break;
+      console.log(`[Airport Pricing] Démarrage de la campagne aéroport #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots - 3 workers parallèles)`);
+      const CONCURRENCY = 3;
+      const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
+      let nextIdx = 0;
+
+      const runWorker = async () => {
+        while (nextIdx < chunkIndices.length) {
+          if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
+            console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} supprimée/annulée en cours de route. Arrêt immédiat.`);
+            return;
+          }
+          const chunkIdx = chunkIndices[nextIdx++];
+          const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
+          if (!session || session.campaign.status === 'cancelled') {
+            console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} interrompue.`);
+            return;
+          }
+          await processCampaignChunk(String(campaignSeqId), chunkIdx);
         }
-        await processCampaignChunk(String(campaignSeqId), chunkIdx);
+      };
+
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker()));
+
+      if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
+        return;
       }
 
       await finalizeCampaignExecution(String(campaignSeqId));
       console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
     } catch (err: any) {
-      console.error(`[Airport Pricing] Erreur lors de l'exécution automatique aéroport #${campaignSeqId}:`, err.message);
+      if (!cancelledCampaignIds.has(String(campaignSeqId))) {
+        console.error(`[Airport Pricing] Erreur lors de l'exécution automatique aéroport #${campaignSeqId}:`, err.message);
+      }
     }
   })();
 

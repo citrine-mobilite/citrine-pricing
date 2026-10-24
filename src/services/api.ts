@@ -488,7 +488,9 @@ export const api = {
 
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
-        if (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_')) {
+        if (key.startsWith('citrine_campaigns_v7_')) {
+          localStorage.removeItem(key);
+        } else if (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_')) {
           const raw = localStorage.getItem(key);
           if (raw) {
             try {

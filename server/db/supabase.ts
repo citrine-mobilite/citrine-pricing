@@ -186,12 +186,17 @@ export async function upsertCityToSupabase(city: City): Promise<void> {
   });
 }
 
-export async function deleteCityFromSupabase(cityId: string): Promise<void> {
+export async function deleteCityFromSupabase(cityId: string | number): Promise<void> {
   const client = getSupabaseClient();
   if (!client) return;
   try {
-    const strId = String(cityId);
-    await client.from('cities').delete().or(`id.eq.${strId},uuid.eq.${strId}`);
+    const strId = String(cityId).trim();
+    const isNum = /^\d+$/.test(strId);
+    if (isNum) {
+      await client.from('cities').delete().eq('id', parseInt(strId, 10));
+      await client.from('neighborhoods').delete().eq('city_id', parseInt(strId, 10));
+    }
+    await client.from('cities').delete().eq('uuid', strId);
     await client.from('neighborhoods').delete().eq('city_id', strId);
   } catch (e: any) {
     console.warn('[Supabase] Warning deleting city:', e.message);
@@ -308,12 +313,16 @@ export async function batchUpsertNeighborhoodsToSupabase(nbs: Neighborhood[]): P
   }
 }
 
-export async function deleteNeighborhoodFromSupabase(nbId: string): Promise<void> {
+export async function deleteNeighborhoodFromSupabase(nbId: string | number): Promise<void> {
   const client = getSupabaseClient();
   if (!client) return;
   try {
-    const strId = String(nbId);
-    await client.from('neighborhoods').delete().or(`id.eq.${strId},uuid.eq.${strId}`);
+    const strId = String(nbId).trim();
+    const isNum = /^\d+$/.test(strId);
+    if (isNum) {
+      await client.from('neighborhoods').delete().eq('id', parseInt(strId, 10));
+    }
+    await client.from('neighborhoods').delete().eq('uuid', strId);
   } catch (e: any) {
     console.warn('[Supabase] Warning deleting neighborhood:', e.message);
   }
@@ -493,12 +502,19 @@ export async function saveCampaignToSupabase(campaign: any): Promise<void> {
   });
 }
 
-export async function deleteCampaignFromSupabase(campaignId: string): Promise<void> {
+export async function deleteCampaignFromSupabase(campaignId: string | number): Promise<void> {
   const client = getSupabaseClient();
   if (!client) return;
   try {
-    const strId = String(campaignId);
-    await client.from('campaigns').delete().or(`id.eq.${strId},uuid.eq.${strId}`);
+    const strId = String(campaignId).trim();
+    const isNum = /^\d+$/.test(strId);
+
+    if (isNum) {
+      await client.from('campaigns').delete().eq('id', parseInt(strId, 10));
+      await client.from('campaign_trips').delete().eq('campaign_id', parseInt(strId, 10));
+      await client.from('shortages').delete().eq('campaign_id', parseInt(strId, 10));
+    }
+    await client.from('campaigns').delete().eq('uuid', strId);
     await client.from('campaign_trips').delete().eq('campaign_id', strId);
     await client.from('shortages').delete().eq('campaign_id', strId);
   } catch (e: any) {
