@@ -61,8 +61,8 @@ export function loadCitiesDiskBackup(): boolean {
 
   // Villes par défaut si aucun backup n'existe
   cities = [
-    { id: 1, uuid: 'city_douala', name: 'Douala', country: 'Cameroun', currency: 'XAF', currencySymbol: 'FCFA', active: true, center: { lat: 4.0511, lng: 9.7679 }, autoSchedule: { enabled: false, slots: [] } },
-    { id: 2, uuid: 'city_yaounde', name: 'Yaoundé', country: 'Cameroun', currency: 'XAF', currencySymbol: 'FCFA', active: true, center: { lat: 3.8480, lng: 11.5021 }, autoSchedule: { enabled: false, slots: [] } }
+    { id: '1', uuid: 'city_douala', name: 'Douala', country: 'Cameroun', currency: 'XAF', currencySymbol: 'FCFA', active: true, center: { lat: 4.0511, lng: 9.7679 }, autoSchedule: { enabled: false, slots: [] } },
+    { id: '2', uuid: 'city_yaounde', name: 'Yaoundé', country: 'Cameroun', currency: 'XAF', currencySymbol: 'FCFA', active: true, center: { lat: 3.8480, lng: 11.5021 }, autoSchedule: { enabled: false, slots: [] } }
   ];
   saveCitiesDiskBackup();
   return false;
@@ -192,6 +192,20 @@ export function loadCampaignTripsDiskBackup(campaignId: string): TripResult[] | 
   return null;
 }
 
+export function loadCanonicalTripsDiskBackup(campaignId: string | number): CanonicalTrip[] {
+  try {
+    const filePath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) return data;
+    }
+  } catch (e: any) {
+    console.warn(`[Disk Backup] Warning reading canonical trips for ${campaignId}:`, e.message);
+  }
+  return [];
+}
+
 export function loadLocalCampaignsDiskBackup() {
   try {
     if (fs.existsSync(CAMPAIGNS_FILE)) {
@@ -208,14 +222,14 @@ export function loadLocalCampaignsDiskBackup() {
         // Pré-charger les trajets existants en RAM pour les 25 campagnes les plus récentes
         for (const camp of memoryCampaigns) {
           if (camp?.id) {
-            loadCampaignTripsDiskBackup(camp.id);
+            loadCampaignTripsDiskBackup(String(camp.id));
           }
         }
 
         // Enrichir toutes les campagnes avec les statistiques par arrondissement
         for (const camp of memoryCampaigns) {
           if (!camp.arrondissementStats) {
-            const canonTrips = memoryCampaignCanonicalTrips[camp.id];
+            const canonTrips = memoryCampaignCanonicalTrips[String(camp.id)];
             if (canonTrips && canonTrips.length > 0) {
               const arrMap: Record<string, { sumY: number; countY: number; sumH: number; countH: number; sumT: number; countT: number; count: number }> = {};
               const nbMap = new Map<string, string>();
@@ -357,11 +371,11 @@ export async function recordHistory(record: {
     ...record
   };
   historyRecords.unshift(item);
-  // Historique conservé en mémoire et disque sans consommer d'écritures Firestore
+  // Historique conservé en mémoire et disque local
 }
 
 export async function deleteHistoryForCampaign(campaignId: string) {
-  // L'historique d'audit est géré en mémoire vive locale (0 lecture/écriture Firestore consommée)
+  // L'historique d'audit est géré en mémoire vive locale
   historyRecords = historyRecords.filter(h =>
     h.metadata?.campaignId !== campaignId &&
     !h.description?.includes(campaignId) &&
@@ -372,11 +386,9 @@ export async function deleteHistoryForCampaign(campaignId: string) {
 let hasSyncedOnce = false;
 
 /**
- * Synchronisation initiale ultra-économe (0 lecture superflue)
- * - Villes et quartiers servis 100% depuis le cache local (0 lecture Firestore)
- * - Au maximum 10 campagnes lues si la mémoire est vide (max 10 lectures O(1))
+ * Synchronisation initiale des données locales et Supabase
  */
-export async function syncFromFirestore() {
+export async function syncLocalStorage() {
   if (hasSyncedOnce) return;
   hasSyncedOnce = true;
 
@@ -387,3 +399,6 @@ export async function syncFromFirestore() {
 
   console.log(`[Store] Données initialisées (${cities.length} villes, ${neighborhoods.length} quartiers, ${memoryCampaigns.length} campagnes, ${users.length} users).`);
 }
+
+// Alias de rétrocompatibilité
+export const syncFromFirestore = syncLocalStorage;

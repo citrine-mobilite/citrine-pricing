@@ -40,7 +40,7 @@ export async function seedCampaignTrips() {
     const canonFile = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
 
     if (fs.existsSync(tripsFile) && fs.existsSync(canonFile)) {
-      console.log(`[Seed Trips] Fichiers déjà existants pour ${camp.cityName || 'Douala'} (${campaignId.slice(0, 8)}). Ignoré.`);
+      console.log(`[Seed Trips] Fichiers déjà existants pour ${camp.cityName || 'Douala'} (${String(campaignId).slice(0, 8)}). Ignoré.`);
       continue;
     }
 
@@ -153,15 +153,15 @@ export async function seedCampaignTrips() {
       const fullTrip: TripResult = {
         id: tripId,
         uuid: tripId,
-        campaignId,
+        campaignId: String(campaignId),
         cityId: camp.cityId || 'city_douala',
         cityName: camp.cityName || 'Douala',
         origin: originName,
         destination: destName,
-        startNeighborhoodId: pair.origin.id,
+        startNeighborhoodId: String(pair.origin.id),
         startNeighborhoodName: originName,
         startCoordinates: origCoords as [number, number],
-        endNeighborhoodId: pair.dest.id,
+        endNeighborhoodId: String(pair.dest.id),
         endNeighborhoodName: destName,
         endCoordinates: destCoords as [number, number],
         distanceKm: distKm,

@@ -6,8 +6,8 @@ import {
   saveCanonicalCampaignBatch,
   saveCanonicalCampaignResults,
   loadCanonicalCampaignResults,
-  saveCampaignToFirestore
-} from '../db/firestore.js';
+  saveCampaignToSupabase
+} from '../db/supabase.js';
 import {
   activePricingSessions,
   memoryCampaigns,
@@ -471,10 +471,10 @@ export async function finalizeCampaignExecution(
   if (Array.isArray(clientCanonicalTrips) && clientCanonicalTrips.length > 0) {
     const tripMap = new Map<string, CanonicalTrip>();
     for (const t of canonicalTrips) {
-      tripMap.set(t.id || `${t.origin}-${t.destination}`, t);
+      tripMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
     }
     for (const ct of clientCanonicalTrips) {
-      tripMap.set(ct.id || `${ct.origin}-${ct.destination}`, ct);
+      tripMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
     }
     canonicalTrips = Array.from(tripMap.values());
   }
@@ -613,7 +613,7 @@ export async function finalizeCampaignExecution(
     memoryCampaigns.unshift(campaign);
   }
 
-  // Cache mémoire RAM serveur immédiat (0 lecture Firestore pour les futures consultations)
+  // Cache mémoire RAM serveur immédiat
   if (session?.trips && session.trips.length > 0) {
     memoryCampaignTrips[campaignUuid] = session.trips;
   }
@@ -622,7 +622,7 @@ export async function finalizeCampaignExecution(
   }
   saveCampaignTripsDiskBackup(campaignUuid, memoryCampaignTrips[campaignUuid] || [], canonicalTrips);
   saveLocalCampaignsDiskBackup();
-  await saveCampaignToFirestore(campaign);
+  await saveCampaignToSupabase(campaign);
 
   campaignSessions.delete(campaignUuid);
   campaignSessions.delete(String(campaign.id));

@@ -296,7 +296,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const handleDelete = async (nbId: string | number) => {
     if (!confirm('Supprimer ce quartier ?')) return;
     try {
-      await api.deleteNeighborhood(nbId);
+      await api.deleteNeighborhood(String(nbId));
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Erreur.');

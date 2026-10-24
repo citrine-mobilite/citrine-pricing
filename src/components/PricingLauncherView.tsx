@@ -81,7 +81,7 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
         const collectedTrips: any[] = [];
         const collectedCanonical: any[] = [];
         const meta = {
-          cityId: currentCity.id,
+          cityId: String(currentCity.id),
           cityName: currentCity.name,
           currency: currentCity.currency
         };

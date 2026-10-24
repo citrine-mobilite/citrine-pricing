@@ -22,7 +22,6 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "firebase": "^12.19.0",
     "highcharts": "^13.1.1",
     "highcharts-react-official": "^3.2.3",
     "lucide-react": "^0.546.0",

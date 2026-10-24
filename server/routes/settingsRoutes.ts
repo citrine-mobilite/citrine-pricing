@@ -13,7 +13,7 @@ import {
 import { yangoSettings, updateYangoSettings, callYangoRoutestats, calculateDistanceKm, getLastYangoRaw } from '../services/yangoService.js';
 import { heroSettings, updateHeroSettings, callHeroStats } from '../services/heroService.js';
 import { tripMasterSettings, updateTripMasterSettings, callTripMasterStats } from '../services/tripMasterService.js';
-import { getSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../db/supabase.js';
+import { getSupabaseConfig, saveSupabaseConfig, testSupabaseConnection, syncAllDataWithSupabase, getSupabaseSqlSchema } from '../db/supabase.js';
 import { TripResult } from '../types.js';
 
 const router = Router();
@@ -83,6 +83,18 @@ router.post('/api/settings/supabase/test', async (_req: Request, res: Response) 
   return res.json(result);
 });
 
+router.post('/api/settings/supabase/sync', async (req: Request, res: Response) => {
+  const direction = req.body?.direction === 'pull' ? 'pull' : 'push';
+  const result = await syncAllDataWithSupabase(direction);
+  return res.json(result);
+});
+
+router.get('/api/settings/supabase/schema', async (_req: Request, res: Response) => {
+  return res.json({
+    schema: getSupabaseSqlSchema()
+  });
+});
+
 // Single route test endpoint (routestats)
 router.post('/api/routestats', async (req: Request, res: Response) => {
   const { startLat, startLng, endLat, endLng, tariffClass, cityCurrency, startName, endName } = req.body;
@@ -146,7 +158,7 @@ router.post('/api/routestats', async (req: Request, res: Response) => {
     durationMinutes: yangoRes?.durationMinutes || Math.round(distanceKm * 2.5),
     jams: yangoRes?.jams || false,
     yangoUnavailable: yangoRes?.yangoUnavailable || false,
-    yangoWaitingMinutes: yangoRes?.waitingMinutes || yangoRes?.yangoWaitingMinutes,
+    yangoWaitingMinutes: yangoRes?.waitingTimeMinutes || yangoRes?.yangoWaitingMinutes,
     prices: {
       yango: {
         eco: yangoPrice,

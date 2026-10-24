@@ -58,8 +58,8 @@ export const api = {
     return res.json();
   },
 
-  async updateUser(id: string, data: Partial<User> & { password?: string }): Promise<User> {
-    const res = await fetch(`${BASE_URL}/users/${id}`, {
+  async updateUser(id: string | number, data: Partial<User> & { password?: string }): Promise<User> {
+    const res = await fetch(`${BASE_URL}/users/${encodeURIComponent(String(id))}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -71,8 +71,8 @@ export const api = {
     return res.json();
   },
 
-  async changeUserPassword(id: string, password: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${BASE_URL}/users/${id}/change-password`, {
+  async changeUserPassword(id: string | number, password: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE_URL}/users/${encodeURIComponent(String(id))}/change-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password })
@@ -84,13 +84,14 @@ export const api = {
     return res.json();
   },
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: string | number): Promise<void> {
+    const strId = String(id);
     try {
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_users') || k.includes(id))
+        .filter(k => k.startsWith('citrine_users') || k.includes(strId))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/users/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/users/${encodeURIComponent(strId)}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la suppression de l’utilisateur.');
@@ -735,5 +736,85 @@ export const api = {
 
   getDbFullDataExportUrl(): string {
     return `${BASE_URL}/export/db-full`;
+  },
+
+  // Shortages
+  async getShortages(filters?: {
+    cityId?: string | number;
+    timeSlot?: string;
+    arrondissement?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ records: any[]; shortages: any[]; total: number; summary: any; analytics: any }> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.cityId && filters.cityId !== 'all') params.append('cityId', String(filters.cityId));
+      if (filters?.timeSlot && filters.timeSlot !== 'all') params.append('timeSlot', filters.timeSlot);
+      if (filters?.arrondissement && filters.arrondissement !== 'all') params.append('arrondissement', filters.arrondissement);
+      if (filters?.search) params.append('search', filters.search);
+      if (filters?.limit) params.append('limit', filters.limit.toString());
+      if (filters?.offset) params.append('offset', filters.offset.toString());
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`${BASE_URL}/shortages${qs}`);
+      if (res.ok) {
+        const data = await res.json();
+        const records = data.records || data.shortages || [];
+        const summary = data.summary || data.analytics || { totalShortages: 0, affectedCitiesCount: 0, topShortageCorridors: [] };
+        return {
+          records,
+          shortages: records,
+          total: data.total ?? records.length,
+          summary,
+          analytics: summary
+        };
+      }
+    } catch {}
+    return { records: [], shortages: [], total: 0, summary: { totalShortages: 0, affectedCitiesCount: 0, topShortageCorridors: [] }, analytics: { totalShortages: 0, affectedCitiesCount: 0, topShortageCorridors: [] } };
+  },
+
+  async deleteShortage(id: string | number): Promise<void> {
+    await fetch(`${BASE_URL}/shortages/${encodeURIComponent(String(id))}`, { method: 'DELETE' });
+  },
+
+  async reExtractShortages(): Promise<any> {
+    const res = await fetch(`${BASE_URL}/shortages/re-extract`, { method: 'POST' });
+    if (!res.ok) throw new Error('Erreur ré-extraction pénuries.');
+    return res.json();
+  },
+
+  getShortagesExportUrl(cityId?: string, timeSlot?: string): string {
+    const params = new URLSearchParams();
+    if (cityId && cityId !== 'all') params.append('cityId', cityId);
+    if (timeSlot && timeSlot !== 'all') params.append('timeSlot', timeSlot);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return `${BASE_URL}/shortages/export${qs}`;
+  },
+
+  // Statistics
+  async getStatistics(cityId?: string | number): Promise<any> {
+    try {
+      const params = new URLSearchParams();
+      if (cityId && cityId !== 'all') params.append('cityId', String(cityId));
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`${BASE_URL}/statistics${qs}`);
+      if (res.ok) return await res.json();
+    } catch {}
+    return { totalCampaigns: 0, totalTrips: 0, snapshots: [] };
+  },
+
+  async saveStatisticsSnapshot(data: any): Promise<any> {
+    const res = await fetch(`${BASE_URL}/statistics/snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Erreur sauvegarde snapshot.');
+    return res.json();
+  },
+
+  async deleteStatisticsSnapshot(id: string): Promise<void> {
+    await fetch(`${BASE_URL}/statistics/snapshot/${id}`, { method: 'DELETE' });
   }
 };
+

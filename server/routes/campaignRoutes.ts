@@ -29,6 +29,7 @@ import {
 } from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
 import { getNextSequence } from '../db/counters.js';
+import { loadCanonicalCampaignResults, deleteCampaignFromSupabase, deleteAllCampaignsFromSupabase } from '../db/supabase.js';
 
 const router = Router();
 
@@ -336,12 +337,6 @@ router.post('/api/campaigns/:id/step', async (req: Request, res: Response) => {
   }
 
   let campaign = memoryCampaigns.find(c => c.id === id);
-  if (!campaign && db) {
-    try {
-      const snap = await getDoc(doc(db, 'campaigns', id));
-      if (snap.exists()) campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
-    } catch {}
-  }
 
   if (!campaign) {
     return res.status(404).json({ error: 'Campagne introuvable.' });
@@ -396,23 +391,19 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
   // 2. Sauvegarde disque local
   saveLocalCampaignsDiskBackup();
 
-  // 3. Sauvegarde Firestore
-  if (db && !isFirestoreQuotaExceeded()) {
-    try {
-      const updatePayload: Record<string, any> = {};
-      if (trimmedComment !== undefined) {
-        updatePayload.comment = trimmedComment;
-        updatePayload.comments = trimmedComment;
-      }
-      if (timeSlotOverride !== undefined) {
-        updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
-      }
-      await safeFirestoreWrite('updateCampaignComment', () =>
-        setDoc(doc(db!, 'campaigns', campUuid), cleanFirestoreDoc(updatePayload), { merge: true })
-      );
-    } catch (e: any) {
-      console.warn('[Firestore] Warning saving campaign comment:', e.message);
+  // 3. Sauvegarde Supabase / stockage local
+  try {
+    const updatePayload: Record<string, any> = {};
+    if (trimmedComment !== undefined) {
+      updatePayload.comment = trimmedComment;
+      updatePayload.comments = trimmedComment;
     }
+    if (timeSlotOverride !== undefined) {
+      updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
+    }
+    // Mise à jour locale déjà effectuée sur memCamp
+  } catch (e: any) {
+    console.warn('[Storage] Warning updating campaign comment:', e.message);
   }
 
   await recordHistory({
@@ -441,6 +432,7 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
   activePricingSessions.clear();
   deleteAllCampaignTripsDiskBackup();
   saveLocalCampaignsDiskBackup();
+  deleteAllCampaignsFromSupabase().catch(() => {});
 
   await recordHistory({
     action: 'delete_all_campaigns',
@@ -479,6 +471,7 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   deleteCampaignTripsDiskBackup(campUuid);
   if (campNumId) deleteCampaignTripsDiskBackup(campNumId);
   saveLocalCampaignsDiskBackup();
+  deleteCampaignFromSupabase(campUuid).catch(() => {});
 
   // Nettoyage de l'historique en mémoire locale
   deleteHistoryForCampaign(campUuid).catch(() => {});
@@ -517,44 +510,41 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
     return res.json(diskTrips);
   }
 
-  // 4. Lecture du JSON canonique en base de données Firestore (si quota disponible)
-  if (!isFirestoreQuotaExceeded()) {
-    const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
-    if (canonicalTrips.length > 0) {
-      const cleanTrips = canonicalTrips.map(t => {
-        const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
-        return {
-          id: t.id,
-          uuid: t.uuid,
-          campaignId: campUuid,
-          origin: t.origin,
-          destination: t.destination,
-          distanceKm: t.distanceKm,
-          durationMinutes: t.durationMin,
-          jams: Boolean(t.jams),
-          yangoUnavailable: Boolean(t.yangoUnavailable),
-          yangoWaitingMinutes: t.yangoWaitingMinutes,
-          yangoUnavailableClasses: t.yangoUnavailableClasses,
-          prices: {
-            ...t.prices,
-            yango: {
-              ...pYango,
-              jams: pYango.jams !== undefined ? pYango.jams : Boolean(t.jams),
-              yangoUnavailable: pYango.yangoUnavailable !== undefined ? pYango.yangoUnavailable : Boolean(t.yangoUnavailable)
-            }
-          },
-          cheapest: t.cheapest,
-          status: t.status,
-          createdAt: t.createdAt
-        };
-      }) as unknown as TripResult[];
+  // 4. Lecture du JSON canonique depuis le stockage persistant
+  const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
+  if (canonicalTrips.length > 0) {
+    const cleanTrips = canonicalTrips.map(t => {
+      const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
+      return {
+        id: t.id,
+        uuid: t.uuid,
+        campaignId: campUuid,
+        origin: t.origin,
+        destination: t.destination,
+        distanceKm: t.distanceKm,
+        durationMinutes: t.durationMin,
+        jams: Boolean(t.jams),
+        yangoUnavailable: Boolean(t.yangoUnavailable),
+        yangoWaitingMinutes: t.yangoWaitingMinutes,
+        yangoUnavailableClasses: t.yangoUnavailableClasses,
+        prices: {
+          ...t.prices,
+          yango: {
+            ...pYango,
+            jams: pYango.jams !== undefined ? pYango.jams : Boolean(t.jams),
+            yangoUnavailable: pYango.yangoUnavailable !== undefined ? pYango.yangoUnavailable : Boolean(t.yangoUnavailable)
+          }
+        },
+        cheapest: t.cheapest,
+        status: t.status,
+        createdAt: t.createdAt
+      };
+    }) as unknown as TripResult[];
 
-      memoryCampaignTrips[campUuid] = cleanTrips;
-      // Sauvegarder immédiatement sur disque local pour les prochains redémarrages
-      saveCampaignTripsDiskBackup(campUuid, cleanTrips, canonicalTrips);
-      res.setHeader('X-Cache', 'HIT-FIRESTORE');
-      return res.json(cleanTrips);
-    }
+    memoryCampaignTrips[campUuid] = cleanTrips;
+    saveCampaignTripsDiskBackup(campUuid, cleanTrips, canonicalTrips);
+    res.setHeader('X-Cache', 'HIT-STORAGE');
+    return res.json(cleanTrips);
   }
 
   // Si aucun trajet n'est encore enregistré ou si la campagne débute, renvoyer un tableau vide [] avec statut 200 (pas d'erreur 404)
@@ -596,14 +586,6 @@ router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Respon
   }
 
   let campaign = targetCamp || memoryCampaigns.find(c => c.uuid === campUuid || String(c.id) === String(id));
-  if (!campaign && db) {
-    try {
-      const snap = await getDoc(doc(db, 'campaigns', campUuid));
-      if (snap.exists()) {
-        campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
-      }
-    } catch {}
-  }
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="pricing_canonical_${campUuid}.json"`);
@@ -627,15 +609,6 @@ router.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
   const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
 
   let campaign = targetCamp || memoryCampaigns.find(c => c.uuid === campUuid || String(c.id) === String(id));
-  if (!campaign && db) {
-    try {
-      const snap = await getDoc(doc(db, 'campaigns', campUuid));
-      if (snap.exists()) {
-        campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
-      }
-    } catch {}
-  }
-
   const cityName = campaign?.cityName || 'Douala';
 
   const headers = [

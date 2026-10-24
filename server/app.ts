@@ -7,7 +7,7 @@ import campaignRoutes from './routes/campaignRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import statisticsRoutes from './routes/statisticsRoutes.js';
 import shortageRoutes from './routes/shortageRoutes.js';
-import { syncFromFirestore } from './db/memoryStore.js';
+import { syncLocalStorage } from './db/memoryStore.js';
 
 dotenv.config();
 
@@ -39,6 +39,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // Synchronisation initiale des données locales au démarrage
-syncFromFirestore().catch((e: any) => console.warn('[Storage] Sync warning:', e.message));
+syncLocalStorage().catch((e: any) => console.warn('[Storage] Sync warning:', e.message));
 
 export default app;

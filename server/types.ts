@@ -8,6 +8,7 @@ export interface Neighborhood {
   uuid: string;
   cityId: string;
   name: string;
+  cityName?: string;
   ville?: string;
   departement?: string;
   arrondissement?: string;
@@ -33,6 +34,11 @@ export interface City {
   currencySymbol: string;
   center: GeoCoordinate;
   active: boolean;
+  airport?: {
+    name?: string;
+    lat?: number;
+    lng?: number;
+  };
   autoSchedule: {
     enabled: boolean;
     slots: string[];
@@ -235,7 +241,7 @@ export interface TripResult {
 }
 
 export interface PricingCampaign {
-  id: string;
+  id: string | number;
   uuid: string;
   cityId: string;
   cityName: string;

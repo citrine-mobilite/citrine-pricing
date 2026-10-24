@@ -139,11 +139,11 @@ export const ShortagesView: React.FC<ShortagesViewProps> = ({
   // Calcul des arrondissements disponibles
   const availableArrondissements = useMemo(() => {
     if (!analytics?.byArrondissement) return [];
-    return analytics.byArrondissement.map(a => a.name);
+    return analytics.byArrondissement.map((a: any) => a.name);
   }, [analytics]);
 
   const topCorridor = analytics?.topCorridors?.[0];
-  const peakSlot = analytics?.byTimeSlot?.slice().sort((a, b) => b.count - a.count)?.[0];
+  const peakSlot = analytics?.byTimeSlot?.slice().sort((a: any, b: any) => b.count - a.count)?.[0];
   const topOrigin = analytics?.topOrigins?.[0];
 
   return (
@@ -234,7 +234,7 @@ export const ShortagesView: React.FC<ShortagesViewProps> = ({
               className="bg-transparent text-xs font-semibold text-slate-800 w-full focus:outline-none cursor-pointer"
             >
               <option value="all">Tous les arrondissements</option>
-              {availableArrondissements.map(arr => (
+              {availableArrondissements.map((arr: any) => (
                 <option key={arr} value={arr}>{arr}</option>
               ))}
             </select>
@@ -344,7 +344,7 @@ export const ShortagesView: React.FC<ShortagesViewProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {analytics.topCorridors.slice(0, 8).map((corridor, idx) => {
+              {analytics.topCorridors.slice(0, 8).map((corridor: any, idx: number) => {
                 const maxCount = analytics.topCorridors[0]?.count || 1;
                 const ratio = Math.min(100, Math.round((corridor.count / maxCount) * 100));
 
@@ -392,7 +392,7 @@ export const ShortagesView: React.FC<ShortagesViewProps> = ({
                 <span>Ruptures par Créneau</span>
               </h3>
               <div className="space-y-2 text-xs">
-                {analytics.byTimeSlot.map((s, idx) => (
+                {analytics.byTimeSlot.map((s: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
                     <span className="font-medium text-slate-700">{s.label}</span>
                     <div className="flex items-center gap-2 font-mono">
@@ -411,7 +411,7 @@ export const ShortagesView: React.FC<ShortagesViewProps> = ({
                 <span>Arrondissements les Plus Touchés</span>
               </h3>
               <div className="space-y-1.5 text-xs max-h-48 overflow-y-auto">
-                {analytics.byArrondissement.slice(0, 6).map((arr, idx) => (
+                {analytics.byArrondissement.slice(0, 6).map((arr: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-b-0">
                     <span className="font-medium text-slate-700 truncate">{arr.name}</span>
                     <span className="font-mono font-bold text-slate-900 shrink-0">{arr.count} ({arr.pct}%)</span>

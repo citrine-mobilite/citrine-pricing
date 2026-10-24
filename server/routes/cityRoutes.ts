@@ -3,6 +3,14 @@ import { randomUUID } from 'crypto';
 import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced, saveNeighborhoodsDiskBackup, saveCitiesDiskBackup } from '../db/memoryStore.js';
 import { City, Neighborhood } from '../types.js';
 import { getNextSequence } from '../db/counters.js';
+import {
+  upsertCityToSupabase,
+  deleteCityFromSupabase,
+  upsertNeighborhoodToSupabase,
+  deleteNeighborhoodFromSupabase,
+  clearCityNeighborhoodsInSupabase,
+  batchUpsertNeighborhoodsToSupabase
+} from '../db/supabase.js';
 
 const router = Router();
 
@@ -36,7 +44,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
   }
 
   const newCity: City = {
-    id: getNextSequence('cities'),
+    id: String(getNextSequence('cities')),
     uuid: `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`,
     name: name.trim(),
     country: country.trim(),
@@ -49,6 +57,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
 
   cities.push(newCity);
   saveCitiesDiskBackup();
+  upsertCityToSupabase(newCity).catch(() => {});
 
   await recordHistory({
     action: 'create_city',
@@ -79,6 +88,7 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
   if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
 
   saveCitiesDiskBackup();
+  upsertCityToSupabase(city).catch(() => {});
   return res.json(city);
 });
 
@@ -94,6 +104,7 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const remainingNbs = neighborhoods.filter(n => n.cityId !== String(deleted.id) && n.cityId !== deleted.uuid);
   setNeighborhoods(remainingNbs);
   saveNeighborhoodsDiskBackup();
+  deleteCityFromSupabase(String(deleted.id)).catch(() => {});
 
   await recordHistory({
     action: 'delete_city',
@@ -149,7 +160,7 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
   const isActive = active !== undefined ? Boolean(active) : (status ? status.toLowerCase() !== 'inactif' : true);
 
   const newNb: Neighborhood = {
-    id: getNextSequence('neighborhoods'),
+    id: String(getNextSequence('neighborhoods')),
     uuid: `nb_${randomUUID()}`,
     cityId: city.uuid || String(city.id),
     name: name.trim(),
@@ -168,6 +179,7 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
 
   neighborhoods.push(newNb);
   saveNeighborhoodsDiskBackup();
+  upsertNeighborhoodToSupabase(newNb).catch(() => {});
 
   return res.status(201).json({ ...newNb, cityName: city.name });
 });
@@ -195,6 +207,7 @@ router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   nb.updatedAt = new Date().toISOString();
 
   saveNeighborhoodsDiskBackup();
+  upsertNeighborhoodToSupabase(nb).catch(() => {});
   return res.json(nb);
 });
 
@@ -205,8 +218,9 @@ router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Quartier introuvable.' });
   }
 
-  neighborhoods.splice(idx, 1);
+  const deleted = neighborhoods.splice(idx, 1)[0];
   saveNeighborhoodsDiskBackup();
+  deleteNeighborhoodFromSupabase(String(deleted.id)).catch(() => {});
   return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
 });
 
@@ -220,6 +234,7 @@ router.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Respo
   const filtered = neighborhoods.filter(n => n.cityId !== cUuid && (!cId || String(n.cityId) !== cId));
   setNeighborhoods(filtered);
   saveNeighborhoodsDiskBackup();
+  clearCityNeighborhoodsInSupabase(cUuid).catch(() => {});
   const deletedCount = countBefore - filtered.length;
 
   return res.json({
@@ -276,7 +291,7 @@ router.post('/api/neighborhoods/import-batch', async (req: Request, res: Respons
     if (isDla6) continue;
 
     const newNb: Neighborhood = {
-      id: getNextSequence('neighborhoods'),
+      id: String(getNextSequence('neighborhoods')),
       uuid: `nb_${randomUUID()}`,
       cityId: city.uuid || String(city.id),
       name: String(item.name).trim(),
@@ -297,6 +312,7 @@ router.post('/api/neighborhoods/import-batch', async (req: Request, res: Respons
 
   neighborhoods.push(...createdNeighborhoods);
   saveNeighborhoodsDiskBackup();
+  batchUpsertNeighborhoodsToSupabase(createdNeighborhoods).catch(() => {});
 
   return res.status(201).json({
     success: true,
@@ -351,7 +367,7 @@ router.post('/api/neighborhoods/reconcile-batch', async (req: Request, res: Resp
       }
     } else if (item.status === 'create') {
       const newNb: Neighborhood = {
-        id: getNextSequence('neighborhoods'),
+        id: String(getNextSequence('neighborhoods')),
         uuid: `nb_${randomUUID()}`,
         cityId: city.uuid || String(city.id),
         name: String(item.name).trim(),

@@ -13,7 +13,7 @@ export interface User {
 }
 
 export interface City {
-  id: number | string;
+  id: string;
   uuid: string;
   name: string;
   country: string;
@@ -24,6 +24,11 @@ export interface City {
     lat: number;
     lng: number;
   };
+  airport?: {
+    name?: string;
+    lat?: number;
+    lng?: number;
+  };
   autoSchedule: {
     enabled: boolean;
     slots: string[];
@@ -33,8 +38,54 @@ export interface City {
   updatedAt?: string;
 }
 
+export interface CampaignShortageRecord {
+  id: string | number;
+  campaignId: string | number;
+  cityName: string;
+  origin: string;
+  destination: string;
+  arrondissementOrigin?: string;
+  arrondissementDest?: string;
+  className?: string;
+  timestamp: string;
+  reason?: string;
+  timeSlot?: string;
+  distanceKm?: number;
+  waitingMinutes?: number;
+}
+
+export interface ShortagesAnalyticsSummary {
+  totalShortages: number;
+  affectedCitiesCount: number;
+  topShortageCorridors: Array<{ corridor: string; count: number }>;
+  topCorridors?: any;
+  byTimeSlot?: any;
+  byArrondissement?: any;
+  topOrigins?: any;
+}
+
+export interface StoredStatsSnapshot {
+  id: string | number;
+  uuid?: string;
+  title: string;
+  createdAt: string;
+  timestamp?: string;
+  cityName?: string;
+  notes?: string;
+  summary: any;
+  data?: any;
+}
+
+export interface StatisticsData {
+  totalCampaigns?: number;
+  totalTrips?: number;
+  averagePrice?: number;
+  snapshots?: StoredStatsSnapshot[];
+  current?: any;
+}
+
 export interface Neighborhood {
-  id: number | string;
+  id: string;
   uuid: string;
   cityId: string;
   cityName?: string;

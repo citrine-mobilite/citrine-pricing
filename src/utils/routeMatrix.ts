@@ -284,3 +284,11 @@ export function calculatePossibleBenchmarkPairsCount(
 ): number {
   return generateBenchmarkPairs(neighborhoods, options).length;
 }
+
+export function calculatePossiblePricingPairsCount(
+  neighborhoods: Neighborhood[],
+  options?: RouteMatrixOptions
+): number {
+  return generateBenchmarkPairs(neighborhoods, options).length;
+}
+

@@ -145,7 +145,7 @@ function computeCurrentAggregates(cityIdFilter?: string) {
         const orig = (t.origin || '').toLowerCase();
         const isAirportTrip = dest.includes('aérop') || dest.includes('aerop') || dest.includes('nsimalen') ||
                               orig.includes('aérop') || orig.includes('aerop') || orig.includes('nsimalen') ||
-                              c.scopeMode === 'airport';
+                              (c.scopeMode as any) === 'airport';
 
         if (isAirportTrip) {
           airportTripsCount++;

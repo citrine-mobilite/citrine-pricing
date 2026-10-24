@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Database, CheckCircle2, AlertTriangle, RefreshCw, Key, Globe, Download, Save, ShieldCheck } from 'lucide-react';
+import {
+  Database,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Key,
+  Globe,
+  Download,
+  Save,
+  ShieldCheck,
+  UploadCloud,
+  DownloadCloud,
+  Code2,
+  Copy,
+  Check
+} from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getStoredSupabaseConfig, saveStoredSupabaseConfig } from '../../services/supabase';
 
@@ -12,7 +27,12 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
   const [anonKey, setAnonKey] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingPush, setIsSyncingPush] = useState(false);
+  const [isSyncingPull, setIsSyncingPull] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showSqlSchema, setShowSqlSchema] = useState(false);
+  const [sqlSchema, setSqlSchema] = useState('');
+  const [hasCopied, setHasCopied] = useState(false);
 
   useEffect(() => {
     // 1. Charger depuis le serveur
@@ -25,11 +45,18 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
         }
       })
       .catch(() => {
-        // Fallback localStorage
         const stored = getStoredSupabaseConfig();
         if (stored.url) setUrl(stored.url);
         if (stored.anonKey) setAnonKey(stored.anonKey);
       });
+
+    // Charger le schéma SQL
+    fetch('/api/settings/supabase/schema')
+      .then(res => res.json())
+      .then(data => {
+        if (data.schema) setSqlSchema(data.schema);
+      })
+      .catch(() => {});
   }, []);
 
   const handleTestConnection = async () => {
@@ -46,7 +73,6 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
     setTestResult(null);
 
     try {
-      // Sauvegarder d'abord pour tester côté serveur
       await fetch('/api/settings/supabase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,6 +136,83 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
     }
   };
 
+  const handleSyncPush = async () => {
+    setIsSyncingPush(true);
+    try {
+      const res = await fetch('/api/settings/supabase/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction: 'push' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        Swal.fire({
+          title: 'Synchronisation réussie !',
+          text: data.message,
+          icon: 'success'
+        });
+      } else {
+        throw new Error(data.message || 'Erreur lors de la synchronisation.');
+      }
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Erreur de synchronisation',
+        text: err.message,
+        icon: 'error'
+      });
+    } finally {
+      setIsSyncingPush(false);
+    }
+  };
+
+  const handleSyncPull = async () => {
+    const confirmRes = await Swal.fire({
+      title: 'Importer depuis Supabase ?',
+      text: 'Les données distantes de Supabase remplaceront les données en mémoire locale.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, importer',
+      cancelButtonText: 'Annuler'
+    });
+
+    if (!confirmRes.isConfirmed) return;
+
+    setIsSyncingPull(true);
+    try {
+      const res = await fetch('/api/settings/supabase/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction: 'pull' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        Swal.fire({
+          title: 'Import terminé !',
+          text: data.message,
+          icon: 'success'
+        });
+      } else {
+        throw new Error(data.message || 'Erreur lors de l’import.');
+      }
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Erreur d’import',
+        text: err.message,
+        icon: 'error'
+      });
+    } finally {
+      setIsSyncingPull(false);
+    }
+  };
+
+  const handleCopySql = () => {
+    if (!sqlSchema) return;
+    navigator.clipboard.writeText(sqlSchema).then(() => {
+      setHasCopied(true);
+      setTimeout(() => setHasCopied(false), 2000);
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* En-tête statut */}
@@ -123,11 +226,11 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
               <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                 Base de Données Supabase (PostgreSQL)
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                  Actif &amp; Zéro Quota
+                  Actif &amp; Correspondance 100%
                 </span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Toutes les opérations Firestore ont été retirées. Les données sont persistées en stockage local haute performance et synchronisables avec Supabase.
+                Toutes les insertions, modifications et suppressions du site (villes, quartiers, utilisateurs, campagnes, ruptures) sont synchronisées avec votre base Supabase.
               </p>
             </div>
           </div>
@@ -139,7 +242,7 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Exporter JSON</span>
+              <span>Export Secours JSON</span>
             </a>
           </div>
         </div>
@@ -151,7 +254,7 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
           Identifiants de Connexion Supabase
         </h4>
         <p className="text-xs text-slate-500 mb-4">
-          Entrez l’URL de votre projet Supabase ainsi que votre clé publique Anon pour lier l’application.
+          Entrez l’URL de votre projet Supabase ainsi que votre clé publique Anon pour lier l’application en lecture et écriture.
         </p>
 
         <form onSubmit={handleSaveConfig} className="space-y-4">
@@ -204,7 +307,7 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
               type="button"
               onClick={handleTestConnection}
@@ -223,24 +326,87 @@ export const SupabaseSettingsCard: React.FC<SupabaseSettingsCardProps> = () => {
               <Save className="w-3.5 h-3.5" />
               <span>{isSaving ? 'Enregistrement...' : 'Enregistrer la configuration'}</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleSyncPush}
+              disabled={isSyncingPush}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
+              title="Envoyer toutes les données locales vers Supabase"
+            >
+              <UploadCloud className={`w-3.5 h-3.5 ${isSyncingPush ? 'animate-spin' : ''}`} />
+              <span>{isSyncingPush ? 'Synchronisation...' : 'Synchroniser le Site vers Supabase'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSyncPull}
+              disabled={isSyncingPull}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
+              title="Importer les données depuis Supabase vers le site"
+            >
+              <DownloadCloud className={`w-3.5 h-3.5 ${isSyncingPull ? 'animate-spin' : ''}`} />
+              <span>{isSyncingPull ? 'Importation...' : 'Importer depuis Supabase'}</span>
+            </button>
           </div>
         </form>
+      </div>
+
+      {/* Accordéon Schéma DDL SQL Supabase */}
+      <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-2xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Code2 className="w-4 h-4 text-[#1F4F4A]" />
+            <h4 className="text-sm font-semibold text-slate-900">
+              Script SQL de Création des Tables Supabase
+            </h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopySql}
+              className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+            >
+              {hasCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{hasCopied ? 'Copié !' : 'Copier le SQL'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSqlSchema(!showSqlSchema)}
+              className="text-xs text-[#1F4F4A] hover:underline font-semibold cursor-pointer"
+            >
+              {showSqlSchema ? 'Masquer le code' : 'Afficher le code SQL'}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500 mt-1 mb-3">
+          Si votre projet Supabase est neuf, copiez et collez ce script dans l'éditeur SQL de votre Dashboard Supabase pour créer instantanément les tables (<code className="font-mono text-slate-700">cities</code>, <code className="font-mono text-slate-700">neighborhoods</code>, <code className="font-mono text-slate-700">users</code>, <code className="font-mono text-slate-700">campaigns</code>, <code className="font-mono text-slate-700">campaign_trips</code>, <code className="font-mono text-slate-700">shortages</code>).
+        </p>
+
+        {showSqlSchema && (
+          <div className="mt-3 relative">
+            <pre className="bg-slate-900 text-slate-100 p-4 rounded-xl text-xs font-mono overflow-x-auto max-h-96">
+              {sqlSchema}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Guide & Sécurité */}
       <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 text-xs text-slate-600 space-y-2">
         <div className="flex items-center gap-2 font-semibold text-slate-900">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>Architecture Indépendante &amp; Haute Disponibilité</span>
+          <span>Correspondance Exacte Site ↔ Base Supabase</span>
         </div>
         <p>
-          1. <strong>Zéro Quota Bloquant</strong> : L'application n'utilise plus Firestore. Vos calculs de pricing, villes et quartiers ne subissent plus les limites de quota journalier de Google Cloud.
+          1. <strong>CRUD Temps Réel</strong> : Dès que vous ajoutez, modifiez ou supprimez une ville, un quartier, un utilisateur ou une campagne, la mise à jour est immédiatement envoyée à Supabase avec repli transparent sur stockage disque local.
         </p>
         <p>
-          2. <strong>Données Sécurisées</strong> : Toutes vos campagnes, quartiers et configurations sont sauvegardés en mémoire vive ultra-rapide (RAM) et synchronisés en continu sur disque persistant.
+          2. <strong>Tolérance de Schéma</strong> : Le connecteur gère automatiquement à la fois les colonnes relationnelles standard et le conteneur JSONB <code className="font-mono text-slate-700">data</code> pour éviter toute erreur de schéma manquant.
         </p>
         <p>
-          3. <strong>Évolutivité Supabase</strong> : Dès que votre projet Supabase est configuré, vos tables PostgreSQL peuvent être alimentées directement via le client Supabase.
+          3. <strong>Indépendance &amp; Continuité</strong> : Même en cas de coupure de connexion avec Supabase, l'application continue de fonctionner sans interruption grâce au cache RAM et au stockage persistant sur disque.
         </p>
       </div>
     </div>

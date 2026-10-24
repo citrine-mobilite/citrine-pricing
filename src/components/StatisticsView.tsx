@@ -156,7 +156,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
 
     // Métriques spécifiques Destinations Aéroport (Agrégation des campagnes de type 'airport' en base)
     const isYaounde = selectedCityFilter.includes('yaound') || (selectedCityFilter !== 'all' && cities.find(c => String(c.id) === selectedCityFilter)?.name.toLowerCase().includes('yaound'));
-    const airportCampaigns = completedCampaigns.filter(c => c.scopeMode === 'airport');
+    const airportCampaigns = completedCampaigns.filter(c => (c.scopeMode as any) === 'airport');
     
     const defaultAirportStats = {
       tripsCount: 0,
@@ -378,7 +378,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
 
     if (confirmRes.isConfirmed) {
       try {
-        await api.deleteStatisticsSnapshot(snapId);
+        await api.deleteStatisticsSnapshot(String(snapId));
         setSnapshots(prev => prev.filter(s => String(s.id) !== String(snapId) && s.uuid !== String(snapId)));
         if (selectedSnapshot && (String(selectedSnapshot.id) === String(snapId) || selectedSnapshot.uuid === String(snapId))) {
           setSelectedSnapshot(null);
@@ -980,7 +980,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
-                  {aggregateMetrics.airportStats.arrondissements.map((arr, idx) => {
+                  {aggregateMetrics.airportStats.arrondissements.map((arr: any, idx: number) => {
                     const delta = arr.avgY > 0 && arr.avgH > 0 ? Math.round(((arr.avgY - arr.avgH) / arr.avgY) * 100) : 0;
                     return (
                       <tr key={idx} className="hover:bg-sky-50/40 transition">
@@ -1063,7 +1063,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                         <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-slate-400" />
-                            {new Date(snap.timestamp).toLocaleDateString('fr-FR')}
+                            {new Date(snap.timestamp || snap.createdAt || Date.now()).toLocaleDateString('fr-FR')}
                           </span>
                           <span>•</span>
                           <span className="text-slate-600 font-medium">{snap.cityName || 'Cameroun'}</span>
@@ -1140,7 +1140,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
                         {selectedSnapshot.title}
                       </h3>
                       <div className="text-[11px] text-slate-500">
-                        {new Date(selectedSnapshot.timestamp).toLocaleString('fr-FR')} • {selectedSnapshot.cityName}
+                        {new Date(selectedSnapshot.timestamp || selectedSnapshot.createdAt || Date.now()).toLocaleString('fr-FR')} • {selectedSnapshot.cityName}
                       </div>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { users, setUsers, recordHistory, CITRINE_ADMIN_PASSWORD, saveUsersDiskBackup, loadUsersDiskBackup } from '../db/memoryStore.js';
 import { User } from '../types.js';
 import { getNextSequence } from '../db/counters.js';
+import { upsertUserToSupabase, deleteUserFromSupabase } from '../db/supabase.js';
 
 const router = Router();
 
@@ -116,6 +117,7 @@ router.post('/api/users', async (req: Request, res: Response) => {
 
   users.push(newUser);
   saveUsersDiskBackup();
+  upsertUserToSupabase(newUser).catch(() => {});
 
   await recordHistory({
     action: 'create_user',
@@ -157,6 +159,7 @@ router.put('/api/users/:id', async (req: Request, res: Response) => {
   }
 
   saveUsersDiskBackup();
+  upsertUserToSupabase(user).catch(() => {});
 
   await recordHistory({
     action: 'update_user',
@@ -186,6 +189,7 @@ router.post('/api/users/:id/change-password', async (req: Request, res: Response
   const rawPass = String(password).trim();
   user.passwordHash = await bcrypt.hash(rawPass, DEFAULT_SALT_ROUNDS);
   saveUsersDiskBackup();
+  upsertUserToSupabase(user).catch(() => {});
 
   await recordHistory({
     action: 'change_password',
@@ -207,6 +211,7 @@ router.delete('/api/users/:id', async (req: Request, res: Response) => {
 
   const deleted = users.splice(idx, 1)[0];
   saveUsersDiskBackup();
+  deleteUserFromSupabase(String(deleted.id)).catch(() => {});
 
   await recordHistory({
     action: 'delete_user',
