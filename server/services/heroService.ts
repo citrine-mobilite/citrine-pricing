@@ -87,7 +87,7 @@ export async function callHeroStats(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
     const payload = new URLSearchParams({
       type: 'getVehicles',

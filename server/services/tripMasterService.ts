@@ -18,34 +18,45 @@ export function updateTripMasterSettings(newSettings: Partial<SystemSettings>) {
 let cachedTmCookie = '';
 let cachedTmToken = '';
 let cachedTmTimestamp = 0;
+let sessionPromise: Promise<{ cookie: string; token: string }> | null = null;
 
 export async function getTripMasterSession(signal?: AbortSignal): Promise<{ cookie: string; token: string }> {
   const now = Date.now();
-  if (cachedTmToken && cachedTmCookie && (now - cachedTmTimestamp < 300000)) {
+  if (cachedTmToken && cachedTmCookie && (now - cachedTmTimestamp < 600000)) {
     return { cookie: cachedTmCookie, token: cachedTmToken };
   }
 
-  try {
-    const res = await fetch('https://tripmastercameroon.com/', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-      },
-      signal
-    });
-
-    const rawCookies = (res.headers as any).getSetCookie ? (res.headers as any).getSetCookie() : [res.headers.get('set-cookie')].filter(Boolean);
-    cachedTmCookie = rawCookies.map((c: string) => c.split(';')[0]).join('; ');
-    const html = await res.text();
-    const tokenMatch = html.match(/name=["']_token["']\s+value=["']([^"']+)["']/i) ||
-                      html.match(/content=["']([^"']+)["']\s+name=["']csrf-token["']/i);
-    cachedTmToken = tokenMatch ? tokenMatch[1] : '';
-    cachedTmTimestamp = now;
-    return { cookie: cachedTmCookie, token: cachedTmToken };
-  } catch (e: any) {
-    console.warn('[TripMaster] Erreur de session/CSRF:', e.message);
-    return { cookie: '', token: '' };
+  if (sessionPromise) {
+    return sessionPromise;
   }
+
+  sessionPromise = (async () => {
+    try {
+      const res = await fetch('https://tripmastercameroon.com/', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        signal
+      });
+
+      const rawCookies = (res.headers as any).getSetCookie ? (res.headers as any).getSetCookie() : [res.headers.get('set-cookie')].filter(Boolean);
+      cachedTmCookie = rawCookies.map((c: string) => c.split(';')[0]).join('; ');
+      const html = await res.text();
+      const tokenMatch = html.match(/name=["']_token["']\s+value=["']([^"']+)["']/i) ||
+                        html.match(/content=["']([^"']+)["']\s+name=["']csrf-token["']/i);
+      cachedTmToken = tokenMatch ? tokenMatch[1] : '';
+      cachedTmTimestamp = Date.now();
+      return { cookie: cachedTmCookie, token: cachedTmToken };
+    } catch (e: any) {
+      console.warn('[TripMaster] Erreur de session/CSRF:', e.message);
+      return { cookie: '', token: '' };
+    } finally {
+      sessionPromise = null;
+    }
+  })();
+
+  return sessionPromise;
 }
 
 export function parseTripMasterNumber(val: any): number {
@@ -103,7 +114,7 @@ export async function callTripMasterStats(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
     const { cookie, token } = await getTripMasterSession(signal || controller.signal);
 

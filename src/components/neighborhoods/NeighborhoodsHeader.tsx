@@ -19,8 +19,8 @@ import {
 interface NeighborhoodsHeaderProps {
   cities: City[];
   currentCity?: City;
-  selectedCityId: string;
-  onSelectCityId: (id: string) => void;
+  selectedCityId: string | number;
+  onSelectCityId: (id: any) => void;
   availableDepartements: string[];
   selectedDepartement: string;
   onSelectDepartement: (dep: string) => void;

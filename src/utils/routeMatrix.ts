@@ -99,7 +99,7 @@ export interface RouteMatrixOptions {
 }
 
 /**
- * Génère la matrice intelligente et équilibrée de trajets pour un pricing VTC multi-villes.
+ * Génère la matrice intelligente et équilibrée de trajets pour un benchmark VTC multi-villes.
  * 
  * RÈGLE D'OR UNIVERSELLE :
  * 1. Isolation stricte par ville :
@@ -112,16 +112,16 @@ export interface RouteMatrixOptions {
  *    - Si la ville n'a pas de sous-découpage, les trajets sont échantillonnés par distance progressive.
  * 4. Paires bidirectionnelles et uniques (A -> B et B -> A ne sont pas dupliquées).
  */
-export function generatePricingPairs(
+export function generateBenchmarkPairs(
   neighborhoods: Neighborhood[],
   options?: RouteMatrixOptions
 ): Array<{ origin: Neighborhood; dest: Neighborhood }> {
   let activeNbs = neighborhoods.filter((n) => n.active);
   if (options?.cityId && options.cityId !== 'all') {
-    const targetKey = options.cityId.toLowerCase().trim();
+    const targetKey = String(options.cityId).toLowerCase().trim();
     activeNbs = activeNbs.filter((n) => {
       const cId = getNeighborhoodCityId(n);
-      return cId === targetKey || n.cityId === options.cityId || cId.includes(targetKey);
+      return cId === targetKey || String(n.cityId) === String(options.cityId) || cId.includes(targetKey);
     });
   }
   if (activeNbs.length < 2) return [];
@@ -147,9 +147,7 @@ export function generatePricingPairs(
   }
 
   const getPairKey = (id1: string | number, id2: string | number): string => {
-    const s1 = String(id1);
-    const s2 = String(id2);
-    return s1 < s2 ? `${s1}---${s2}` : `${s2}---${s1}`;
+    return String(id1) < String(id2) ? `${id1}---${id2}` : `${id2}---${id1}`;
   };
 
   // 2. Traiter chaque ville de manière 100% indépendante
@@ -158,16 +156,15 @@ export function generatePricingPairs(
     if (pairs.length >= maxGlobal) break;
 
     // Suivi des quotas dans cette ville
-    const quotaTracker = new Map<string, Map<string, number>>();
+    const quotaTracker = new Map<string | number, Map<string, number>>();
     const getQuotaCount = (nbId: string | number, targetKey: string): number => {
-      return quotaTracker.get(String(nbId))?.get(targetKey) || 0;
+      return quotaTracker.get(nbId)?.get(targetKey) || 0;
     };
     const incrementQuota = (nbId: string | number, targetKey: string) => {
-      const sId = String(nbId);
-      let map = quotaTracker.get(sId);
+      let map = quotaTracker.get(nbId);
       if (!map) {
         map = new Map<string, number>();
-        quotaTracker.set(sId, map);
+        quotaTracker.set(nbId, map);
       }
       map.set(targetKey, (map.get(targetKey) || 0) + 1);
     };
@@ -281,9 +278,9 @@ export function generatePricingPairs(
 /**
  * Calcule rapidement le nombre de combinaisons effectives selon la matrice intelligente.
  */
-export function calculatePossiblePricingPairsCount(
+export function calculatePossibleBenchmarkPairsCount(
   neighborhoods: Neighborhood[],
   options?: RouteMatrixOptions
 ): number {
-  return generatePricingPairs(neighborhoods, options).length;
+  return generateBenchmarkPairs(neighborhoods, options).length;
 }

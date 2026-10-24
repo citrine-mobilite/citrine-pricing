@@ -2,53 +2,69 @@ import { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { City, PricingCampaign, TripResult } from '../../types';
 import { api } from '../../services/api';
+import { findCityInList, isCampaignInCity } from '../../utils/cityMatching';
 
 export function usePricingCampaign(
   campaigns: PricingCampaign[],
-  selectedCityId: string,
-  propSelectedCampaignId?: string | null,
+  selectedCityId: string | number,
+  propSelectedCampaignId?: string | number | null,
   onSelectCampaignId?: (id: string) => void,
   onSelectCityId?: (id: string) => void,
-  onRefresh?: () => void
+  onRefresh?: () => void,
+  cities?: City[]
 ) {
+  const currentCity = useMemo(() => {
+    return findCityInList(cities || [], selectedCityId);
+  }, [cities, selectedCityId]);
+
   const cityCampaigns = useMemo(
-    () => campaigns.filter((c) => c.cityId === selectedCityId),
-    [campaigns, selectedCityId]
+    () => campaigns.filter((c) => {
+      if (currentCity && isCampaignInCity(c, currentCity)) return true;
+      return String(c.cityId) === String(selectedCityId) || c.cityId === selectedCityId;
+    }),
+    [campaigns, selectedCityId, currentCity]
   );
 
   const [internalCampaignId, setInternalCampaignId] = useState<string>(() => {
-    if (propSelectedCampaignId && campaigns.some((c) => String(c.id) === String(propSelectedCampaignId) || c.uuid === propSelectedCampaignId)) {
-      return String(propSelectedCampaignId);
+    if (propSelectedCampaignId) {
+      const match = campaigns.find((c) => String(c.id) === String(propSelectedCampaignId) || c.uuid === String(propSelectedCampaignId));
+      if (match) return match.uuid || String(match.id);
     }
-    return String(cityCampaigns[0]?.id || campaigns[0]?.id || '');
+    const firstCity = cityCampaigns[0];
+    if (firstCity) return firstCity.uuid || String(firstCity.id);
+    const firstOverall = campaigns[0];
+    return firstOverall ? (firstOverall.uuid || String(firstOverall.id)) : '';
   });
 
   useEffect(() => {
     if (propSelectedCampaignId) {
-      setInternalCampaignId(String(propSelectedCampaignId));
-    } else if (!internalCampaignId) {
-      const activeForCity = campaigns.filter((c) => c.cityId === selectedCityId || String(c.cityId) === String(selectedCityId));
-      if (activeForCity.length > 0) {
-        setInternalCampaignId(String(activeForCity[0].id));
+      const match = campaigns.find((c) => String(c.id) === String(propSelectedCampaignId) || c.uuid === String(propSelectedCampaignId));
+      if (match) {
+        setInternalCampaignId(match.uuid || String(match.id));
       }
+    } else if (!internalCampaignId && cityCampaigns.length > 0) {
+      setInternalCampaignId(cityCampaigns[0].uuid || String(cityCampaigns[0].id));
     }
-  }, [propSelectedCampaignId, campaigns, selectedCityId, internalCampaignId]);
+  }, [propSelectedCampaignId, campaigns, cityCampaigns, internalCampaignId]);
 
   const activeCampaignId = internalCampaignId;
-  const activeCampaign = campaigns.find((c) => String(c.id) === String(activeCampaignId) || c.uuid === activeCampaignId);
+  const activeCampaign = campaigns.find((c) => c.uuid === activeCampaignId || String(c.id) === activeCampaignId);
 
-  const handleCampaignChange = (newCampaignId: string | number) => {
-    const idStr = String(newCampaignId);
-    setInternalCampaignId(idStr);
-    if (onSelectCampaignId) onSelectCampaignId(idStr);
-    const targetCamp = campaigns.find((c) => String(c.id) === idStr || c.uuid === idStr);
-    if (targetCamp && targetCamp.cityId !== selectedCityId && onSelectCityId) {
-      onSelectCityId(String(targetCamp.cityId));
+  const handleCampaignChange = (newCampaignId: string) => {
+    const targetCamp = campaigns.find((c) => c.uuid === newCampaignId || String(c.id) === newCampaignId);
+    const resolvedId = targetCamp?.uuid || newCampaignId;
+    setInternalCampaignId(resolvedId);
+    if (onSelectCampaignId) onSelectCampaignId(resolvedId);
+    if (targetCamp && String(targetCamp.cityId) !== String(selectedCityId) && onSelectCityId) {
+      onSelectCityId(targetCamp.cityId);
     }
   };
 
   const handleDeleteCampaign = async () => {
     if (!activeCampaignId) return;
+    const targetCamp = campaigns.find((c) => c.uuid === activeCampaignId || String(c.id) === activeCampaignId);
+    const resolvedId = targetCamp?.uuid || activeCampaignId;
+
     const result = await Swal.fire({
       title: 'Supprimer cette campagne ?',
       text: 'Cette action est irréversible et supprimera également tous les trajets associés.',
@@ -61,16 +77,21 @@ export function usePricingCampaign(
 
     if (result.isConfirmed) {
       try {
-        await api.deleteCampaign(activeCampaignId);
-        const otherCampaigns = campaigns.filter(
-          (c) => String(c.id) !== String(activeCampaignId) && c.uuid !== activeCampaignId && (c.cityId === selectedCityId || String(c.cityId) === String(selectedCityId))
-        );
-        const nextId = String(otherCampaigns[0]?.id || campaigns.filter((c) => String(c.id) !== String(activeCampaignId) && c.uuid !== activeCampaignId)[0]?.id || '');
-        handleCampaignChange(nextId);
-        if (onRefresh) await onRefresh();
-        Swal.fire({ title: 'Supprimée !', text: 'Campagne supprimée.', icon: 'success', timer: 1500, showConfirmButton: false });
+        await api.deleteCampaign(resolvedId);
+        Swal.fire({
+          title: 'Campagne supprimée',
+          text: 'La campagne a été retirée avec succès.',
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
+        });
+        if (onRefresh) onRefresh();
       } catch (err: any) {
-        Swal.fire('Erreur', err?.message || 'Erreur lors de la suppression.', 'error');
+        Swal.fire({
+          title: 'Erreur',
+          text: err.message || 'Impossible de supprimer la campagne.',
+          icon: 'error'
+        });
       }
     }
   };

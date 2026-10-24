@@ -38,7 +38,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Synchronisation initiale Firestore en arriÃ¨re-plan
-syncFromFirestore().catch((e: any) => console.warn('[Firestore] Sync warning:', e.message));
+// Synchronisation initiale des données locales au démarrage
+syncFromFirestore().catch((e: any) => console.warn('[Storage] Sync warning:', e.message));
 
 export default app;

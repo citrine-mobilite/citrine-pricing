@@ -1,19 +1,12 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { City, Neighborhood, PricingCampaign, TripResult, CanonicalTrip } from '../types.js';
 import {
-  db,
-  cleanFirestoreDoc,
-  safeFirestoreWrite,
   saveCanonicalCampaignBatch,
   saveCanonicalCampaignResults,
-  initCanonicalCampaignResults,
   loadCanonicalCampaignResults,
-  isFirestoreQuotaExceeded,
-  isQuotaExceededError,
-  flagFirestoreQuotaExceeded
+  saveCampaignToFirestore
 } from '../db/firestore.js';
 import {
   activePricingSessions,
@@ -26,14 +19,12 @@ import {
   ensureSynced,
   saveCampaignTripsDiskBackup,
   loadCampaignTripsDiskBackup,
-  loadCanonicalTripsDiskBackup,
   saveLocalCampaignsDiskBackup
 } from '../db/memoryStore.js';
-import { extractAndSaveCampaignShortages } from '../db/shortageStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
 import { callTripMasterStats } from './tripMasterService.js';
-import { generatePricingPairs, detectArrondissement } from '../../src/utils/routeMatrix.js';
+import { generateBenchmarkPairs, detectArrondissement } from '../../src/utils/routeMatrix.js';
 import { getNextSequence } from '../db/counters.js';
 
 export function cleanNeighborhoodName(name: string | null | undefined): string {
@@ -61,7 +52,7 @@ export interface CampaignSessionState {
 }
 
 // Map local des sessions actives
-export const campaignSessions = new Map<string | number, CampaignSessionState>();
+export const campaignSessions = new Map<string, CampaignSessionState>();
 
 function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T> {
   let timeoutId: NodeJS.Timeout;
@@ -71,27 +62,16 @@ function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promi
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-export function cancelChunkCampaignSession(campaignId: string | number): boolean {
-  const session = campaignSessions.get(campaignId);
+export function cancelChunkCampaignSession(campaignId: string): boolean {
+  const memCamp = memoryCampaigns.find(c => String(c.id) === String(campaignId) || c.uuid === campaignId);
+  const campUuid = memCamp?.uuid || campaignId;
+
+  const session = campaignSessions.get(campUuid) || campaignSessions.get(campaignId);
   if (session) {
     session.campaign.status = 'cancelled';
-    // Ne PAS supprimer de campaignSessions afin que les requêtes de lots suivantes soient rejetées immédiatement
   }
-  const memCamp = memoryCampaigns.find(c => c.id === campaignId);
   if (memCamp) {
     memCamp.status = 'cancelled';
-  }
-
-  // Notification d'arrière-plan sans blocage ("Fire & Forget")
-  // Même si Firestore est en panne ou hors quota, l'arrêt en RAM prend effet en 0ms
-  if (db) {
-    const firestorePromise = setDoc(doc(db, 'campaigns', String(campaignId)), { status: 'cancelled' }, { merge: true });
-    Promise.race([
-      firestorePromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore timeout')), 1500))
-    ]).catch((err) => {
-      console.warn('[Firestore] Notification d\'arrêt Firestore en arrière-plan ignorée:', err?.message);
-    });
   }
 
   return true;
@@ -132,19 +112,15 @@ export async function initializeCampaignSession(
     startedAtMs: Date.now()
   };
 
-  campaignSessions.set(campaign.id, sessionState);
+  const campUuid = campaign.uuid || String(campaign.id);
+  campaignSessions.set(campUuid, sessionState);
+  campaignSessions.set(String(campaign.id), sessionState);
 
-  // Écriture initiale unique dans Firestore des métadonnées
-  if (db) {
-    await safeFirestoreWrite('initCampaignMetaDoc', async () => {
-      await setDoc(doc(db!, 'campaigns', String(campaign.id)), cleanFirestoreDoc(campaign));
-    });
-  }
-
-  // Mémoire
+  // Mémoire et persistance locale
+  saveLocalCampaignsDiskBackup();
   memoryCampaigns.unshift(campaign);
-  memoryCampaignTrips[campaign.id] = sessionState.trips;
-  memoryCampaignCanonicalTrips[campaign.id] = sessionState.canonicalTrips;
+  memoryCampaignTrips[campUuid] = sessionState.trips;
+  memoryCampaignCanonicalTrips[campUuid] = sessionState.canonicalTrips;
 
   return { totalChunks: chunks.length, totalPairs: pairs.length };
 }
@@ -173,22 +149,12 @@ export async function processCampaignChunk(
   chunkTrips: TripResult[];
   chunkCanonicalTrips?: CanonicalTrip[];
 }> {
-  let session = campaignSessions.get(campaignId) ||
-    campaignSessions.get(Number(campaignId)) ||
-    Array.from(campaignSessions.values()).find(s => String(s.campaign.id) === String(campaignId) || s.campaign.uuid === String(campaignId));
+  let session = campaignSessions.get(campaignId);
 
   // Reconstitution si le serveur a redémarré (cold start Serverless ou instance Cloud Run secondaire)
   if (!session) {
     await ensureSynced();
-    let camp = memoryCampaigns.find(c => String(c.id) === String(campaignId) || c.uuid === String(campaignId));
-    if (!camp && db && !isFirestoreQuotaExceeded()) {
-      try {
-        const snap = await getDoc(doc(db, 'campaigns', String(campaignId)));
-        if (snap.exists()) camp = { id: snap.id, ...snap.data() } as PricingCampaign;
-      } catch (e: any) {
-        if (isQuotaExceededError(e)) flagFirestoreQuotaExceeded(e);
-      }
-    }
+    let camp = memoryCampaigns.find(c => c.id === campaignId);
 
     // Si la campagne n'est toujours pas trouvée, la reconstruire à partir des métadonnées du client
     if (!camp) {
@@ -215,39 +181,9 @@ export async function processCampaignChunk(
       memoryCampaigns.unshift(camp);
     }
 
-    const city = cities.find(c => c.id === camp?.cityId || c.uuid === camp?.cityId || String(c.id) === String(camp?.cityId)) || { id: camp.cityId, name: camp.cityName, currency: camp.currency } as City;
-    const activeNbs = neighborhoods.filter(n => (n.cityId === city.id || n.cityId === city.uuid || String(n.cityId) === String(city.id)) && n.active);
-    let pairs: Array<{ origin: any; dest: any }> = [];
-    if (camp.scopeMode === 'airport') {
-      const cityAirport = city.airport;
-      let airportDest: any = null;
-      if (cityAirport && cityAirport.lat && cityAirport.lng) {
-        airportDest = {
-          id: `airport_${city.id}`,
-          cityId: String(city.uuid || city.id),
-          name: cityAirport.name || `Aéroport de ${city.name}`,
-          lat: cityAirport.lat,
-          lng: cityAirport.lng,
-          zoneType: 'airport',
-          active: true
-        };
-      } else {
-        airportDest = activeNbs.find(n =>
-          n.zoneType === 'airport' ||
-          n.name.toLowerCase().includes('aérop') ||
-          n.name.toLowerCase().includes('aerop') ||
-          n.name.toLowerCase().includes('nsimalen')
-        );
-      }
-      if (airportDest) {
-        const others = activeNbs.filter(n => String(n.id) !== String(airportDest.id) && n.name.toLowerCase().trim() !== airportDest.name.toLowerCase().trim());
-        pairs = others.map(origin => ({ origin, dest: airportDest }));
-      } else {
-        pairs = generatePricingPairs(activeNbs);
-      }
-    } else {
-      pairs = generatePricingPairs(activeNbs);
-    }
+    const city = cities.find(c => c.id === camp?.cityId) || { id: camp.cityId, name: camp.cityName, currency: camp.currency } as City;
+    const activeNbs = neighborhoods.filter(n => n.cityId === city.id && n.active);
+    let pairs = generateBenchmarkPairs(activeNbs);
     const limitNum = typeof camp.sampleLimit === 'number' ? camp.sampleLimit : (camp.sampleLimit && String(camp.sampleLimit) !== 'all' ? parseInt(String(camp.sampleLimit), 10) : undefined);
     if (limitNum && limitNum < pairs.length) {
       pairs = pairs.slice(0, limitNum);
@@ -272,7 +208,13 @@ export async function processCampaignChunk(
     const diskTrips = loadCampaignTripsDiskBackup(campaignId) || [];
     let diskCanonical = memoryCampaignCanonicalTrips[campaignId] || [];
     if (diskCanonical.length === 0) {
-      diskCanonical = loadCanonicalTripsDiskBackup(campaignId) || [];
+      try {
+        const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
+        const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
+        if (fs.existsSync(canonPath)) {
+          diskCanonical = JSON.parse(fs.readFileSync(canonPath, 'utf8'));
+        }
+      } catch {}
     }
 
     session = {
@@ -318,9 +260,9 @@ export async function processCampaignChunk(
 
     try {
       const [yangoStats, heroStats, tmStats] = await Promise.all([
-        fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 7000, emptyStats as any),
-        fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 7000, emptyStats as any),
-        fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 7000, emptyStats as any)
+        fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 3500, emptyStats as any),
+        fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 3500, emptyStats as any),
+        fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 3500, emptyStats as any)
       ]);
 
       const yEco = yangoStats.priceEconom || (yangoStats.classes?.econom?.price) || yangoStats.price || null;
@@ -355,8 +297,8 @@ export async function processCampaignChunk(
       confCandidates.sort((a, b) => (a.p as number) - (b.p as number));
       const cheaperConf = confCandidates[0]?.name || null;
 
-      const tripSeqId = getNextSequence('trips');
       const tripUuid = randomUUID();
+      const tripId = getNextSequence('trips');
       const cleanOrigin = cleanNeighborhoodName(origin.name);
       const cleanDest = cleanNeighborhoodName(dest.name);
 
@@ -364,7 +306,7 @@ export async function processCampaignChunk(
       const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) ? yangoStats.durationMinutes : durationMin;
 
       const canonicalTrip: CanonicalTrip = {
-        id: tripSeqId,
+        id: String(tripId),
         uuid: tripUuid,
         origin: cleanOrigin,
         destination: cleanDest,
@@ -396,9 +338,9 @@ export async function processCampaignChunk(
       };
 
       const tripRow: TripResult = {
-        id: tripSeqId,
+        id: String(tripId),
         uuid: tripUuid,
-        campaignId,
+        campaignId: session.campaign.uuid || campaignId,
         origin: cleanOrigin,
         destination: cleanDest,
         distanceKm: tripDistanceKm,
@@ -463,9 +405,9 @@ export async function processCampaignChunk(
   session.campaign.completedBatches = session.completedBatches;
   session.campaign.durationSeconds = Math.max(1, Math.round((Date.now() - session.startedAtMs) / 1000));
 
-  // Enregistrement par lot de 10 trajets dans Firestore : exactement 1 écriture par lot
+  // Enregistrement par lot de 10 trajets sur disque persistant
   if (chunkCanonicalTrips.length > 0) {
-    await saveCanonicalCampaignBatch(campaignId, session.city.name, chunkIndex, chunkCanonicalTrips);
+    await saveCanonicalCampaignBatch(campaignId, chunkIndex, chunkCanonicalTrips, session.city.name);
   }
 
   // Synchro mémoire & disque local persistant
@@ -492,8 +434,9 @@ export async function finalizeCampaignExecution(
   clientCanonicalTrips?: CanonicalTrip[],
   clientTrips?: TripResult[]
 ): Promise<PricingCampaign> {
-  const session = campaignSessions.get(campaignId);
-  const rawCampaign = session ? session.campaign : memoryCampaigns.find(c => c.id === campaignId);
+  const strId = String(campaignId);
+  const session = campaignSessions.get(strId) || campaignSessions.get(campaignId);
+  const rawCampaign = session ? session.campaign : memoryCampaigns.find(c => String(c.id) === strId || c.uuid === strId);
   let campaign: PricingCampaign;
 
   if (!rawCampaign) {
@@ -517,10 +460,8 @@ export async function finalizeCampaignExecution(
     campaign = rawCampaign;
   }
 
-  let canonicalTrips = session
-    ? session.canonicalTrips
-    : (memoryCampaignCanonicalTrips[campaignId] || loadCanonicalTripsDiskBackup(campaignId) || []);
-  if (canonicalTrips.length === 0 && db && !isFirestoreQuotaExceeded()) {
+  let canonicalTrips = session ? session.canonicalTrips : memoryCampaignCanonicalTrips[campaignId] || [];
+  if (canonicalTrips.length === 0) {
     try {
       canonicalTrips = await loadCanonicalCampaignResults(campaignId);
     } catch {}
@@ -530,10 +471,10 @@ export async function finalizeCampaignExecution(
   if (Array.isArray(clientCanonicalTrips) && clientCanonicalTrips.length > 0) {
     const tripMap = new Map<string, CanonicalTrip>();
     for (const t of canonicalTrips) {
-      tripMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
+      tripMap.set(t.id || `${t.origin}-${t.destination}`, t);
     }
     for (const ct of clientCanonicalTrips) {
-      tripMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
+      tripMap.set(ct.id || `${ct.origin}-${ct.destination}`, ct);
     }
     canonicalTrips = Array.from(tripMap.values());
   }
@@ -541,10 +482,10 @@ export async function finalizeCampaignExecution(
   if (Array.isArray(clientTrips) && clientTrips.length > 0 && session) {
     const rMap = new Map<string, TripResult>();
     for (const t of session.trips) {
-      rMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
+      rMap.set(t.id || `${t.origin}-${t.destination}`, t);
     }
     for (const ct of clientTrips) {
-      rMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
+      rMap.set(ct.id || `${ct.origin}-${ct.destination}`, ct);
     }
     session.trips = Array.from(rMap.values());
   }
@@ -659,18 +600,13 @@ export async function finalizeCampaignExecution(
   }
 
   campaign.canonicalTripsCount = canonicalTrips.length;
+  const campaignUuid = campaign.uuid || campaignId;
 
-  // Persistance Firestore finale des métadonnées ET du document consolidé unique (pour des lectures futures en 1 seule lecture)
-  if (db) {
-    await safeFirestoreWrite('finalizeCampaignMeta', async () => {
-      await setDoc(doc(db!, 'campaigns', campaignId), cleanFirestoreDoc(campaign));
-    });
-    if (canonicalTrips && canonicalTrips.length > 0) {
-      await saveCanonicalCampaignResults(campaignId, campaign.cityName, canonicalTrips);
-    }
+  if (canonicalTrips && canonicalTrips.length > 0) {
+    await saveCanonicalCampaignResults(campaignUuid, canonicalTrips, campaign.cityName);
   }
 
-  const existingIdx = memoryCampaigns.findIndex(c => c.id === campaignId);
+  const existingIdx = memoryCampaigns.findIndex(c => c.uuid === campaignUuid || String(c.id) === String(campaign.id));
   if (existingIdx >= 0) {
     memoryCampaigns[existingIdx] = campaign;
   } else {
@@ -679,22 +615,17 @@ export async function finalizeCampaignExecution(
 
   // Cache mémoire RAM serveur immédiat (0 lecture Firestore pour les futures consultations)
   if (session?.trips && session.trips.length > 0) {
-    memoryCampaignTrips[campaignId] = session.trips;
+    memoryCampaignTrips[campaignUuid] = session.trips;
   }
   if (canonicalTrips && canonicalTrips.length > 0) {
-    memoryCampaignCanonicalTrips[campaignId] = canonicalTrips;
+    memoryCampaignCanonicalTrips[campaignUuid] = canonicalTrips;
   }
-  saveCampaignTripsDiskBackup(campaignId, memoryCampaignTrips[campaignId] || [], canonicalTrips);
+  saveCampaignTripsDiskBackup(campaignUuid, memoryCampaignTrips[campaignUuid] || [], canonicalTrips);
   saveLocalCampaignsDiskBackup();
+  await saveCampaignToFirestore(campaign);
 
-  // Enregistrement des trajets en pénurie (UNIQUEMENT à la fin de la campagne)
-  try {
-    extractAndSaveCampaignShortages(campaign, canonicalTrips || [], memoryCampaignTrips[campaignId] || []);
-  } catch (err: any) {
-    console.warn('[CampaignEngine] Warning extracting campaign shortages:', err?.message);
-  }
-
-  campaignSessions.delete(campaignId);
+  campaignSessions.delete(campaignUuid);
+  campaignSessions.delete(String(campaign.id));
 
   await recordHistory({
     action: 'complete_campaign',

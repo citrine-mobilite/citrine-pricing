@@ -413,6 +413,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   ], [onSelectCampaign, onNavigate, onRefresh]);
 
+  React.useEffect(() => {
+    if (onRefresh) {
+      onRefresh();
+    }
+  }, []);
+
   return (
     <div className="space-y-5">
       {/* Cartes KPI Opérationnelles */}
@@ -434,6 +440,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Activity className="w-4 h-4 text-[#1F4F4A]" />
             <span>Relevés de Pricing (Récents)</span>
           </h2>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Actualiser les données du tableau de bord"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition cursor-pointer"
+            >
+              <span>Actualiser</span>
+            </button>
+          )}
         </div>
 
         <DataTable

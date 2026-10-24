@@ -1,7 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, cleanFirestoreDoc, safeFirestoreWrite, isFirestoreQuotaExceeded, isQuotaExceededError, flagFirestoreQuotaExceeded } from '../db/firestore.js';
 import {
   cities,
   neighborhoods,
@@ -15,6 +13,7 @@ import {
 import { yangoSettings, updateYangoSettings, callYangoRoutestats, calculateDistanceKm, getLastYangoRaw } from '../services/yangoService.js';
 import { heroSettings, updateHeroSettings, callHeroStats } from '../services/heroService.js';
 import { tripMasterSettings, updateTripMasterSettings, callTripMasterStats } from '../services/tripMasterService.js';
+import { getSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../db/supabase.js';
 import { TripResult } from '../types.js';
 
 const router = Router();
@@ -29,13 +28,11 @@ router.get('/api/settings/yango/last-raw-json', (_req: Request, res: Response) =
 
 router.post('/api/settings', async (req: Request, res: Response) => {
   updateYangoSettings(req.body);
-  await safeFirestoreWrite('updateYangoSettings', () => setDoc(doc(db!, 'settings', 'yango'), cleanFirestoreDoc(yangoSettings), { merge: true }));
   return res.json({ success: true, settings: yangoSettings });
 });
 
 router.post('/api/settings/yango', async (req: Request, res: Response) => {
   updateYangoSettings(req.body);
-  await safeFirestoreWrite('updateYangoSettings', () => setDoc(doc(db!, 'settings', 'yango'), cleanFirestoreDoc(yangoSettings), { merge: true }));
   return res.json({ success: true, settings: yangoSettings });
 });
 
@@ -43,7 +40,6 @@ router.post('/api/settings/yango', async (req: Request, res: Response) => {
 router.get('/api/settings/hero', (_req: Request, res: Response) => res.json(heroSettings));
 router.post('/api/settings/hero', async (req: Request, res: Response) => {
   updateHeroSettings(req.body);
-  await safeFirestoreWrite('updateHeroSettings', () => setDoc(doc(db!, 'settings', 'hero'), cleanFirestoreDoc(heroSettings), { merge: true }));
   return res.json({ success: true, settings: heroSettings });
 });
 
@@ -51,154 +47,167 @@ router.post('/api/settings/hero', async (req: Request, res: Response) => {
 router.get('/api/settings/tripmaster', (_req: Request, res: Response) => res.json(tripMasterSettings));
 router.post('/api/settings/tripmaster', async (req: Request, res: Response) => {
   updateTripMasterSettings(req.body);
-  await safeFirestoreWrite('updateTripMasterSettings', () => setDoc(doc(db!, 'settings', 'tripmaster'), cleanFirestoreDoc(tripMasterSettings), { merge: true }));
   return res.json({ success: true, settings: tripMasterSettings });
+});
+
+// Supabase Settings & Connection
+router.get('/api/settings/supabase', (_req: Request, res: Response) => {
+  const config = getSupabaseConfig();
+  return res.json({
+    url: config.url,
+    anonKey: config.anonKey ? `${config.anonKey.slice(0, 8)}...${config.anonKey.slice(-6)}` : '',
+    hasConfig: Boolean(config.url && config.anonKey)
+  });
+});
+
+router.post('/api/settings/supabase', async (req: Request, res: Response) => {
+  const { url, anonKey } = req.body;
+  if (!url || !anonKey) {
+    return res.status(400).json({ error: 'URL et Clé API Supabase requises.' });
+  }
+
+  const updated = saveSupabaseConfig({
+    url: String(url).trim(),
+    anonKey: String(anonKey).trim()
+  });
+
+  return res.json({
+    success: true,
+    message: 'Configuration Supabase enregistrée.',
+    hasConfig: Boolean(updated.url && updated.anonKey)
+  });
+});
+
+router.post('/api/settings/supabase/test', async (_req: Request, res: Response) => {
+  const result = await testSupabaseConnection();
+  return res.json(result);
 });
 
 // Single route test endpoint (routestats)
 router.post('/api/routestats', async (req: Request, res: Response) => {
   const { startLat, startLng, endLat, endLng, tariffClass, cityCurrency, startName, endName } = req.body;
   if (startLat === undefined || startLng === undefined || endLat === undefined || endLng === undefined) {
-    return res.status(400).json({ error: 'Coordonnées GPS obligatoires.' });
+    return res.status(400).json({ error: 'Coordonnées de départ et d’arrivée requises.' });
   }
 
-  const sLat = Number(startLat);
-  const sLng = Number(startLng);
-  const eLat = Number(endLat);
-  const eLng = Number(endLng);
-  const tClass = tariffClass || 'econom';
-  const curr = cityCurrency || 'XAF';
+  const currency = cityCurrency || 'XAF';
+  const distanceKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
 
-  const [yangoRes, heroRes, tmRes] = await Promise.all([
-    callYangoRoutestats(sLat, sLng, eLat, eLng, tClass, curr),
-    callHeroStats(sLat, sLng, eLat, eLng, tClass, curr, startName || 'Départ', endName || 'Arrivée'),
-    callTripMasterStats(sLat, sLng, eLat, eLng, curr, startName || 'Départ', endName || 'Arrivée')
+  // Appel simultané des 3 services avec leurs vrais paramètres
+  const [yangoRes, heroRes, tripMasterRes] = await Promise.all([
+    callYangoRoutestats(startLat, startLng, endLat, endLng, tariffClass || 'econom', currency).catch(e => {
+      console.warn('[Single Route] Yango error:', e.message);
+      return null;
+    }),
+    callHeroStats(startLat, startLng, endLat, endLng).catch(e => {
+      console.warn('[Single Route] Hero error:', e.message);
+      return null;
+    }),
+    callTripMasterStats(startLat, startLng, endLat, endLng, currency, startName || 'Départ', endName || 'Arrivée').catch(e => {
+      console.warn('[Single Route] Trip Master error:', e.message);
+      return null;
+    })
   ]);
 
-  const mainDistKm = yangoRes.distanceKm || calculateDistanceKm(sLat, sLng, eLat, eLng);
-  const durationMin = yangoRes.durationMinutes || Math.max(2, Math.round((mainDistKm / 25) * 60));
+  const yangoPrice = yangoRes?.priceEconom || yangoRes?.price || yangoRes?.classes?.econom?.price || null;
+  const yangoConfort = yangoRes?.priceConfort || yangoRes?.classes?.business?.price || yangoRes?.classes?.comfortplus?.price || null;
+  const yangoMoto = yangoRes?.priceMoto || yangoRes?.classes?.moto?.price || null;
 
-  const yEco = yangoRes.priceEconom || (yangoRes.classes?.econom?.price) || yangoRes.price || 0;
-  const yConf = yangoRes.priceConfort || yangoRes.classes?.business?.price || yangoRes.classes?.comfort?.price;
-  const yConfPlus = yangoRes.priceConfortPlus || yangoRes.classes?.comfortplus?.price;
-  const yMoto = yangoRes.priceMoto || yangoRes.classes?.moto?.price;
+  const heroPrice = heroRes?.price || null;
+  const heroConfort = heroRes?.priceConfort || null;
+  const heroSuv = heroRes?.priceSuv || null;
 
-  const hEco = heroRes.priceStandard || heroRes.price || 0;
-  const hConf = heroRes.priceConfort;
-  const hSuv = heroRes.priceSuv;
+  const tripMasterPrice = tripMasterRes?.priceEco || null;
+  const tripMasterConfort = tripMasterRes?.priceConfort || null;
+  const tripMasterMoto = tripMasterRes?.priceMoto || null;
 
-  const tmEco = tmRes.priceEco || 0;
-  const tmConf = tmRes.priceConfort;
-  const tmMoto = tmRes.priceMoto;
+  // Calcul du moins cher
+  const validPrices: Array<{ name: string; price: number }> = [];
+  if (yangoPrice) validPrices.push({ name: 'yango', price: yangoPrice });
+  if (heroPrice) validPrices.push({ name: 'hero', price: heroPrice });
+  if (tripMasterPrice) validPrices.push({ name: 'tripmaster', price: tripMasterPrice });
 
-  const ecoList = [
-    { provider: 'yango', price: yEco },
-    { provider: 'hero', price: hEco },
-    { provider: 'tripmaster', price: tmEco }
-  ].filter(p => p.price > 0);
-  ecoList.sort((a, b) => a.price - b.price);
+  let cheapest: 'yango' | 'hero' | 'tripmaster' | 'tie' | 'none' = 'none';
+  let minPrice = Infinity;
+  for (const p of validPrices) {
+    if (p.price < minPrice) {
+      minPrice = p.price;
+      cheapest = p.name as any;
+    } else if (p.price === minPrice) {
+      cheapest = 'tie';
+    }
+  }
 
-  const cheaperProvider: 'yango' | 'hero' | 'tripmaster' | 'equal' = ecoList.length > 0 ? (ecoList[0].provider as any) : 'equal';
-  const deltaPrice = ecoList.length > 1 ? ecoList[1].price - ecoList[0].price : 0;
-
-  const singleTripResult: TripResult = {
-    id: randomUUID(),
-    campaignId: 'quick_test',
-    cityId: 'quick_test_city',
-    origin: startName || 'Départ',
-    destination: endName || 'Arrivée',
-    startNeighborhoodId: 'start',
-    startNeighborhoodName: startName || 'Départ',
-    endNeighborhoodId: 'end',
-    endNeighborhoodName: endName || 'Arrivée',
-    distanceKm: mainDistKm,
-    distanceMeters: Math.round(mainDistKm * 1000),
-    durationSeconds: durationMin * 60,
-    durationMinutes: durationMin,
-    tariffClass: tClass,
-    price: yEco || hEco || tmEco || 0,
-    priceFormatted: (yEco || hEco || tmEco || 0) > 0 ? `${(yEco || hEco || tmEco || 0).toLocaleString('fr-FR')} ${curr}` : 'Non disponible',
-    currency: curr,
-    pricePerKm: mainDistKm > 0 ? Math.round((yEco || hEco || tmEco || 0) / mainDistKm) : 0,
+  const result = {
+    id: `trip_test_${randomUUID().slice(0, 8)}`,
+    origin: startName || `${startLat.toFixed(4)}, ${startLng.toFixed(4)}`,
+    destination: endName || `${endLat.toFixed(4)}, ${endLng.toFixed(4)}`,
+    distanceKm: yangoRes?.distanceKm || distanceKm,
+    durationMinutes: yangoRes?.durationMinutes || Math.round(distanceKm * 2.5),
+    jams: yangoRes?.jams || false,
+    yangoUnavailable: yangoRes?.yangoUnavailable || false,
+    yangoWaitingMinutes: yangoRes?.waitingMinutes || yangoRes?.yangoWaitingMinutes,
     prices: {
-      yango: { eco: yEco > 0 ? yEco : null, confort: yConf || null, confortPlus: yConfPlus || null, moto: yMoto || null },
-      heroCab: { eco: hEco > 0 ? hEco : null, confort: hConf || null, suv: hSuv || null, perKm: null },
-      tripMaster: { eco: tmEco > 0 ? tmEco : null, confort: tmConf || null, moto: tmMoto || null }
+      yango: {
+        eco: yangoPrice,
+        confort: yangoConfort,
+        moto: yangoMoto
+      },
+      heroCab: {
+        eco: heroPrice,
+        confort: heroConfort,
+        suv: heroSuv
+      },
+      tripMaster: {
+        eco: tripMasterPrice,
+        confort: tripMasterConfort,
+        moto: tripMasterMoto
+      }
     },
     cheapest: {
-      eco: cheaperProvider,
+      eco: cheapest,
       confort: null,
-      overall: cheaperProvider
+      overall: cheapest
     },
-    priceEconom: yEco > 0 ? yEco : undefined,
-    priceConfort: yConf && yConf > 0 ? yConf : undefined,
-    priceConfortPlus: yConfPlus && yConfPlus > 0 ? yConfPlus : undefined,
-    priceMoto: yMoto && yMoto > 0 ? yMoto : undefined,
-    priceHero: hEco > 0 ? hEco : undefined,
-    priceHeroStandard: hEco > 0 ? hEco : undefined,
-    priceHeroConfort: hConf && hConf > 0 ? hConf : undefined,
-    priceHeroSuv: hSuv && hSuv > 0 ? hSuv : undefined,
-    priceTripMaster: tmEco > 0 ? tmEco : undefined,
-    priceTripMasterConfort: tmConf && tmConf > 0 ? tmConf : undefined,
-    priceTripMasterMoto: tmMoto && tmMoto > 0 ? tmMoto : undefined,
-    // flat fields
-    yango_eco: yEco > 0 ? yEco : undefined,
-    yango_confort: yConf && yConf > 0 ? yConf : undefined,
-    yango_moto: yMoto && yMoto > 0 ? yMoto : undefined,
-    hero_eco: hEco > 0 ? hEco : undefined,
-    hero_confort: hConf && hConf > 0 ? hConf : undefined,
-    hero_suv: hSuv && hSuv > 0 ? hSuv : undefined,
-    tripmaster_eco: tmEco > 0 ? tmEco : undefined,
-    tripmaster_confort: tmConf && tmConf > 0 ? tmConf : undefined,
-    tripmaster_moto: tmMoto && tmMoto > 0 ? tmMoto : undefined,
-    cheaperProvider,
-    deltaPriceYangoVsHero: deltaPrice,
-    source: 'yango_live',
-    status: (yEco || hEco || tmEco) ? 'success' : 'failed'
+    // Objets bruts pour affichage détaillé et inspection
+    yango: yangoRes,
+    hero: heroRes,
+    heroCab: heroRes,
+    tripMaster: tripMasterRes,
+    // Propriétés plates pour affichage direct dans les composants
+    price: yangoPrice || heroPrice || tripMasterPrice || 0,
+    priceEconom: yangoPrice || undefined,
+    priceConfort: yangoConfort || undefined,
+    priceMoto: yangoMoto || undefined,
+    priceHero: heroPrice || undefined,
+    priceHeroStandard: heroPrice || undefined,
+    priceHeroConfort: heroConfort || undefined,
+    priceHeroSuv: heroSuv || undefined,
+    priceHeroPerKm: heroRes?.pricePerKm || undefined,
+    priceTripMaster: tripMasterPrice || undefined,
+    priceTripMasterConfort: tripMasterConfort || undefined,
+    priceTripMasterMoto: tripMasterMoto || undefined,
+    yango_eco: yangoPrice || undefined,
+    hero_eco: heroPrice || undefined,
+    tripmaster_eco: tripMasterPrice || undefined,
+    status: 'success'
   };
 
-  return res.json({
-    ...singleTripResult,
-    yango: yangoRes,
-    heroCab: heroRes,
-    tripMaster: tmRes
-  });
-});
-
-// Cron Trigger
-router.post('/api/cron/trigger-scheduled', async (_req: Request, res: Response) => {
-  return res.json({ success: true, message: 'Vérification planifiée effectuée.' });
-});
-
-// History (Servi depuis la RAM en priorité - 0 lecture Firestore)
-router.get('/api/history', async (_req: Request, res: Response) => {
-  return res.json(historyRecords);
-});
-
-router.delete('/api/history', async (_req: Request, res: Response) => {
-  setHistoryRecords([]);
-  return res.json({ success: true, message: 'Tout l’historique a été vidé avec succès.' });
-});
-
-router.delete('/api/history/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const filtered = historyRecords.filter(h => String(h.id) !== String(id) && h.uuid !== id);
-  setHistoryRecords(filtered);
-  return res.json({ success: true, message: 'Entrée d’historique supprimée.' });
+  return res.json(result);
 });
 
 // System Status
 router.get('/api/system/status', async (_req: Request, res: Response) => {
-  const isQuota = isFirestoreQuotaExceeded();
+  const supabase = getSupabaseConfig();
   return res.json({
     status: 'ok',
-    storageMode: isQuota ? 'hybrid_local_disk' : 'firestore_canonical_optimized',
+    storageMode: supabase.url ? 'supabase_cloud_active' : 'local_storage_ready',
     activeCampaigns: activePricingSessions.size,
     totalCampaigns: memoryCampaigns.length + activePricingSessions.size,
     totalNeighborhoods: neighborhoods.length,
     totalCities: cities.length,
-    maxFirestorePayload: '< 1 MB (Chunked < 400 KB)',
-    isQuotaExceeded: isQuota
+    supabaseConfigured: Boolean(supabase.url && supabase.anonKey),
+    isQuotaExceeded: false
   });
 });
 
@@ -229,24 +238,6 @@ router.get('/api/export/db-structure', async (_req: Request, res: Response) => {
 // 2. Export Full Database with Data
 router.get('/api/export/db-full', async (_req: Request, res: Response) => {
   try {
-    let campaignsList: any[] = [];
-    let tripsList: any[] = [];
-
-    if (db) {
-      try {
-        const campSnap = await getDocs(collection(db, 'campaigns'));
-        if (!campSnap.empty) {
-          campaignsList = campSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
-        const tripsSnap = await getDocs(collection(db, 'trips'));
-        if (!tripsSnap.empty) {
-          tripsList = tripsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
-      } catch (err: any) {
-        console.warn('[Export] Firestore read warning:', err.message);
-      }
-    }
-
     const fullData = {
       exportType: 'full_database_with_data',
       exportedAt: new Date().toISOString(),
@@ -259,8 +250,7 @@ router.get('/api/export/db-full', async (_req: Request, res: Response) => {
         hero: heroSettings,
         tripmaster: tripMasterSettings
       },
-      campaigns: campaignsList,
-      trips: tripsList
+      campaigns: memoryCampaigns
     };
 
     res.setHeader('Content-Type', 'application/json');

@@ -1,16 +1,5 @@
-import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings, StatisticsData, StoredStatsSnapshot, ShortagesResponse, CampaignShortageRecord } from '../types';
-import {
-  getCachedCampaignTrips,
-  setCachedCampaignTrips,
-  invalidateCampaignTripsCache,
-  invalidateAllTripsCache,
-  getCachedCities,
-  setCachedCities,
-  invalidateCitiesCache,
-  getCachedNeighborhoods,
-  setCachedNeighborhoods,
-  invalidateNeighborhoodsCache
-} from './dbCache';
+import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings } from '../types';
+import { getCachedCampaignTrips, setCachedCampaignTrips, invalidateCampaignTripsCache, invalidateAllTripsCache } from './dbCache';
 
 const BASE_URL = '/api';
 
@@ -69,7 +58,7 @@ export const api = {
     return res.json();
   },
 
-  async updateUser(id: string | number, data: Partial<User> & { password?: string }): Promise<User> {
+  async updateUser(id: string, data: Partial<User> & { password?: string }): Promise<User> {
     const res = await fetch(`${BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -82,7 +71,7 @@ export const api = {
     return res.json();
   },
 
-  async changeUserPassword(id: string | number, password: string): Promise<{ success: boolean; message: string }> {
+  async changeUserPassword(id: string, password: string): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${BASE_URL}/users/${id}/change-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,11 +84,10 @@ export const api = {
     return res.json();
   },
 
-  async deleteUser(id: string | number): Promise<void> {
+  async deleteUser(id: string): Promise<void> {
     try {
-      const idStr = String(id);
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_users') || k.includes(idStr))
+        .filter(k => k.startsWith('citrine_users') || k.includes(id))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/users/${id}`, { method: 'DELETE' });
@@ -109,33 +97,27 @@ export const api = {
     }
   },
 
-  // Cities (avec cache 30 jours et réinitialisation immédiate à la modification)
+  // Cities (avec cache navigateur 24h et 0 lecture Firestore)
+  // Cities (Toujours frais depuis le serveur)
   async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
-    if (!forceRefresh) {
-      const cached = getCachedCities();
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        return cached;
-      }
-    }
+    try {
+      // Purge proactive des anciens caches persistants
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_cities_cache') || k.startsWith('citrine_nbs_cache_v')).forEach(k => localStorage.removeItem(k));
+    } catch {}
 
     try {
       const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setCachedCities(data);
-        }
-        return data;
+        return await res.json();
       }
     } catch (e) {
       console.warn('[API Client] getCities error:', e);
     }
-    return getCachedCities() || [];
+    return [];
   },
 
   async createCity(data: Partial<City>): Promise<City> {
-    invalidateCitiesCache();
     const res = await fetch(`${BASE_URL}/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -145,69 +127,50 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la création de la ville.');
     }
-    invalidateCitiesCache();
     return res.json();
   },
 
-  async updateCity(id: string | number, data: Partial<City>): Promise<City> {
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
+  async updateCity(id: string, data: Partial<City>): Promise<City> {
     const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour de la ville.');
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
     return res.json();
   },
 
-  async deleteCity(id: string | number): Promise<void> {
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
+  async deleteCity(id: string): Promise<void> {
     try {
-      const idStr = String(id);
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(idStr))
+        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(id))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
   },
 
-  // Neighborhoods (avec cache 30 jours par ville et réinitialisation immédiate à la modification)
-  async getNeighborhoods(cityId?: string | number, forceRefresh: boolean = false): Promise<Neighborhood[]> {
-    if (!forceRefresh) {
-      const cached = getCachedNeighborhoods(cityId);
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        return cached;
-      }
-    }
-
+  // Neighborhoods (Toujours frais depuis le serveur)
+  async getNeighborhoods(cityId?: string, forceRefresh: boolean = false): Promise<Neighborhood[]> {
     try {
       const params = new URLSearchParams();
-      if (cityId !== undefined && cityId !== null) params.append('cityId', String(cityId));
+      if (cityId) params.append('cityId', cityId);
       if (forceRefresh) params.append('forceRefresh', 'true');
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setCachedNeighborhoods(cityId, data);
-        }
-        return data;
+        return await res.json();
       }
     } catch (e) {
       console.warn('[API Client] getNeighborhoods error:', e);
     }
-    return getCachedNeighborhoods(cityId) || [];
+    return [];
   },
 
   async createNeighborhood(data: Partial<Neighborhood>): Promise<Neighborhood> {
-    invalidateNeighborhoodsCache(data.cityId);
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -217,79 +180,69 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de l’ajout du quartier.');
     }
-    invalidateNeighborhoodsCache(data.cityId);
     return res.json();
   },
 
-  async updateNeighborhood(id: string | number, data: Partial<Neighborhood>): Promise<Neighborhood> {
-    invalidateNeighborhoodsCache(data.cityId);
+  async updateNeighborhood(id: string, data: Partial<Neighborhood>): Promise<Neighborhood> {
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
+    } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour du quartier.');
-    invalidateNeighborhoodsCache(data.cityId);
     return res.json();
   },
 
-  async deleteNeighborhood(id: string | number, cityId?: string | number): Promise<void> {
-    invalidateNeighborhoodsCache(cityId);
+  async deleteNeighborhood(id: string): Promise<void> {
     try {
-      const idStr = String(id);
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(idStr)).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(id)).forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression du quartier.');
-    invalidateNeighborhoodsCache(cityId);
   },
 
-  async clearCityNeighborhoods(cityId: string | number): Promise<{ success: boolean; deletedCount: number }> {
-    invalidateNeighborhoodsCache(cityId);
+  async clearCityNeighborhoods(cityId: string): Promise<{ success: boolean; deletedCount: number }> {
     try {
-      const idStr = String(cityId);
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(idStr)).forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(cityId)).forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/neighborhoods/city/${encodeURIComponent(String(cityId))}`, {
+    const res = await fetch(`${BASE_URL}/neighborhoods/city/${encodeURIComponent(cityId)}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Erreur lors de la suppression des quartiers de la ville.');
-    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
-  async batchToggleNeighborhoods(cityId: string | number, active: boolean): Promise<{ success: boolean; updatedCount: number; active: boolean }> {
-    invalidateNeighborhoodsCache(cityId);
+  async batchToggleNeighborhoods(cityId: string, active: boolean): Promise<{ success: boolean; updatedCount: number; active: boolean }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/batch-toggle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId: String(cityId), active })
+      body: JSON.stringify({ cityId, active })
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour globale des quartiers.');
-    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
-  async seedCityNeighborhoods(cityId: string | number): Promise<{ neighborhoods: Neighborhood[] }> {
-    invalidateNeighborhoodsCache(cityId);
+  async seedCityNeighborhoods(cityId: string): Promise<{ neighborhoods: Neighborhood[] }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/seed-city`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId: String(cityId) })
+      body: JSON.stringify({ cityId })
     });
     if (!res.ok) throw new Error('Erreur de réinitialisation des quartiers.');
-    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
   async importNeighborhoodsBatch(
-    cityId: string | number,
+    cityId: string,
     neighborhoods: Array<{ name: string; lat: number; lng: number; zoneType?: string; active?: boolean }>
   ): Promise<{ success: boolean; count: number; neighborhoods: Neighborhood[] }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/import-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId: String(cityId), neighborhoods })
+      body: JSON.stringify({ cityId, neighborhoods })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -299,13 +252,13 @@ export const api = {
   },
 
   async reconcileNeighborhoodsBatch(
-    cityId: string | number,
+    cityId: string,
     items: any[]
   ): Promise<{ success: boolean; updatedCount: number; createdCount: number; ignoredCount: number; message: string }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/reconcile-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId: String(cityId), items })
+      body: JSON.stringify({ cityId, items })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -319,12 +272,11 @@ export const api = {
   },
 
   // Campaigns
-  async getCampaigns(cityId?: string | number): Promise<PricingCampaign[]> {
-    const cityIdStr = cityId ? String(cityId) : 'all';
-    const CACHE_KEY = `citrine_campaigns_v7_${cityIdStr}`;
+  async getCampaigns(cityId?: string): Promise<PricingCampaign[]> {
+    const CACHE_KEY = `citrine_campaigns_v7_${cityId || 'all'}`;
 
     try {
-      const url = cityId ? `${BASE_URL}/campaigns?cityId=${encodeURIComponent(String(cityId))}` : `${BASE_URL}/campaigns`;
+      const url = cityId ? `${BASE_URL}/campaigns?cityId=${encodeURIComponent(cityId)}` : `${BASE_URL}/campaigns`;
       const res = await fetch(url);
       if (res.ok) {
         const freshList: PricingCampaign[] = await res.json();
@@ -374,14 +326,14 @@ export const api = {
   },
 
   async startCampaign(data: {
-    cityId: string | number;
-    triggeredByUserId?: string | number;
+    cityId: string;
+    triggeredByUserId?: string;
     triggeredByUserName?: string;
     triggeredByUserRole?: string;
     triggerType?: 'manual' | 'scheduled';
     selectedClasses?: string[];
     sampleLimit?: number | 'all';
-    scopeMode?: 'global' | 'intra' | 'inter' | 'airport' | 'city';
+    scopeMode?: 'global' | 'intra' | 'inter';
     arrondissement?: string;
     originArrondissement?: string;
     destArrondissement?: string;
@@ -426,7 +378,7 @@ export const api = {
     chunkIndex: number, 
     signal?: AbortSignal,
     meta?: {
-      cityId?: string | number;
+      cityId?: string;
       cityName?: string;
       currency?: string;
       scopeMode?: string;
@@ -470,11 +422,7 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la finalisation de la campagne.');
     }
-    const data = await res.json();
-    if (Array.isArray(trips) && trips.length > 0) {
-      setCachedCampaignTrips(String(campaignId), trips).catch(() => {});
-    }
-    return data;
+    return res.json();
   },
 
   async cancelCampaign(id: string | number): Promise<{ campaign: PricingCampaign }> {
@@ -495,7 +443,6 @@ export const api = {
     }
     const data = await res.json();
     try {
-      const idStr = String(id);
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('citrine_campaigns_')) {
@@ -504,7 +451,7 @@ export const api = {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed.data)) {
               parsed.data = parsed.data.map((c: any) =>
-                String(c.id) === idStr
+                c.id === id
                   ? {
                       ...c,
                       comment,
@@ -522,7 +469,7 @@ export const api = {
     return data.campaign;
   },
 
-  async stepCampaign(id: string | number): Promise<{ success: boolean; campaign?: PricingCampaign }> {
+  async stepCampaign(id: string): Promise<{ success: boolean; campaign?: PricingCampaign }> {
     try {
       const res = await fetch(`${BASE_URL}/campaigns/${id}/step`, { method: 'POST' });
       if (res.ok) return await res.json();
@@ -531,13 +478,12 @@ export const api = {
   },
 
   async deleteCampaign(id: string | number): Promise<void> {
-    const idStr = String(id);
-    await invalidateCampaignTripsCache(idStr);
+    await invalidateCampaignTripsCache(String(id));
     try {
-      localStorage.removeItem(`citrine_campaigns_${idStr}`);
-      localStorage.removeItem(`citrine_trips_${idStr}`);
-      localStorage.removeItem(`citrine_canonical_${idStr}`);
-      localStorage.removeItem(`trips_${idStr}`);
+      localStorage.removeItem(`citrine_campaigns_${id}`);
+      localStorage.removeItem(`citrine_trips_${id}`);
+      localStorage.removeItem(`citrine_canonical_${id}`);
+      localStorage.removeItem(`trips_${id}`);
 
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
@@ -547,10 +493,10 @@ export const api = {
             try {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed.data)) {
-                parsed.data = parsed.data.filter((c: any) => String(c.id) !== idStr);
+                parsed.data = parsed.data.filter((c: any) => String(c.id) !== String(id) && c.uuid !== id);
                 localStorage.setItem(key, JSON.stringify(parsed));
               } else if (Array.isArray(parsed)) {
-                const filtered = parsed.filter((c: any) => String(c.id) !== idStr);
+                const filtered = parsed.filter((c: any) => String(c.id) !== String(id) && c.uuid !== id);
                 localStorage.setItem(key, JSON.stringify(filtered));
               }
             } catch {}
@@ -595,7 +541,6 @@ export const api = {
       all?: boolean;
     }
   ): Promise<TripResult[]> {
-    const campIdStr = String(campaignId);
     // Si aucun filtre spécifique, tenter d'abord de servir depuis le cache local IndexedDB
     const hasCustomFilters = Boolean(
       filters?.startNeighborhood ||
@@ -607,10 +552,10 @@ export const api = {
     );
 
     if (!hasCustomFilters) {
-      const cached = await getCachedCampaignTrips(campIdStr);
+      const cached = await getCachedCampaignTrips(String(campaignId));
       if (cached && cached.length > 0) {
         // En arrière-plan non-bloquant, synchroniser le serveur si nécessaire
-        fetch(`${BASE_URL}/campaigns/${campIdStr}/sync-trips`, {
+        fetch(`${BASE_URL}/campaigns/${campaignId}/sync-trips`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trips: cached })
@@ -630,14 +575,14 @@ export const api = {
       if (filters?.search) params.append('search', filters.search);
 
       const qs = params.toString();
-      const res = await fetch(`${BASE_URL}/campaigns/${campIdStr}/results${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/results${qs ? `?${qs}` : ''}`);
       if (res.status === 404) return [];
       if (!res.ok) throw new Error('Erreur lors de la récupération des trajets.');
       const data = await res.json();
 
       // Sauvegarde dans IndexedDB si données reçues et sans filtres restrictifs
       if (!hasCustomFilters && Array.isArray(data) && data.length > 0) {
-        setCachedCampaignTrips(campIdStr, data).catch(() => {});
+        setCachedCampaignTrips(String(campaignId), data).catch(() => {});
       }
 
       return data;
@@ -646,7 +591,7 @@ export const api = {
     }
   },
 
-  getExportCsvUrl(campaignId: string | number): string {
+  getExportCsvUrl(campaignId: string): string {
     return `${BASE_URL}/campaigns/${campaignId}/export`;
   },
 
@@ -772,7 +717,7 @@ export const api = {
     return cachedList;
   },
 
-  async deleteHistoryItem(id: string | number): Promise<void> {
+  async deleteHistoryItem(id: string): Promise<void> {
     try { localStorage.removeItem('citrine_history_v7'); } catch {}
     await fetch(`${BASE_URL}/history/${id}`, { method: 'DELETE' });
   },
@@ -790,82 +735,5 @@ export const api = {
 
   getDbFullDataExportUrl(): string {
     return `${BASE_URL}/export/db-full`;
-  },
-
-  // Statistics & Snapshots
-  async getStatistics(cityId?: string | number): Promise<StatisticsData> {
-    const qs = cityId ? `?cityId=${encodeURIComponent(String(cityId))}` : '';
-    const res = await fetch(`${BASE_URL}/statistics${qs}`);
-    if (!res.ok) throw new Error('Impossible de charger les statistiques.');
-    return res.json();
-  },
-
-  async saveStatisticsSnapshot(data: {
-    title?: string;
-    cityName?: string;
-    notes?: string;
-    customData?: any;
-  }): Promise<{ success: boolean; snapshot: StoredStatsSnapshot }> {
-    const res = await fetch(`${BASE_URL}/statistics/snapshots`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Erreur lors de la sauvegarde de l’instantané.');
-    }
-    return res.json();
-  },
-
-  async deleteStatisticsSnapshot(id: string | number): Promise<{ success: boolean }> {
-    const res = await fetch(`${BASE_URL}/statistics/snapshots/${id}`, {
-      method: 'DELETE'
-    });
-    if (!res.ok) throw new Error('Erreur lors de la suppression de l’instantané.');
-    return res.json();
-  },
-
-  // Shortages (Pénuries & Ruptures)
-  async getShortages(params?: {
-    cityId?: string | number;
-    timeSlot?: string;
-    arrondissement?: string;
-    search?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<ShortagesResponse> {
-    const sp = new URLSearchParams();
-    if (params?.cityId && params.cityId !== 'all') sp.append('cityId', String(params.cityId));
-    if (params?.timeSlot && params.timeSlot !== 'all') sp.append('timeSlot', params.timeSlot);
-    if (params?.arrondissement && params.arrondissement !== 'all') sp.append('arrondissement', params.arrondissement);
-    if (params?.search) sp.append('search', params.search);
-    if (params?.limit) sp.append('limit', String(params.limit));
-    if (params?.offset) sp.append('offset', String(params.offset));
-
-    const qs = sp.toString() ? `?${sp.toString()}` : '';
-    const res = await fetch(`${BASE_URL}/shortages${qs}`);
-    if (!res.ok) throw new Error('Impossible de charger les trajets en pénurie.');
-    return res.json();
-  },
-
-  getShortagesExportUrl(cityId?: string | number, timeSlot?: string): string {
-    const sp = new URLSearchParams();
-    if (cityId && cityId !== 'all') sp.append('cityId', String(cityId));
-    if (timeSlot && timeSlot !== 'all') sp.append('timeSlot', timeSlot);
-    const qs = sp.toString() ? `?${sp.toString()}` : '';
-    return `${BASE_URL}/shortages/export${qs}`;
-  },
-
-  async deleteShortage(id: string | number): Promise<{ success: boolean }> {
-    const res = await fetch(`${BASE_URL}/shortages/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Erreur lors de la suppression du trajet en pénurie.');
-    return res.json();
-  },
-
-  async reExtractShortages(): Promise<{ success: boolean; extractedCount: number; total: number }> {
-    const res = await fetch(`${BASE_URL}/shortages/re-extract`, { method: 'POST' });
-    if (!res.ok) throw new Error('Erreur lors de la ré-extraction des pénuries.');
-    return res.json();
   }
 };

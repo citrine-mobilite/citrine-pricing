@@ -2,16 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import defaultNeighborhoods from '../db/defaultNeighborhoods.json' with { type: 'json' };
-import { generatePricingPairs } from '../../src/utils/routeMatrix.js';
+import { generateBenchmarkPairs } from '../../src/utils/routeMatrix.js';
 import { calculateDistanceKm } from '../../src/utils/geoUtils.js';
 import type { Neighborhood } from '../../src/types/index.js';
 import type { PricingCampaign, TripResult, CanonicalTrip } from '../types.js';
-import { saveCampaignTripsDiskBackup, loadCampaignTripsDiskBackup } from '../db/memoryStore.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
+const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
 
 export async function seedCampaignTrips() {
+  if (!fs.existsSync(TRIPS_DIR)) {
+    fs.mkdirSync(TRIPS_DIR, { recursive: true });
+  }
 
   if (!fs.existsSync(CAMPAIGNS_FILE)) {
     console.log('[Seed Trips] Aucun fichier campaigns.json trouvé.');
@@ -27,16 +30,17 @@ export async function seedCampaignTrips() {
   }
 
   const allNeighborhoods = defaultNeighborhoods as unknown as Neighborhood[];
-  const doualaPairs = generatePricingPairs(allNeighborhoods, { cityId: 'city_douala' });
+  const doualaPairs = generateBenchmarkPairs(allNeighborhoods, { cityId: 'city_douala' });
 
   console.log(`[Seed Trips] Traitement de ${campaigns.length} campagnes...`);
 
   for (const camp of campaigns) {
     const campaignId = camp.id;
-    const existing = loadCampaignTripsDiskBackup(campaignId);
+    const tripsFile = path.resolve(TRIPS_DIR, `trips_${campaignId}.json`);
+    const canonFile = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
 
-    if (existing && existing.length > 0) {
-      console.log(`[Seed Trips] Trajets déjà existants dans trips.json pour ${camp.cityName || 'Douala'} (${String(campaignId).slice(0, 8)}). Ignoré.`);
+    if (fs.existsSync(tripsFile) && fs.existsSync(canonFile)) {
+      console.log(`[Seed Trips] Fichiers déjà existants pour ${camp.cityName || 'Douala'} (${campaignId.slice(0, 8)}). Ignoré.`);
       continue;
     }
 
@@ -61,8 +65,8 @@ export async function seedCampaignTrips() {
       const pair = pairsForCamp[pairIndex % pairsForCamp.length];
       pairIndex++;
 
-      const origCoords: [number, number] = [pair.origin.lat || 4.05, pair.origin.lng || 9.70];
-      const destCoords: [number, number] = [pair.dest.lat || 4.06, pair.dest.lng || 9.72];
+      const origCoords = [pair.origin.lat || 4.05, pair.origin.lng || 9.70];
+      const destCoords = [pair.dest.lat || 4.06, pair.dest.lng || 9.72];
       const distKm = calculateDistanceKm(origCoords[0], origCoords[1], destCoords[0], destCoords[1]) || 5.8;
       
       const isJam = (i / totalTarget) < isJamsRatio;
@@ -107,6 +111,7 @@ export async function seedCampaignTrips() {
 
       const canon: CanonicalTrip = {
         id: tripId,
+        uuid: tripId,
         origin: originName,
         destination: destName,
         distanceKm: distKm,
@@ -147,15 +152,16 @@ export async function seedCampaignTrips() {
 
       const fullTrip: TripResult = {
         id: tripId,
+        uuid: tripId,
         campaignId,
         cityId: camp.cityId || 'city_douala',
         cityName: camp.cityName || 'Douala',
         origin: originName,
         destination: destName,
-        startNeighborhoodId: String(pair.origin.id),
+        startNeighborhoodId: pair.origin.id,
         startNeighborhoodName: originName,
         startCoordinates: origCoords as [number, number],
-        endNeighborhoodId: String(pair.dest.id),
+        endNeighborhoodId: pair.dest.id,
         endNeighborhoodName: destName,
         endCoordinates: destCoords as [number, number],
         distanceKm: distKm,
@@ -188,8 +194,12 @@ export async function seedCampaignTrips() {
       trips.push(fullTrip);
     }
 
-    saveCampaignTripsDiskBackup(campaignId, trips, canonicalTrips);
-    console.log(`[Seed Trips] ${trips.length} trajets enregistrés avec succès dans server/data/trips.json (campagne ${campaignId}).`);
+    fs.writeFileSync(tripsFile, JSON.stringify(trips, null, 2), 'utf8');
+    fs.writeFileSync(canonFile, JSON.stringify(canonicalTrips, null, 2), 'utf8');
+
+    console.log(`[Seed Trips] ${trips.length} trajets enregistrés avec succès dans :`);
+    console.log(`  -> ${tripsFile}`);
+    console.log(`  -> ${canonFile}`);
   }
 
   console.log('[Seed Trips] Génération terminée avec succès.');

@@ -7,14 +7,15 @@ import { NeighborhoodExcelImportModal } from './neighborhoods/NeighborhoodExcelI
 import { NeighborhoodQuickInfo } from './neighborhoods/NeighborhoodQuickInfo';
 import { NeighborhoodsTable } from './neighborhoods/NeighborhoodsTable';
 import { getNeighborhoodCity, getNeighborhoodCityId } from '../utils/routeMatrix';
+import { findCityInList, isNeighborhoodInCity } from '../utils/cityMatching';
 
 interface NeighborhoodsViewProps {
   cities: City[];
   neighborhoods: Neighborhood[];
-  selectedCityId: string;
-  onSelectCityId: (cityId: string) => void;
+  selectedCityId: string | number;
+  onSelectCityId: (cityId: string | number) => void;
   onRefresh: () => void;
-  onLaunchPricingForCity: (cityId: string) => void;
+  onLaunchPricingForCity: (cityId: string | number) => void;
 }
 
 export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
@@ -26,7 +27,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   onLaunchPricingForCity
 }) => {
   // Filters State : Ville, Département, Arrondissement, Statut, Recherche
-  const [selectedCityFilter, setSelectedCityFilter] = useState<string>(selectedCityId || 'city_douala');
+  const [selectedCityFilter, setSelectedCityFilter] = useState<string | number>(selectedCityId || 1);
   const [selectedDepartement, setSelectedDepartement] = useState<string>('all');
   const [selectedArrondissement, setSelectedArrondissement] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -66,11 +67,12 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   // Determine current active city for contextual actions (Add/Import/Seeding)
   const currentCity = useMemo(() => {
     if (selectedCityFilter && selectedCityFilter !== 'all') {
-      return cities.find((c) => c.id === selectedCityFilter) || cities[0];
+      return findCityInList(cities, selectedCityFilter) || cities[0];
     }
-    return cities.find((c) => c.id === selectedCityId) || cities[0] || {
-      id: selectedCityId || 'default_city',
-      name: 'Ville active',
+    return findCityInList(cities, selectedCityId) || cities[0] || {
+      id: selectedCityId || 'city_douala',
+      uuid: 'city_douala',
+      name: 'Douala',
       country: 'Cameroun',
       currency: 'XAF',
       currencySymbol: 'FCFA',
@@ -85,18 +87,15 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     if (selectedCityFilter === 'all') {
       return neighborhoods;
     }
-    const targetCity = cities.find((c) => c.id === selectedCityFilter);
-    const targetKey = selectedCityFilter.toLowerCase().trim();
-    const targetName = targetCity?.name.toLowerCase().trim();
+    const targetCity = findCityInList(cities, selectedCityFilter);
+    if (targetCity) {
+      return neighborhoods.filter((n) => isNeighborhoodInCity(n, targetCity));
+    }
+    const targetKey = String(selectedCityFilter || '').toLowerCase().trim();
     return neighborhoods.filter((n) => {
-      if (n.cityId === selectedCityFilter) return true;
+      if (String(n.cityId) === targetKey || n.cityId === selectedCityFilter) return true;
       const cId = getNeighborhoodCityId(n);
-      if (cId === targetKey || cId.includes(targetKey)) return true;
-      if (targetName) {
-        const v = (n.ville || n.cityName || '').toLowerCase().trim();
-        if (v === targetName || v.includes(targetName)) return true;
-      }
-      return false;
+      return cId === targetKey || cId.includes(targetKey);
     });
   }, [neighborhoods, selectedCityFilter, cities]);
 

@@ -9,7 +9,7 @@ import { api } from '../../services/api';
 interface PricingHeaderProps {
   cities: City[];
   currentCity: City;
-  onSelectCityId: (cityId: string) => void;
+  onSelectCityId: (cityId: string | number | any) => void;
   campaigns: PricingCampaign[];
   activeCampaignId: string;
   onCampaignChange: (campaignId: string) => void;

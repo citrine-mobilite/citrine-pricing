@@ -3,8 +3,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
-import { StatisticsView } from './components/StatisticsView';
-import { ShortagesView } from './components/ShortagesView';
 import { PricingUnifiedView } from './components/PricingUnifiedView';
 import { CampaignsView } from './components/CampaignsView';
 import { TemporalComparisonView } from './components/TemporalComparisonView';
@@ -35,7 +33,7 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Selected Entities
-  const [selectedCityId, setSelectedCityId] = useState<string>('');
+  const [selectedCityId, setSelectedCityId] = useState<string | number>('');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   // Mobile Menu State
@@ -44,9 +42,9 @@ function AppContent() {
   // Campaign selection helper: updates both selectedCampaignId and selectedCityId
   const handleSelectCampaign = useCallback((campaignId: string) => {
     setSelectedCampaignId(campaignId);
-    const targetCampaign = campaigns.find((c) => String(c.id) === String(campaignId));
+    const targetCampaign = campaigns.find((c) => String(c.id) === String(campaignId) || c.uuid === String(campaignId));
     if (targetCampaign) {
-      setSelectedCityId(String(targetCampaign.cityId));
+      setSelectedCityId(targetCampaign.cityId);
     }
     setActiveTab('pricing');
   }, [campaigns]);
@@ -62,12 +60,12 @@ function AppContent() {
 
       if (citiesData && citiesData.length > 0) {
         setCities(citiesData);
-        setSelectedCityId((prev) => (citiesData.some((c) => String(c.id) === String(prev)) ? prev : String(citiesData[0].id)));
+        setSelectedCityId((prev) => (citiesData.some((c) => String(c.id) === String(prev) || c.uuid === String(prev)) ? prev : (citiesData[0].uuid || citiesData[0].id)));
       }
 
       if (campaignsData && campaignsData.length > 0) {
         setCampaigns(campaignsData);
-        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => String(c.id) === String(prev)) ? prev : String(campaignsData[0].id)));
+        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => String(c.id) === String(prev) || c.uuid === String(prev)) ? prev : (campaignsData[0].uuid || String(campaignsData[0].id))));
       } else {
         setCampaigns([]);
         setSelectedCampaignId(null);
@@ -79,7 +77,7 @@ function AppContent() {
 
       // Fetch neighborhoods for all cities
       if (citiesData && citiesData.length > 0) {
-        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(String(c.id), forceRefresh));
+        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(c.id, forceRefresh));
         const nbsResults = await Promise.all(nbsPromises);
         const allNbs = nbsResults.flat();
         if (allNbs && allNbs.length > 0) {
@@ -198,24 +196,6 @@ function AppContent() {
                       setSelectedCityId(cityId);
                       setActiveTab('pricing');
                     }}
-                  />
-                )}
-
-                {activeTab === 'statistics' && (
-                  <StatisticsView
-                    cities={cities}
-                    campaigns={campaigns}
-                    neighborhoods={neighborhoods}
-                    onNavigate={setActiveTab}
-                    onSelectCampaign={handleSelectCampaign}
-                  />
-                )}
-
-                {activeTab === 'shortages' && (
-                  <ShortagesView
-                    cities={cities}
-                    onNavigate={setActiveTab}
-                    onSelectCampaign={handleSelectCampaign}
                   />
                 )}
 

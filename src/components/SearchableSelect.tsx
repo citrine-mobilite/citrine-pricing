@@ -37,7 +37,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   // Selected option object
   const selectedOption = useMemo(() => {
-    return options.find((o) => String(o.value) === String(value)) || null;
+    return options.find((o) => o.value === value) || null;
   }, [options, value]);
 
   // Filter options based on search query
@@ -73,7 +73,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     }
   }, [isOpen]);
 
-  const handleSelect = (optionValue: string | number) => {
+  const handleSelect = (optionValue: any) => {
     onChange(optionValue);
     setIsOpen(false);
   };

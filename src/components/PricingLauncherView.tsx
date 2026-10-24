@@ -7,11 +7,13 @@ import { LauncherCitySelectorCard } from './launcher/LauncherCitySelectorCard';
 import { LauncherTariffClassSelector } from './launcher/LauncherTariffClassSelector';
 import { LauncherSingleRouteTester } from './launcher/LauncherSingleRouteTester';
 
+import { findCityInList, isNeighborhoodInCity } from '../utils/cityMatching';
+
 interface PricingLauncherViewProps {
   cities: City[];
   neighborhoods: Neighborhood[];
-  selectedCityId: string;
-  onSelectCityId: (cityId: string) => void;
+  selectedCityId: string | number;
+  onSelectCityId: (cityId: string | number) => void;
   onCampaignStarted: (campaignId: string) => void;
 }
 
@@ -23,9 +25,9 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
   onCampaignStarted
 }) => {
   const { user } = useAuth();
-  const currentCity = cities.find(c => c.id === selectedCityId) || cities[0];
+  const currentCity = findCityInList(cities, selectedCityId) || cities[0];
 
-  const cityNeighborhoods = neighborhoods.filter(n => n.cityId === currentCity?.id);
+  const cityNeighborhoods = neighborhoods.filter(n => isNeighborhoodInCity(n, currentCity));
   const activeNeighborhoods = cityNeighborhoods.filter(n => n.active);
   const activeCount = activeNeighborhoods.length;
   const totalPairs = activeCount > 1 ? activeCount * (activeCount - 1) : 0;

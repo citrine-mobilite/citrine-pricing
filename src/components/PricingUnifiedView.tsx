@@ -4,7 +4,8 @@ import { City, Neighborhood, PricingCampaign, TripResult } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { YangoResponseInspectorModal } from './YangoResponseInspectorModal';
-import { calculatePossiblePricingPairsCount, detectArrondissement } from '../utils/routeMatrix';
+import { calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../utils/routeMatrix';
+import { findCityInList, isNeighborhoodInCity } from '../utils/cityMatching';
 import {
   PricingStatsSummary,
   computePricingStats,
@@ -28,16 +29,15 @@ import {
 import { PricingResultsTable } from './pricing/PricingResultsTable';
 import { PricingRecommendationModal } from './pricing/PricingRecommendationModal';
 import { PricingArrondissementTester } from './pricing/PricingArrondissementTester';
-import { PricingAirportView } from './pricing/PricingAirportView';
 import { ArrondissementInfo } from './pricing/ArrondissementSelect2';
 import { computeCampaignDuration } from '../utils/durationUtils';
 
 interface PricingUnifiedViewProps {
   cities: City[];
   neighborhoods: Neighborhood[];
-  selectedCityId: string;
-  onSelectCityId: (cityId: string) => void;
-  selectedCampaignId?: string | null;
+  selectedCityId: string | number;
+  onSelectCityId: (cityId: any) => void;
+  selectedCampaignId?: string | number | null;
   onSelectCampaignId?: (campaignId: string) => void;
   campaigns: PricingCampaign[];
   onCampaignStarted: (campaignId: string) => void;
@@ -75,22 +75,26 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     onRefresh
   );
 
-  const currentCity = cities.find((c) => c.id === selectedCityId) || cities[0] || {
-    id: selectedCityId || 'city_douala',
-    name: 'Douala',
-    country: 'Cameroun',
-    currency: 'XAF',
-    currencySymbol: 'FCFA',
-    active: true,
-    center: { lat: 4.0511, lng: 9.7679 },
-    autoSchedule: { enabled: false, slots: [] }
-  };
+  const currentCity = useMemo(() => {
+    return findCityInList(cities, selectedCityId) || cities[0] || {
+      id: selectedCityId || 'city_douala',
+      uuid: 'city_douala',
+      name: 'Douala',
+      country: 'Cameroun',
+      currency: 'XAF',
+      currencySymbol: 'FCFA',
+      active: true,
+      center: { lat: 4.0511, lng: 9.7679 },
+      autoSchedule: { enabled: false, slots: [] }
+    };
+  }, [cities, selectedCityId]);
+
   const cityActiveNeighborhoods = useMemo(
-    () => (currentCity?.active ? neighborhoods.filter((n) => n.cityId === currentCity?.id && n.active) : []),
-    [neighborhoods, currentCity?.id, currentCity?.active]
+    () => (currentCity?.active ? neighborhoods.filter((n) => isNeighborhoodInCity(n, currentCity) && n.active) : []),
+    [neighborhoods, currentCity]
   );
   const totalCombinations = useMemo(
-    () => calculatePossiblePricingPairsCount(cityActiveNeighborhoods),
+    () => calculatePossibleBenchmarkPairsCount(cityActiveNeighborhoods),
     [cityActiveNeighborhoods]
   );
 
@@ -131,11 +135,26 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   }, [currentCity, cityActiveNeighborhoods]);
 
   const [inspectedTrip, setInspectedTrip] = useState<TripResult | null>(null);
-  const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter' | 'airport'>('none');
-  const [quickOriginId, setQuickOriginId] = useState<string>(String(cityActiveNeighborhoods[0]?.id || ''));
-  const [quickDestId, setQuickDestId] = useState<string>(String(cityActiveNeighborhoods[1]?.id || ''));
+  const [activeTesterPanel, setActiveTesterPanel] = useState<'none' | 'single' | 'intra' | 'inter'>('none');
+  const [quickOriginId, setQuickOriginId] = useState<string>('');
+  const [quickDestId, setQuickDestId] = useState<string>('');
   const [isQuickTesting, setIsQuickTesting] = useState<boolean>(false);
   const [quickTestResult, setQuickTestResult] = useState<any>(null);
+
+  // Synchronisation automatique des quartiers par défaut du simulateur
+  useEffect(() => {
+    if (cityActiveNeighborhoods.length >= 2) {
+      const firstId = String(cityActiveNeighborhoods[0].uuid || cityActiveNeighborhoods[0].id);
+      const secondId = String(cityActiveNeighborhoods[1].uuid || cityActiveNeighborhoods[1].id);
+      if (!quickOriginId || !cityActiveNeighborhoods.some(n => String(n.id) === String(quickOriginId) || n.uuid === quickOriginId)) {
+        setQuickOriginId(firstId);
+      }
+      if (!quickDestId || !cityActiveNeighborhoods.some(n => String(n.id) === String(quickDestId) || n.uuid === quickDestId)) {
+        setQuickDestId(secondId);
+      }
+    }
+  }, [cityActiveNeighborhoods, quickOriginId, quickDestId]);
+
   const [launchingTarget, setLaunchingTarget] = useState<string | null>(null);
   const [liveCampaignOverride, setLiveCampaignOverride] = useState<PricingCampaign | null>(null);
   const [trips, setTrips] = useState<TripResult[]>([]);
@@ -179,9 +198,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
       // Détection de transition vers un état final
       if (prevStatus === 'in_progress' && (camp.status === 'completed' || camp.status === 'failed' || camp.status === 'cancelled')) {
-        const campIdStr = String(camp.id);
-        if (!alertedCampaignsRef.current.has(campIdStr)) {
-          alertedCampaignsRef.current.add(campIdStr);
+        if (!alertedCampaignsRef.current.has(camp.id)) {
+          alertedCampaignsRef.current.add(camp.id);
 
           if (camp.status === 'completed') {
             const completedPairs = camp.completedPairs || camp.totalPairs || 0;
@@ -284,7 +302,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   }, [activeCampaignId, campaigns, liveCampaignOverride]);
 
   const handleLaunchWithOptions = async (options: {
-    scopeMode: 'global' | 'intra' | 'inter' | 'airport';
+    scopeMode: 'global' | 'intra' | 'inter';
     arrondissement?: string;
     originArrondissement?: string;
     destArrondissement?: string;
@@ -299,9 +317,9 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
     setLaunchingTarget(targetKey);
     try {
       const result = await api.startCampaign({
-        cityId: String(currentCity.id),
+        cityId: currentCity.id,
         triggerType: 'manual',
-        triggeredByUserId: user?.id ? String(user.id) : 'manual_user',
+        triggeredByUserId: user?.id || 'manual_user',
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe',
         selectedClasses: ['econom'],
@@ -315,7 +333,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
       });
 
       if (result?.campaign) {
-        const campaignId = String(result.campaign.id);
+        const campaignId = result.campaign.id;
         runningCampaignIdRef.current = campaignId;
         onCampaignStarted(campaignId);
         handleCampaignChange(campaignId);
@@ -327,7 +345,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
         const collectedCanonicalTrips: any[] = [];
 
         const chunkMeta = {
-          cityId: String(currentCity.id),
+          cityId: currentCity.id,
           cityName: currentCity.name,
           currency: currentCity.currency,
           scopeMode: options.scopeMode,
@@ -339,7 +357,7 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
 
         const processChunkWithRetry = async (chunkIdx: number) => {
           let lastErr: any = null;
-          for (let attempt = 1; attempt <= 4; attempt++) {
+          for (let attempt = 1; attempt <= 2; attempt++) {
             if (cancelRequestedRef.current) return null;
             try {
               return await api.processCampaignChunk(
@@ -353,8 +371,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
                 return null;
               }
               lastErr = err;
-              if (attempt < 4 && !cancelRequestedRef.current) {
-                await new Promise(r => setTimeout(r, 1000 * attempt));
+              if (attempt < 2 && !cancelRequestedRef.current) {
+                await new Promise(r => setTimeout(r, 400));
               }
             }
           }
@@ -362,44 +380,53 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           throw lastErr || new Error(`Échec du lot ${chunkIdx}`);
         };
 
-        for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          if (cancelRequestedRef.current) break;
-          try {
-            const chunkRes = await processChunkWithRetry(chunkIdx);
-            if (cancelRequestedRef.current || !chunkRes) break;
+        // Exécution optimisée par pool de 3 workers concurrents
+        const CONCURRENCY = 3;
+        const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
+        let nextIdx = 0;
 
-            if (chunkRes?.campaign?.status === 'cancelled') {
-              cancelRequestedRef.current = true;
-              setLiveCampaignOverride(prev => prev ? { ...prev, status: 'cancelled' } : chunkRes.campaign);
-              break;
-            }
+        const runWorker = async () => {
+          while (nextIdx < chunkIndices.length && !cancelRequestedRef.current) {
+            const chunkIdx = chunkIndices[nextIdx++];
+            try {
+              const chunkRes = await processChunkWithRetry(chunkIdx);
+              if (cancelRequestedRef.current || !chunkRes) break;
 
-            if (chunkRes?.campaign) {
-              setLiveCampaignOverride(prev => {
-                if (prev && (prev.completedPairs || 0) > (chunkRes.campaign.completedPairs || 0)) {
-                  return { ...chunkRes.campaign, completedPairs: prev.completedPairs };
-                }
-                return chunkRes.campaign;
-              });
+              if (chunkRes?.campaign?.status === 'cancelled') {
+                cancelRequestedRef.current = true;
+                setLiveCampaignOverride(prev => prev ? { ...prev, status: 'cancelled' } : chunkRes.campaign);
+                break;
+              }
+
+              if (chunkRes?.campaign) {
+                setLiveCampaignOverride(prev => {
+                  const currentDone = prev?.completedPairs || 0;
+                  const newDone = Math.max(currentDone, chunkRes.campaign.completedPairs || 0);
+                  return { ...chunkRes.campaign, completedPairs: newDone };
+                });
+              }
+              if (chunkRes?.chunkTrips && chunkRes.chunkTrips.length > 0) {
+                collectedTrips.push(...chunkRes.chunkTrips);
+                setTrips(prev => {
+                  const existingKeys = new Set(prev.map(t => `${t.origin}-${t.destination}`));
+                  const fresh = chunkRes.chunkTrips.filter(t => !existingKeys.has(`${t.origin}-${t.destination}`));
+                  return [...prev, ...fresh];
+                });
+              }
+              if (chunkRes?.chunkCanonicalTrips && chunkRes.chunkCanonicalTrips.length > 0) {
+                collectedCanonicalTrips.push(...chunkRes.chunkCanonicalTrips);
+              }
+            } catch (chunkErr: any) {
+              if (cancelRequestedRef.current || chunkErr?.name === 'AbortError') {
+                break;
+              }
+              console.error(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
             }
-            if (chunkRes?.chunkTrips && chunkRes.chunkTrips.length > 0) {
-              collectedTrips.push(...chunkRes.chunkTrips);
-              setTrips(prev => {
-                const existingKeys = new Set(prev.map(t => `${t.origin}-${t.destination}`));
-                const fresh = chunkRes.chunkTrips.filter(t => !existingKeys.has(`${t.origin}-${t.destination}`));
-                return [...prev, ...fresh];
-              });
-            }
-            if (chunkRes?.chunkCanonicalTrips && chunkRes.chunkCanonicalTrips.length > 0) {
-              collectedCanonicalTrips.push(...chunkRes.chunkCanonicalTrips);
-            }
-          } catch (chunkErr: any) {
-            if (cancelRequestedRef.current || chunkErr?.name === 'AbortError') {
-              break;
-            }
-            console.error(`Erreur sur le lot ${chunkIdx}:`, chunkErr);
           }
-        }
+        };
+
+        const workers = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker());
+        await Promise.all(workers);
 
         if (!cancelRequestedRef.current) {
           const finalRes = await api.finalizeCampaign(campaignId, collectedCanonicalTrips, collectedTrips);
@@ -431,54 +458,10 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   };
 
   const handleLaunch = async (overrideLimit: number | 'all') => {
-    const isSample = overrideLimit === 25;
-    const nowTimeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const confirm = await Swal.fire({
-      title: isSample ? 'Lancer un test rapide ?' : 'Lancer la tarification complète ?',
-      html: `
-        <div style="text-align: left; font-size: 12px; color: #334155;">
-          <p style="margin-bottom: 12px; color: #475569;">
-            ${isSample ? 'Un échantillon de 25 trajets va être calculé pour cette ville.' : `L'ensemble des trajets (${totalCombinations}) va être calculé.`}
-          </p>
-          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #334155;">
-            1. Créneau horaire du relevé :
-          </label>
-          <select id="swal-launch-slot" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 10px; font-size: 12px; background: #f8fafc;">
-            <option value="auto" selected>⏱️ Automatique selon l'heure actuelle (${nowTimeStr})</option>
-            <option value="morning_peak">🌅 Pointe Matin (06h00 – 10h00)</option>
-            <option value="off_peak_morning">🟢 Creuse Matinée (10h00 – 12h00)</option>
-            <option value="midday_peak">☀️ Pointe Midi (12h00 – 14h30)</option>
-            <option value="off_peak_afternoon">🌤️ Creuse Après-midi (14h30 – 16h30)</option>
-            <option value="evening_peak">🌆 Pointe Soir (16h30 – 20h30)</option>
-            <option value="night">🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
-          </select>
-          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #334155;">
-            2. Commentaire / Contexte (optionnel) :
-          </label>
-          <input id="swal-launch-comment" type="text" placeholder="Ex: Forte pluie, embouteillages Akwa, jour férié..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
-        </div>
-      `,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Oui, lancer',
-      cancelButtonText: 'Annuler',
-      confirmButtonColor: '#1F4F4A',
-      preConfirm: () => {
-        const slotEl = document.getElementById('swal-launch-slot') as HTMLSelectElement | null;
-        const commentEl = document.getElementById('swal-launch-comment') as HTMLInputElement | null;
-        return {
-          timeSlotOverride: slotEl ? slotEl.value : 'auto',
-          comment: commentEl && commentEl.value.trim() ? commentEl.value.trim() : undefined
-        };
-      }
-    });
-    if (!confirm.isConfirmed) return;
-
     handleLaunchWithOptions({
       scopeMode: 'global',
       sampleLimit: overrideLimit,
-      comment: confirm.value?.comment,
-      timeSlotOverride: confirm.value?.timeSlotOverride
+      timeSlotOverride: 'auto'
     });
   };
 
@@ -512,9 +495,23 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
   };
 
   const handleRunQuickTest = async () => {
-    const origin = cityActiveNeighborhoods.find((n) => n.id === quickOriginId);
-    const dest = cityActiveNeighborhoods.find((n) => n.id === quickDestId);
-    if (!origin || !dest) return;
+    let origin = cityActiveNeighborhoods.find((n) => String(n.id) === String(quickOriginId) || n.uuid === quickOriginId);
+    let dest = cityActiveNeighborhoods.find((n) => String(n.id) === String(quickDestId) || n.uuid === quickDestId);
+
+    // Fallbacks si non encore sélectionnés
+    if (!origin && cityActiveNeighborhoods.length > 0) origin = cityActiveNeighborhoods[0];
+    if (!dest && cityActiveNeighborhoods.length > 1) dest = cityActiveNeighborhoods[1];
+
+    if (!origin || !dest) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sélectionnez deux quartiers',
+        text: 'Veuillez sélectionner un quartier de départ et un quartier d’arrivée actifs.',
+        confirmButtonColor: '#1F4F4A'
+      });
+      return;
+    }
+
     setIsQuickTesting(true);
     setQuickTestResult(null);
     try {
@@ -697,22 +694,6 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
               scopeMode: 'inter',
               originArrondissement: originArr,
               destArrondissement: destArr,
-              sampleLimit: limit,
-              comment
-            });
-          }}
-        />
-      )}
-
-      {/* 4. Panel Destinations Aéroport */}
-      {activeTesterPanel === 'airport' && (
-        <PricingAirportView
-          currentCity={currentCity}
-          cityActiveNeighborhoods={cityActiveNeighborhoods}
-          isRunning={displayedCampaign?.status === 'in_progress'}
-          onLaunchAirport={(limit, comment) => {
-            handleLaunchWithOptions({
-              scopeMode: 'airport',
               sampleLimit: limit,
               comment
             });

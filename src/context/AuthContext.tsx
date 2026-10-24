@@ -27,7 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const dbUsers = await api.getUsers();
           const matchedUser = dbUsers.find(
-            (u) => u.email.toLowerCase() === (fbUser.email || '').toLowerCase() || u.id === fbUser.uid
+            (u) => u.email.toLowerCase() === (fbUser.email || '').toLowerCase() || u.uuid === fbUser.uid || String(u.id) === fbUser.uid
           );
 
           if (matchedUser && matchedUser.active) {
@@ -38,7 +38,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.removeItem('vtc_pricing_user');
           } else {
             const currentUser: User = {
-              id: fbUser.uid,
+              id: 1,
+              uuid: fbUser.uid,
               email: fbUser.email || '',
               name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur',
               role: 'admin',

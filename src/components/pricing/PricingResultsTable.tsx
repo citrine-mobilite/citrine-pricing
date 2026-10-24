@@ -71,22 +71,6 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
 
   const columns: Column<TripResult>[] = useMemo(() => [
     {
-      key: 'id',
-      label: '#ID',
-      sortable: true,
-      align: 'center',
-      width: '64px',
-      render: (t) => (
-        <span
-          className="font-mono text-[11px] font-bold text-[#1F4F4A] bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded shadow-2xs"
-          title={`UUID: ${t.uuid || t.id}`}
-        >
-          #{t.id}
-        </span>
-      ),
-      exportValue: (t) => t.id
-    },
-    {
       key: 'origin',
       label: 'Départ',
       sortable: true,

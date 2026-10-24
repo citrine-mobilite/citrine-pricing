@@ -1,0 +1,212 @@
+[
+  {
+    "id": "20051",
+    "uuid": "df57b293-cece-43d6-b1d5-61320128efcb",
+    "origin": "Bali",
+    "destination": "Bonamatoumbe Village",
+    "distanceKm": 3.72,
+    "durationMin": 9,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 650,
+        "confort": 700,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 897,
+        "confort": 1127,
+        "suv": 58,
+        "perKm": 241
+      },
+      "tripMaster": {
+        "eco": 2316,
+        "confort": 2718,
+        "moto": 1000
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T18:46:48.031Z"
+  },
+  {
+    "id": "20052",
+    "uuid": "f2b4b0f4-49d7-4708-a00f-c8da301c833c",
+    "origin": "Bali",
+    "destination": "Bonamatoumbe Ville",
+    "distanceKm": 3.72,
+    "durationMin": 9,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 650,
+        "confort": 700,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 897,
+        "confort": 1127,
+        "suv": 58,
+        "perKm": 241
+      },
+      "tripMaster": {
+        "eco": 2316,
+        "confort": 2718,
+        "moto": 1000
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T18:46:48.092Z"
+  },
+  {
+    "id": "20053",
+    "uuid": "d46995db-f19a-41bf-acab-8fb64e4aeb09",
+    "origin": "Bépanda Ambiance",
+    "destination": "Bépanda Casmando",
+    "distanceKm": 0.31,
+    "durationMin": 2,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 1050,
+        "confort": 850,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 510,
+        "confort": 910,
+        "suv": 27,
+        "perKm": 1645
+      },
+      "tripMaster": {
+        "eco": 1000,
+        "confort": 1000,
+        "moto": 200
+      }
+    },
+    "cheapest": {
+      "eco": "hero",
+      "confort": "yango",
+      "overall": "hero"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T18:46:48.175Z"
+  },
+  {
+    "id": "20054",
+    "uuid": "9cc6b48e-d7cc-41f2-a3ac-cba18bc07adb",
+    "origin": "Bali",
+    "destination": "Bonassama",
+    "distanceKm": 3.39,
+    "durationMin": 8,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 650,
+        "confort": 700,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 840,
+        "confort": 1058,
+        "suv": 55,
+        "perKm": 248
+      },
+      "tripMaster": {
+        "eco": 2207,
+        "confort": 2590,
+        "moto": 957
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T18:46:48.188Z"
+  },
+  {
+    "id": "20055",
+    "uuid": "fbfbe2e4-d0d4-423a-bc7f-a72aebb84c97",
+    "origin": "Bali",
+    "destination": "Djebale 1",
+    "distanceKm": 3.65,
+    "durationMin": 9,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 650,
+        "confort": 700,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 885,
+        "confort": 1112,
+        "suv": 57,
+        "perKm": 242
+      },
+      "tripMaster": {
+        "eco": 1533,
+        "confort": 1799,
+        "moto": 673
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T18:46:48.190Z"
+  }
+]
