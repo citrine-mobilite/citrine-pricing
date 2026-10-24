@@ -133,8 +133,8 @@ async function resilientUpsert(
     const { error } = await client.from(table).upsert(fullRecord, { onConflict: 'id' });
     if (!error) return true;
 
-    // Colonne manquante dans le schéma PostgreSQL existant
-    if (error.code === '42703' && fallbackRecord) {
+    // Colonne manquante dans le schéma PostgreSQL existant (42703 ou PGRST204)
+    if ((error.code === '42703' || error.code === 'PGRST204') && fallbackRecord) {
       const { error: fallbackErr } = await client.from(table).upsert(fallbackRecord, { onConflict: 'id' });
       if (!fallbackErr) return true;
       console.warn(`[Supabase] Fallback upsert failed for ${table}:`, fallbackErr.message);
@@ -461,9 +461,9 @@ export async function fetchUsersFromSupabase(): Promise<User[] | null> {
 // ==========================================
 
 export function mapCampaignToSupabase(c: PricingCampaign | any) {
-  const strId = String(c.id);
-  return {
-    id: strId,
+  const strId = String(c.id || '');
+  const isNum = /^\d+$/.test(strId);
+  const rec: Record<string, any> = {
     uuid: c.uuid || strId,
     city_id: String(c.cityId || ''),
     city_name: c.cityName || 'Douala',
@@ -475,31 +475,35 @@ export function mapCampaignToSupabase(c: PricingCampaign | any) {
     duration_seconds: c.durationSeconds || 0,
     avg_price: c.avgPrice || null,
     started_at: c.startedAt || null,
-    completed_at: c.completedAt || c.finishedAt || null,
+    finished_at: c.finishedAt || c.completedAt || null,
     trigger_type: c.triggerType || 'manual',
     triggered_by_user_id: c.triggeredByUserId ? String(c.triggeredByUserId) : null,
     triggered_by_user_name: c.triggeredByUserName || null,
-    triggered_by_user_role: c.triggeredByUserRole || null,
-    delta_stats: c.deltaStats || null,
     hero_stats: c.heroStats || null,
     trip_master_stats: c.tripMasterStats || null,
-    arrondissement_stats: c.arrondissementStats || null,
-    data: c
+    arrondissement_stats: c.arrondissementStats || null
   };
+  if (isNum) {
+    rec.id = parseInt(strId, 10);
+  }
+  return rec;
 }
 
 export async function saveCampaignToSupabase(campaign: any): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+
   const record = mapCampaignToSupabase(campaign);
-  await resilientUpsert('campaigns', record, {
-    id: record.id,
-    uuid: record.uuid,
-    city_id: record.city_id,
-    city_name: record.city_name,
-    status: record.status,
-    started_at: record.started_at,
-    completed_at: record.completed_at,
-    data: campaign
-  });
+  try {
+    const { error } = await client.from('campaigns').upsert(record, { onConflict: 'uuid' });
+    if (error) {
+      console.warn('[Supabase] Warning saving campaign:', error.message);
+    } else {
+      console.log(`[Supabase] Campagne uuid=${record.uuid} persistée avec succès.`);
+    }
+  } catch (e: any) {
+    console.warn('[Supabase] Error saving campaign:', e.message);
+  }
 }
 
 export async function deleteCampaignFromSupabase(campaignId: string | number): Promise<void> {
@@ -520,6 +524,15 @@ export async function deleteCampaignFromSupabase(campaignId: string | number): P
   } catch (e: any) {
     console.warn('[Supabase] Warning deleting campaign:', e.message);
   }
+}
+
+export async function deleteCanonicalCampaign(campaignId: string | number): Promise<void> {
+  const strId = String(campaignId);
+  try {
+    const filePath = path.resolve(TRIPS_DIR, `canonical_${strId}.json`);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch {}
+  await deleteCampaignFromSupabase(campaignId).catch(() => {});
 }
 
 export async function deleteAllCampaignsFromSupabase(): Promise<void> {

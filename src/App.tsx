@@ -33,7 +33,7 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Selected Entities
-  const [selectedCityId, setSelectedCityId] = useState<string | number>('');
+  const [selectedCityId, setSelectedCityId] = useState<string>('');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   // Mobile Menu State
@@ -42,7 +42,7 @@ function AppContent() {
   // Campaign selection helper: updates both selectedCampaignId and selectedCityId
   const handleSelectCampaign = useCallback((campaignId: string) => {
     setSelectedCampaignId(campaignId);
-    const targetCampaign = campaigns.find((c) => String(c.id) === String(campaignId) || c.uuid === String(campaignId));
+    const targetCampaign = campaigns.find((c) => c.id === campaignId);
     if (targetCampaign) {
       setSelectedCityId(targetCampaign.cityId);
     }
@@ -60,12 +60,12 @@ function AppContent() {
 
       if (citiesData && citiesData.length > 0) {
         setCities(citiesData);
-        setSelectedCityId((prev) => (citiesData.some((c) => String(c.id) === String(prev) || c.uuid === String(prev)) ? prev : (citiesData[0].uuid || citiesData[0].id)));
+        setSelectedCityId((prev) => (citiesData.some((c) => c.id === prev) ? prev : citiesData[0].id));
       }
 
       if (campaignsData && campaignsData.length > 0) {
         setCampaigns(campaignsData);
-        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => String(c.id) === String(prev) || c.uuid === String(prev)) ? prev : (campaignsData[0].uuid || String(campaignsData[0].id))));
+        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
       } else {
         setCampaigns([]);
         setSelectedCampaignId(null);

@@ -76,7 +76,7 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
       const campaignId = res.campaign.id;
       const totalChunks = res.totalChunks || 1;
 
-      // Exécution séquentielle des lots (Client-Driven Chunking)
+      // Exécution accélérée par pool de workers concurrents (Client-Driven Chunking)
       (async () => {
         const collectedTrips: any[] = [];
         const collectedCanonical: any[] = [];
@@ -86,19 +86,29 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
           currency: currentCity.currency
         };
 
-        for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              const cRes = await api.processCampaignChunk(campaignId, chunkIdx, undefined, meta);
-              if (cRes?.chunkTrips) collectedTrips.push(...cRes.chunkTrips);
-              if (cRes?.chunkCanonicalTrips) collectedCanonical.push(...cRes.chunkCanonicalTrips);
-              break;
-            } catch (e) {
-              console.warn(`Lot ${chunkIdx} tentative ${attempt}/3 échouée:`, e);
-              if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+        const CONCURRENCY = 2;
+        const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
+        let nextIdx = 0;
+
+        const runWorker = async () => {
+          while (nextIdx < chunkIndices.length) {
+            const chunkIdx = chunkIndices[nextIdx++];
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              try {
+                const cRes = await api.processCampaignChunk(campaignId, chunkIdx, undefined, meta);
+                if (cRes?.chunkTrips) collectedTrips.push(...cRes.chunkTrips);
+                if (cRes?.chunkCanonicalTrips) collectedCanonical.push(...cRes.chunkCanonicalTrips);
+                break;
+              } catch (e) {
+                console.warn(`Lot ${chunkIdx} tentative ${attempt}/2:`, e);
+                if (attempt < 2) await new Promise(r => setTimeout(r, 300));
+              }
             }
           }
-        }
+        };
+
+        const workers = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker());
+        await Promise.all(workers);
         await api.finalizeCampaign(campaignId, collectedCanonical, collectedTrips);
       })();
     } catch (err: any) {

@@ -1,4 +1,4 @@
-# 🚖 Citrine Pricing — Plateforme d'Intelligence Tarifaire & Pricing VTC
+# 🚖 Citrine Pricing — Plateforme d'Intelligence Tarifaire & Benchmark VTC
 
 **Citrine Pricing** est une plateforme SaaS d'analyse de marché et de comparaison tarifaire en temps réel pour les services de transport VTC (Véhicules de Transport avec Chauffeur) en Afrique Centrale (Cameroun, Douala, Yaoundé).
 
@@ -52,14 +52,14 @@ La plateforme permet d'exécuter des campagnes de relever de prix automatisées 
 └──────────────┬─────────────────────────────┬────────────┘
                │                             │
 ┌──────────────▼──────────────┐  ┌───────────▼───────────┐
-│     Supabase / Disque Local │  │  APIs VTC Tiers Direct│
-│ (Stockage Canonique & Sync) │  │ (Yango, Hero, TripM.) │
+│     Firebase Firestore      │  │  APIs VTC Tiers Direct│
+│ (Stockage Canonique & Rules)│  │ (Yango, Hero, TripM.) │
 └─────────────────────────────┘  └───────────────────────┘
 ```
 
 * **Frontend** : React 19, Vite, TypeScript, Tailwind CSS v4, Lucide React, SweetAlert2.
 * **Backend** : Node.js, Express, TSX.
-* **Base de Données** : Supabase PostgreSQL & Stockage persistant sur disque local avec cache réactif en mémoire vive.
+* **Base de Données** : Firebase Firestore avec mécanisme de partitionnement automatique (documents garantis < 400 Ko pour respecter la limite de 1 Mo) et cache réactif en mémoire.
 * **Déploiement** : Prêt pour déploiement Serverless sur Vercel avec configuration `vercel.json`.
 
 ---
@@ -69,9 +69,9 @@ La plateforme permet d'exécuter des campagnes de relever de prix automatisées 
 ```text
 ├── api/                    # Handler Serverless Vercel (api/index.ts)
 ├── server/                 # Code source du serveur Node.js / Express
-│   ├── db/                 # Connexion Supabase & Store mémoire
-│   │   ├── supabase.ts     # Client Supabase & helpers d'écriture sécurisée
-│   │   └── memoryStore.ts  # Cache mémoire réactif & synchronisation disque
+│   ├── db/                 # Connexion Firestore & Store mémoire
+│   │   ├── firestore.ts    # Client Firebase & helpers d'écriture sécurisée
+│   │   └── memoryStore.ts  # Cache mémoire réactif & synchronisation
 │   ├── routes/             # Endpoints de l'API REST
 │   │   ├── authRoutes.ts   # Authentification & Utilisateurs
 │   │   ├── cityRoutes.ts   # Villes & Quartiers
@@ -89,6 +89,8 @@ La plateforme permet d'exécuter des campagnes de relever de prix automatisées 
 │   ├── services/           # Client API (src/services/api.ts)
 │   ├── types/              # Interfaces TypeScript frontend
 │   └── utils/              # Fonctions d'export (Excel, CSV, PDF, JSON)
+├── firebase-applet-config.json # Configuration du projet Firebase
+├── firestore.rules         # Règles de sécurité Cloud Firestore
 ├── vercel.json             # Configuration de déploiement Vercel
 ├── server.ts               # Point d'entrée principal du serveur Express
 └── package.json            # Dépendances & scripts du projet

@@ -16,8 +16,6 @@ interface NavbarProps {
 
 const TAB_TITLES: Record<string, string> = {
   dashboard: 'Accueil',
-  statistics: 'Tableau des Statistiques & Pricing',
-  shortages: 'Analyse des Pénuries & Ruptures de Trajets',
   pricing: 'Pricing & Itinéraires',
   campaigns: 'Suivi des Campagnes',
   temporal: 'Comparateur Temporel (Évolution des Prix)',

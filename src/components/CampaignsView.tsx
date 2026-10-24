@@ -154,19 +154,33 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   }, [filteredCampaigns, arrondissementFilter]);
 
   const handleEditComment = async (c: PricingCampaign) => {
+    const peak = getCampaignPeakHourInfo(c);
+    const currentSlot = c.timeSlotOverride || 'auto';
     const currentComment = (c.comment || c.comments || '').replace(/"/g, '&quot;');
 
     const { value: formValues, isConfirmed } = await Swal.fire({
-      title: 'Commentaire du relevé',
+      title: 'Créneau & Commentaire du relevé',
       html: `
         <div style="text-align: left; font-size: 12px; color: #334155;">
-          <p style="margin-bottom: 12px; font-weight: 600; color: #0f172a;">
+          <p style="margin-bottom: 10px; font-weight: 600; color: #0f172a;">
             ${c.cityName} — Relevé du ${new Date(c.startedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
-          <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #475569;">
-            Commentaire / Observation (météo, trafic, événement) :
+          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
+            1. Créneau horaire / Heure de pointe :
           </label>
-          <textarea id="swal-camp-comment" rows="4" placeholder="Ex: Forte pluie, embouteillages, jour férié..." style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-family: inherit;">${currentComment}</textarea>
+          <select id="swal-camp-slot" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 12px; font-size: 12px; background: #f8fafc;">
+            <option value="auto" ${currentSlot === 'auto' ? 'selected' : ''}>⏱️ Automatique selon l'heure (${peak.exactTimeStr})</option>
+            <option value="morning_peak" ${currentSlot === 'morning_peak' ? 'selected' : ''}>🌅 Pointe Matin (06h00 – 10h00)</option>
+            <option value="off_peak_morning" ${currentSlot === 'off_peak_morning' ? 'selected' : ''}>🟢 Creuse Matinée (10h00 – 12h00)</option>
+            <option value="midday_peak" ${currentSlot === 'midday_peak' ? 'selected' : ''}>☀️ Pointe Midi (12h00 – 14h30)</option>
+            <option value="off_peak_afternoon" ${currentSlot === 'off_peak_afternoon' ? 'selected' : ''}>🌤️ Creuse Après-midi (14h30 – 16h30)</option>
+            <option value="evening_peak" ${currentSlot === 'evening_peak' ? 'selected' : ''}>🌆 Pointe Soir (16h30 – 20h30)</option>
+            <option value="night" ${currentSlot === 'night' ? 'selected' : ''}>🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
+          </select>
+          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
+            2. Commentaire / Observation (météo, trafic, événement) :
+          </label>
+          <textarea id="swal-camp-comment" rows="3" placeholder="Ex: Forte pluie, embouteillages, jour férié..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">${currentComment}</textarea>
         </div>
       `,
       showCancelButton: true,
@@ -175,8 +189,10 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       confirmButtonText: 'Enregistrer',
       cancelButtonText: 'Annuler',
       preConfirm: () => {
+        const slotEl = document.getElementById('swal-camp-slot') as HTMLSelectElement | null;
         const commentEl = document.getElementById('swal-camp-comment') as HTMLTextAreaElement | null;
         return {
+          timeSlotOverride: slotEl ? slotEl.value : 'auto',
           comment: commentEl ? commentEl.value.trim() : ''
         };
       }
@@ -184,7 +200,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
 
     if (isConfirmed && formValues) {
       try {
-        await api.updateCampaignComment(c.id, formValues.comment);
+        await api.updateCampaignComment(c.id, formValues.comment, formValues.timeSlotOverride);
         c.comment = formValues.comment;
         c.comments = formValues.comment;
         c.timeSlotOverride = formValues.timeSlotOverride === 'auto' ? undefined : formValues.timeSlotOverride;
@@ -234,12 +250,12 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         cityId: c.cityId,
         triggerType: 'manual',
         sampleLimit: c.sampleLimit,
-        triggeredByUserId: user?.id ? String(user.id) : undefined,
+        triggeredByUserId: user?.id,
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe'
       });
       if (res?.campaign) {
-        onSelectCampaign(String(res.campaign.id));
+        onSelectCampaign(res.campaign.id);
         onNavigate('pricing');
       }
     } catch (err: any) {
@@ -436,7 +452,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           )}
           <button
             onClick={() => {
-              onSelectCampaign(String(c.id));
+              onSelectCampaign(c.id);
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-[#1F4F4A] text-white rounded-lg hover:bg-[#183F3B] transition cursor-pointer shadow-xs"
@@ -446,7 +462,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           </button>
           {isAdminOrResponsable && (
             <button
-              onClick={() => handleDelete(String(c.id))}
+              onClick={() => handleDelete(c.id)}
               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
               title="Supprimer la campagne"
             >

@@ -1,57 +1,25 @@
 [
   {
-    "id": 1,
+    "id": "3",
+    "uuid": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
     "name": "Douala",
     "country": "Cameroun",
     "currency": "XAF",
     "currencySymbol": "FCFA",
+    "active": true,
     "center": {
-      "lat": 4.0511,
-      "lng": 9.7679
+      "lat": 4.0525,
+      "lng": 9.6963
     },
     "airport": {
-      "name": "Aéroport International de Douala",
-      "lat": 4.0061,
-      "lng": 9.7195,
-      "code": "DLA",
+      "lat": 4.0134386,
+      "lng": 9.714432417,
+      "name": "Aeroport international de douala",
       "active": true
     },
-    "active": true,
     "autoSchedule": {
-      "enabled": false,
-      "slots": [
-        "08:00",
-        "13:00",
-        "18:00"
-      ]
-    },
-    "uuid": "city_douala"
-  },
-  {
-    "id": 2,
-    "name": "Yaoundé",
-    "country": "Cameroun",
-    "currency": "XAF",
-    "currencySymbol": "FCFA",
-    "center": {
-      "lat": 3.848,
-      "lng": 11.5021
-    },
-    "airport": {
-      "name": "Aéroport International de Yaoundé-Nsimalen",
-      "lat": 3.7226,
-      "lng": 11.5532,
-      "code": "NSI",
-      "active": true
-    },
-    "active": true,
-    "autoSchedule": {
-      "enabled": false,
-      "slots": [
-        "08:00",
-        "18:00"
-      ]
-    },
-    "uuid": "city_yaounde"
+      "slots": [],
+      "enabled": false
+    }
   }
 ]

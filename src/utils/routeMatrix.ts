@@ -118,10 +118,10 @@ export function generateBenchmarkPairs(
 ): Array<{ origin: Neighborhood; dest: Neighborhood }> {
   let activeNbs = neighborhoods.filter((n) => n.active);
   if (options?.cityId && options.cityId !== 'all') {
-    const targetKey = String(options.cityId).toLowerCase().trim();
+    const targetKey = options.cityId.toLowerCase().trim();
     activeNbs = activeNbs.filter((n) => {
       const cId = getNeighborhoodCityId(n);
-      return cId === targetKey || String(n.cityId) === String(options.cityId) || cId.includes(targetKey);
+      return cId === targetKey || n.cityId === options.cityId || cId.includes(targetKey);
     });
   }
   if (activeNbs.length < 2) return [];
@@ -146,8 +146,8 @@ export function generateBenchmarkPairs(
     list.push(nb);
   }
 
-  const getPairKey = (id1: string | number, id2: string | number): string => {
-    return String(id1) < String(id2) ? `${id1}---${id2}` : `${id2}---${id1}`;
+  const getPairKey = (id1: string, id2: string): string => {
+    return id1 < id2 ? `${id1}---${id2}` : `${id2}---${id1}`;
   };
 
   // 2. Traiter chaque ville de manière 100% indépendante
@@ -156,11 +156,11 @@ export function generateBenchmarkPairs(
     if (pairs.length >= maxGlobal) break;
 
     // Suivi des quotas dans cette ville
-    const quotaTracker = new Map<string | number, Map<string, number>>();
-    const getQuotaCount = (nbId: string | number, targetKey: string): number => {
+    const quotaTracker = new Map<string, Map<string, number>>();
+    const getQuotaCount = (nbId: string, targetKey: string): number => {
       return quotaTracker.get(nbId)?.get(targetKey) || 0;
     };
-    const incrementQuota = (nbId: string | number, targetKey: string) => {
+    const incrementQuota = (nbId: string, targetKey: string) => {
       let map = quotaTracker.get(nbId);
       if (!map) {
         map = new Map<string, number>();
@@ -284,11 +284,3 @@ export function calculatePossibleBenchmarkPairsCount(
 ): number {
   return generateBenchmarkPairs(neighborhoods, options).length;
 }
-
-export function calculatePossiblePricingPairsCount(
-  neighborhoods: Neighborhood[],
-  options?: RouteMatrixOptions
-): number {
-  return generateBenchmarkPairs(neighborhoods, options).length;
-}
-

@@ -8,7 +8,7 @@ interface NeighborhoodsTableProps {
   cityName: string;
   onToggleActive: (nb: Neighborhood) => void;
   onOpenEditModal: (nb: Neighborhood) => void;
-  onDelete: (id: string | number) => void;
+  onDelete: (id: string) => void;
 }
 
 export const NeighborhoodsTable: React.FC<NeighborhoodsTableProps> = ({

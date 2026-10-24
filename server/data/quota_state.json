@@ -1,6 +1,5 @@
 {
-  "readUntil": 1800000000000,
+  "readUntil": 0,
   "writeUntil": 0,
-  "updatedAt": "2026-10-10T00:55:00.000Z",
-  "reason": "Free daily read units per project (free tier database) limit reached"
+  "updatedAt": "2026-10-24T23:07:00.000Z"
 }

@@ -1,11 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import {
+  loadCanonicalCampaignResults,
+  initCanonicalCampaignResults,
+  deleteCanonicalCampaign
+} from '../db/supabase.js';
+import {
   cities,
   neighborhoods,
   users,
   memoryCampaigns,
-  setMemoryCampaigns,
   memoryCampaignTrips,
   memoryCampaignCanonicalTrips,
   activePricingSessions,
@@ -25,30 +29,68 @@ import {
   finalizeCampaignExecution,
   cancelChunkCampaignSession,
   cleanNeighborhoodName,
-  campaignSessions,
-  cancelledCampaignIds,
-  runAutomatedServerCampaign,
-  runAutomatedAirportCampaign
+  campaignSessions
 } from '../services/campaignEngine.js';
 import { generateBenchmarkPairs, calculatePossibleBenchmarkPairsCount, detectArrondissement } from '../../src/utils/routeMatrix.js';
-import { getNextSequence } from '../db/counters.js';
-import { loadCanonicalCampaignResults, deleteCampaignFromSupabase, deleteAllCampaignsFromSupabase } from '../db/supabase.js';
+import { saveCampaignToSupabase, fetchCampaignsFromSupabase } from '../db/supabase.js';
 
 const router = Router();
 
-export function findCampaign(idOrUuid: string | number): PricingCampaign | undefined {
-  const str = String(idOrUuid);
-  return memoryCampaigns.find(c => String(c.id) === str || c.uuid === str);
-}
+// 1. Liste des campagnes (avec cache RAM serveur TTL 60s et Supabase/Disque)
+let lastCampaignsSupaFetch = 0;
+let cachedSupaCampaigns: PricingCampaign[] = [];
 
-// 1. Liste des 25 dernières campagnes (Servie à 100% depuis la mémoire RAM et persistance locale)
-router.get('/api/campaigns', async (_req: Request, res: Response) => {
-  let list: PricingCampaign[] = [...memoryCampaigns];
+router.get('/api/campaigns', async (req: Request, res: Response) => {
+  const forceRefresh = req.query.forceRefresh === 'true';
+  const now = Date.now();
+  let list: PricingCampaign[] = [];
 
-  // Fusion avec les campagnes actives en mémoire (Sessions en temps réel)
+  if (cachedSupaCampaigns.length === 0 || forceRefresh || now - lastCampaignsSupaFetch > 60000) {
+    try {
+      const supaCamps = await fetchCampaignsFromSupabase();
+      if (supaCamps && supaCamps.length > 0) {
+        cachedSupaCampaigns = supaCamps;
+        lastCampaignsSupaFetch = now;
+
+        let diskUpdated = false;
+        for (const camp of cachedSupaCampaigns) {
+          const idx = memoryCampaigns.findIndex(m => m.id === camp.id || m.uuid === camp.uuid);
+          if (idx < 0) {
+            memoryCampaigns.push(camp);
+            diskUpdated = true;
+          } else {
+            if (JSON.stringify(memoryCampaigns[idx]) !== JSON.stringify(camp)) {
+              memoryCampaigns[idx] = { ...memoryCampaigns[idx], ...camp };
+              diskUpdated = true;
+            }
+          }
+        }
+        if (diskUpdated) {
+          saveLocalCampaignsDiskBackup();
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Supabase] get campaigns error:', e.message);
+    }
+  }
+
+  list = [...cachedSupaCampaigns];
+
+  // Fusion avec memoryCampaigns
+  for (const memCamp of memoryCampaigns) {
+    const idx = list.findIndex(c => c.id === memCamp.id || c.uuid === memCamp.uuid);
+    if (idx >= 0) {
+      if (memCamp.status === 'completed' || (memCamp.completedPairs || 0) >= (list[idx].completedPairs || 0)) {
+        list[idx] = { ...list[idx], ...memCamp };
+      }
+    } else {
+      list.unshift({ ...memCamp });
+    }
+  }
+
+  // Fusion avec les campagnes actives en mémoire (Chunking sessions & Worker sessions)
   for (const [id, session] of campaignSessions.entries()) {
-    const sUuid = session.campaign.uuid;
-    const idx = list.findIndex(c => String(c.id) === String(id) || (sUuid && c.uuid === sUuid) || c.uuid === String(id));
+    const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...session.campaign };
     } else {
@@ -56,8 +98,7 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
     }
   }
   for (const [id, session] of activePricingSessions.entries()) {
-    const sUuid = session.campaign.uuid;
-    const idx = list.findIndex(c => String(c.id) === String(id) || (sUuid && c.uuid === sUuid) || c.uuid === String(id));
+    const idx = list.findIndex(c => c.id === id);
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...session.campaign };
     } else {
@@ -65,21 +106,9 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
     }
   }
 
-  // Dédoublonnage strict par ID et UUID
-  const seenKeys = new Set<string>();
-  const deduplicatedList: PricingCampaign[] = [];
-  for (const camp of list) {
-    const key = camp.uuid || String(camp.id);
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      deduplicatedList.push(camp);
-    }
-  }
-  list = deduplicatedList;
-
   list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
-  // Nettoyage des statuts pour les campagnes terminées
+  // Nettoyage des campagnes réellement terminées
   list = list.map(c => {
     if (c.status === 'in_progress') {
       const isActuallyFinished = c.completedPairs && c.totalPairs && c.completedPairs >= c.totalPairs;
@@ -90,10 +119,7 @@ router.get('/api/campaigns', async (_req: Request, res: Response) => {
     return c;
   });
 
-  // Strictement limité aux 10 dernières campagnes
-  const final10 = list.slice(0, 10);
-  res.setHeader('X-Cache', 'HIT-RAM-STRICT-10');
-  return res.json(final10);
+  return res.json(list);
 });
 
 // Route de synchronisation du cache local client vers la mémoire et le disque du serveur
@@ -118,23 +144,44 @@ router.post('/api/campaigns/sync-cache', (req: Request, res: Response) => {
 // 2. Détail d'une campagne
 router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const mem = findCampaign(id);
-  const uuid = mem?.uuid || id;
 
   // 1. Session active en cours
-  const chunkSession = campaignSessions.get(uuid) || campaignSessions.get(id);
+  const chunkSession = campaignSessions.get(id);
   if (chunkSession) {
     return res.json(chunkSession.campaign);
   }
-  const session = activePricingSessions.get(uuid) || activePricingSessions.get(id);
+  const session = activePricingSessions.get(id);
   if (session) {
     return res.json(session.campaign);
   }
 
-  // 2. Recherche en RAM locale du serveur (10 dernières campagnes en mémoire)
+  // 2. Recherche en RAM locale du serveur (memoryCampaigns et cachedFirestoreCampaigns)
+  const mem = memoryCampaigns.find(c => c.id === id);
   if (mem) {
     res.setHeader('X-Cache', 'HIT-RAM');
     return res.json(mem);
+  }
+
+  const cached = cachedFirestoreCampaigns.find(c => c.id === id);
+  if (cached) {
+    res.setHeader('X-Cache', 'HIT-CACHE');
+    return res.json(cached);
+  }
+
+  // 3. Uniquement en dernier recours, requêter Supabase
+  try {
+    const supaCamps = await fetchCampaignsFromSupabase();
+    if (supaCamps) {
+      const found = supaCamps.find((c: any) => String(c.id) === String(id) || c.uuid === id);
+      if (found) {
+        memoryCampaigns.push(found);
+        saveLocalCampaignsDiskBackup();
+        res.setHeader('X-Cache', 'HIT-SUPABASE');
+        return res.json(found);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[Supabase] get campaign error:', e.message);
   }
 
   return res.status(404).json({ error: 'Campagne introuvable.' });
@@ -162,7 +209,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'cityId est obligatoire.' });
   }
 
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === String(cityId));
+  const city = cities.find(c => c.id === cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
@@ -170,17 +217,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Impossible de lancer un pricing sur une ville inactive. Activez la ville d’abord.' });
   }
 
-  const cId = String(city.id);
-  const cUuid = city.uuid;
-  const cName = city.name ? city.name.toLowerCase().trim() : '';
-
-  const activeNbs = neighborhoods.filter(n => {
-    if (!n.active) return false;
-    if (n.cityId === cUuid || String(n.cityId) === cId) return true;
-    if (cName && (n.ville || n.cityName || '').toLowerCase().trim().includes(cName)) return true;
-    return false;
-  });
-
+  const activeNbs = neighborhoods.filter(n => n.cityId === cityId && n.active);
   if (activeNbs.length < 2) {
     return res.status(400).json({ error: 'Au moins 2 quartiers actifs sont requis pour calculer des trajets.' });
   }
@@ -237,12 +274,10 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
     ? String(triggeredByUserName).trim()
     : (triggerType === 'scheduled' ? 'Planificateur Automatique' : 'Citrine Opérateur');
 
-  const campaignUuid = randomUUID();
-  const campaignNumericId = getNextSequence('campaigns');
+  const campaignId = randomUUID();
   const campaign: PricingCampaign = {
-    id: campaignNumericId,
-    uuid: campaignUuid,
-    cityId: city.uuid || String(city.id),
+    id: campaignId,
+    cityId: city.id,
     cityName: city.name,
     currency: city.currency,
     triggerType: triggerType || 'manual',
@@ -277,6 +312,8 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   // Initialisation de la session de campagne
   const { totalChunks, totalPairs } = await initializeCampaignSession(campaign, city, pairs);
   saveLocalCampaignsDiskBackup();
+  saveCampaignToFirestore(campaign).catch(() => {});
+  saveCampaignToSupabase(campaign).catch(() => {});
 
   await recordHistory({
     action: 'start_campaign',
@@ -318,19 +355,6 @@ router.post('/api/campaigns/:id/process-chunk', async (req: Request, res: Respon
   }
 });
 
-// Alias direct /api/campaigns/:id/chunk/:chunkIndex
-router.post('/api/campaigns/:id/chunk/:chunkIndex', async (req: Request, res: Response) => {
-  const { id, chunkIndex } = req.params;
-  const cIdx = parseInt(String(chunkIndex || 1), 10);
-  const fallbackMeta = req.body.fallbackMeta || req.body;
-  try {
-    const result = await processCampaignChunk(id, cIdx, fallbackMeta);
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Erreur lors du traitement du lot.' });
-  }
-});
-
 // Finalisation de la campagne
 router.post('/api/campaigns/:id/finalize', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -339,6 +363,8 @@ router.post('/api/campaigns/:id/finalize', async (req: Request, res: Response) =
   try {
     const campaign = await finalizeCampaignExecution(id, canonicalTrips, trips);
     saveLocalCampaignsDiskBackup();
+    saveCampaignToFirestore(campaign).catch(() => {});
+    saveCampaignToSupabase(campaign).catch(() => {});
     return res.json({ success: true, campaign });
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Erreur lors de la finalisation.' });
@@ -354,6 +380,12 @@ router.post('/api/campaigns/:id/step', async (req: Request, res: Response) => {
   }
 
   let campaign = memoryCampaigns.find(c => c.id === id);
+  if (!campaign && db) {
+    try {
+      const snap = await getDoc(doc(db, 'campaigns', id));
+      if (snap.exists()) campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
+    } catch {}
+  }
 
   if (!campaign) {
     return res.status(404).json({ error: 'Campagne introuvable.' });
@@ -393,8 +425,7 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
   const trimmedComment = typeof comment === 'string' ? comment.trim() : undefined;
 
   // 1. Mettre à jour en mémoire
-  const memCamp = findCampaign(id);
-  const campUuid = memCamp?.uuid || id;
+  const memCamp = memoryCampaigns.find(c => c.id === id);
   if (memCamp) {
     if (trimmedComment !== undefined) {
       memCamp.comment = trimmedComment;
@@ -405,22 +436,38 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     }
   }
 
-  // 2. Sauvegarde disque local
-  saveLocalCampaignsDiskBackup();
-
-  // 3. Sauvegarde Supabase / stockage local
-  try {
-    const updatePayload: Record<string, any> = {};
+  // 2. Mettre à jour dans le cache Firestore
+  const cached = cachedFirestoreCampaigns.find(c => c.id === id);
+  if (cached) {
     if (trimmedComment !== undefined) {
-      updatePayload.comment = trimmedComment;
-      updatePayload.comments = trimmedComment;
+      cached.comment = trimmedComment;
+      cached.comments = trimmedComment;
     }
     if (timeSlotOverride !== undefined) {
-      updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
+      cached.timeSlotOverride = timeSlotOverride === 'auto' ? undefined : timeSlotOverride;
     }
-    // Mise à jour locale déjà effectuée sur memCamp
-  } catch (e: any) {
-    console.warn('[Storage] Warning updating campaign comment:', e.message);
+  }
+
+  // 3. Sauvegarde disque local
+  saveLocalCampaignsDiskBackup();
+
+  // 4. Sauvegarde Firestore
+  if (db && !isFirestoreQuotaExceeded()) {
+    try {
+      const updatePayload: Record<string, any> = {};
+      if (trimmedComment !== undefined) {
+        updatePayload.comment = trimmedComment;
+        updatePayload.comments = trimmedComment;
+      }
+      if (timeSlotOverride !== undefined) {
+        updatePayload.timeSlotOverride = timeSlotOverride === 'auto' ? null : timeSlotOverride;
+      }
+      await safeFirestoreWrite('updateCampaignComment', () =>
+        setDoc(doc(db!, 'campaigns', id), cleanFirestoreDoc(updatePayload), { merge: true })
+      );
+    } catch (e: any) {
+      console.warn('[Firestore] Warning saving campaign comment:', e.message);
+    }
   }
 
   await recordHistory({
@@ -432,24 +479,44 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     metadata: { campaignId: id, timeSlotOverride }
   }).catch(() => {});
 
-  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp });
+  return res.json({ success: true, id, comment: trimmedComment, timeSlotOverride, campaign: memCamp || cached });
 });
 
 // 5. Suppression globale
 router.delete('/api/campaigns', async (_req: Request, res: Response) => {
-  const campsToDelete = [...memoryCampaigns];
+  cachedFirestoreCampaigns = [];
   memoryCampaigns.length = 0;
-  for (const cid of Object.keys(memoryCampaignTrips)) {
-    delete memoryCampaignTrips[cid];
+  for (const id of Object.keys(memoryCampaignTrips)) {
+    delete memoryCampaignTrips[id];
   }
-  for (const cid of Object.keys(memoryCampaignCanonicalTrips)) {
-    delete memoryCampaignCanonicalTrips[cid];
+  for (const id of Object.keys(memoryCampaignCanonicalTrips)) {
+    delete memoryCampaignCanonicalTrips[id];
   }
   campaignSessions.clear();
   activePricingSessions.clear();
   deleteAllCampaignTripsDiskBackup();
   saveLocalCampaignsDiskBackup();
-  deleteAllCampaignsFromSupabase().catch(() => {});
+
+  if (db && !isFirestoreQuotaExceeded() && !isFirestoreWriteQuotaExceeded()) {
+    try {
+      const snap = await getDocs(collection(db, 'campaigns'));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+      const resSnap = await getDocs(collection(db, 'campaign_results'));
+      if (!resSnap.empty) {
+        const batch = writeBatch(db);
+        resSnap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    } catch (e: any) {
+      if (isQuotaExceededError(e)) {
+        flagFirestoreQuotaExceeded(e);
+      }
+    }
+  }
 
   await recordHistory({
     action: 'delete_all_campaigns',
@@ -464,45 +531,22 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
 // 6. Suppression unique
 router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
-  const campNumId = targetCamp?.id ? String(targetCamp.id) : null;
-
-  // 1. Interrompre immédiatement la boucle de calcul d'arrière-plan si elle est en cours
-  cancelChunkCampaignSession(id);
-  cancelledCampaignIds.add(String(id));
-  if (campUuid) cancelledCampaignIds.add(campUuid);
-  if (campNumId) cancelledCampaignIds.add(campNumId);
-
-  const idx = memoryCampaigns.findIndex(c => String(c.id) === String(id) || c.uuid === id);
+  cachedFirestoreCampaigns = cachedFirestoreCampaigns.filter(c => c.id !== id);
+  const idx = memoryCampaigns.findIndex(c => c.id === id);
   if (idx >= 0) memoryCampaigns.splice(idx, 1);
-
-  delete memoryCampaignTrips[campUuid];
-  delete memoryCampaignCanonicalTrips[campUuid];
-  if (campNumId) {
-    delete memoryCampaignTrips[campNumId];
-    delete memoryCampaignCanonicalTrips[campNumId];
-  }
-
-  campaignSessions.delete(campUuid);
-  activePricingSessions.delete(campUuid);
-  if (campNumId) {
-    campaignSessions.delete(campNumId);
-    activePricingSessions.delete(campNumId);
-  }
-
-  deleteCampaignTripsDiskBackup(campUuid);
-  if (campNumId) deleteCampaignTripsDiskBackup(campNumId);
+  delete memoryCampaignTrips[id];
+  delete memoryCampaignCanonicalTrips[id];
+  campaignSessions.delete(id);
+  deleteCampaignTripsDiskBackup(id);
   saveLocalCampaignsDiskBackup();
 
-  // Suppression en base Supabase (par UUID et ID numérique)
-  await deleteCampaignFromSupabase(campUuid).catch(() => {});
-  if (campNumId) {
-    await deleteCampaignFromSupabase(campNumId).catch(() => {});
-  }
-
   // Nettoyage de l'historique en mémoire locale
-  deleteHistoryForCampaign(campUuid).catch(() => {});
+  deleteHistoryForCampaign(id).catch(() => {});
+
+  // Nettoyage Firestore asynchrone non-bloquant si les écritures sont permises
+  if (db && !isFirestoreWriteQuotaExceeded()) {
+    deleteCanonicalCampaign(id).catch(() => {});
+  }
 
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
 });
@@ -510,69 +554,64 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
 // 7. Résultats des trajets (Exploite notre cache RAM, disque local et JSON canonique pour garantir 0 lecture Firestore)
 router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
-  const campNumId = targetCamp?.id ? String(targetCamp.id) : null;
 
   // 1. Session active en cours
-  const session = activePricingSessions.get(campUuid) || (campNumId ? activePricingSessions.get(campNumId) : undefined);
+  const session = activePricingSessions.get(id);
   if (session && session.trips.length > 0) {
     res.setHeader('X-Cache', 'HIT-SESSION');
     return res.json(session.trips);
   }
 
   // 2. Cache mémoire RAM serveur instantané (2ms, 0 lecture Firestore)
-  if (memoryCampaignTrips[campUuid] && memoryCampaignTrips[campUuid].length > 0) {
+  if (memoryCampaignTrips[id] && memoryCampaignTrips[id].length > 0) {
     res.setHeader('X-Cache', 'HIT-RAM');
-    return res.json(memoryCampaignTrips[campUuid]);
-  }
-  if (campNumId && memoryCampaignTrips[campNumId] && memoryCampaignTrips[campNumId].length > 0) {
-    res.setHeader('X-Cache', 'HIT-RAM');
-    return res.json(memoryCampaignTrips[campNumId]);
+    return res.json(memoryCampaignTrips[id]);
   }
 
   // 3. Cache disque local serveur persistant (survit aux redémarrages et quotas)
-  const diskTrips = loadCampaignTripsDiskBackup(campUuid) || (campNumId ? loadCampaignTripsDiskBackup(campNumId) : null);
+  const diskTrips = loadCampaignTripsDiskBackup(id);
   if (diskTrips && diskTrips.length > 0) {
     res.setHeader('X-Cache', 'HIT-DISK');
     return res.json(diskTrips);
   }
 
-  // 4. Lecture du JSON canonique depuis le stockage persistant
-  const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
-  if (canonicalTrips.length > 0) {
-    const cleanTrips = canonicalTrips.map(t => {
-      const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
-      return {
-        id: t.id,
-        uuid: t.uuid,
-        campaignId: campUuid,
-        origin: t.origin,
-        destination: t.destination,
-        distanceKm: t.distanceKm,
-        durationMinutes: t.durationMin,
-        jams: Boolean(t.jams),
-        yangoUnavailable: Boolean(t.yangoUnavailable),
-        yangoWaitingMinutes: t.yangoWaitingMinutes,
-        yangoUnavailableClasses: t.yangoUnavailableClasses,
-        prices: {
-          ...t.prices,
-          yango: {
-            ...pYango,
-            jams: pYango.jams !== undefined ? pYango.jams : Boolean(t.jams),
-            yangoUnavailable: pYango.yangoUnavailable !== undefined ? pYango.yangoUnavailable : Boolean(t.yangoUnavailable)
-          }
-        },
-        cheapest: t.cheapest,
-        status: t.status,
-        createdAt: t.createdAt
-      };
-    }) as unknown as TripResult[];
+  // 4. Lecture du JSON canonique en base de données Firestore (si quota disponible)
+  if (!isFirestoreQuotaExceeded()) {
+    const canonicalTrips = await loadCanonicalCampaignResults(id);
+    if (canonicalTrips.length > 0) {
+      const cleanTrips = canonicalTrips.map(t => {
+        const pYango = t.prices?.yango || { eco: null, confort: null, confortPlus: null, moto: null };
+        return {
+          id: t.id,
+          campaignId: id,
+          origin: t.origin,
+          destination: t.destination,
+          distanceKm: t.distanceKm,
+          durationMinutes: t.durationMin,
+          jams: Boolean(t.jams),
+          yangoUnavailable: Boolean(t.yangoUnavailable),
+          yangoWaitingMinutes: t.yangoWaitingMinutes,
+          yangoUnavailableClasses: t.yangoUnavailableClasses,
+          prices: {
+            ...t.prices,
+            yango: {
+              ...pYango,
+              jams: pYango.jams !== undefined ? pYango.jams : Boolean(t.jams),
+              yangoUnavailable: pYango.yangoUnavailable !== undefined ? pYango.yangoUnavailable : Boolean(t.yangoUnavailable)
+            }
+          },
+          cheapest: t.cheapest,
+          status: t.status,
+          createdAt: t.createdAt
+        };
+      }) as unknown as TripResult[];
 
-    memoryCampaignTrips[campUuid] = cleanTrips;
-    saveCampaignTripsDiskBackup(campUuid, cleanTrips, canonicalTrips);
-    res.setHeader('X-Cache', 'HIT-STORAGE');
-    return res.json(cleanTrips);
+      memoryCampaignTrips[id] = cleanTrips;
+      // Sauvegarder immédiatement sur disque local pour les prochains redémarrages
+      saveCampaignTripsDiskBackup(id, cleanTrips, canonicalTrips);
+      res.setHeader('X-Cache', 'HIT-FIRESTORE');
+      return res.json(cleanTrips);
+    }
   }
 
   // Si aucun trajet n'est encore enregistré ou si la campagne débute, renvoyer un tableau vide [] avec statut 200 (pas d'erreur 404)
@@ -583,13 +622,11 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
 router.post('/api/campaigns/:id/sync-trips', (req: Request, res: Response) => {
   const { id } = req.params;
   const { trips } = req.body;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
 
   if (Array.isArray(trips) && trips.length > 0) {
-    memoryCampaignTrips[campUuid] = trips;
-    saveCampaignTripsDiskBackup(campUuid, trips);
-    console.log(`[Sync Trips] ${trips.length} trajets synchronisés depuis le client pour la campagne ${campUuid}.`);
+    memoryCampaignTrips[id] = trips;
+    saveCampaignTripsDiskBackup(id, trips);
+    console.log(`[Sync Trips] ${trips.length} trajets synchronisés depuis le client pour la campagne ${id}.`);
     return res.json({ success: true, count: trips.length });
   }
 
@@ -599,29 +636,34 @@ router.post('/api/campaigns/:id/sync-trips', (req: Request, res: Response) => {
 // 8. Endpoint Téléchargement JSON Canonique Ultra-Léger
 router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
 
   let canonicalTrips: CanonicalTrip[] = [];
 
-  const session = activePricingSessions.get(campUuid);
+  const session = activePricingSessions.get(id);
   if (session) {
     canonicalTrips = session.canonicalTrips;
-  } else if (memoryCampaignCanonicalTrips[campUuid]) {
-    canonicalTrips = memoryCampaignCanonicalTrips[campUuid];
+  } else if (memoryCampaignCanonicalTrips[id]) {
+    canonicalTrips = memoryCampaignCanonicalTrips[id];
   } else {
-    canonicalTrips = await loadCanonicalCampaignResults(campUuid);
+    canonicalTrips = await loadCanonicalCampaignResults(id);
   }
 
-  let campaign = targetCamp || memoryCampaigns.find(c => c.uuid === campUuid || String(c.id) === String(id));
+  let campaign = memoryCampaigns.find(c => c.id === id);
+  if (!campaign && db) {
+    try {
+      const snap = await getDoc(doc(db, 'campaigns', id));
+      if (snap.exists()) {
+        campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
+      }
+    } catch {}
+  }
 
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', `attachment; filename="pricing_canonical_${campUuid}.json"`);
+  res.setHeader('Content-Disposition', `attachment; filename="pricing_canonical_${id}.json"`);
 
   return res.json({
     format: 'citrine.vtc.canonical.v1',
-    campaignId: campUuid,
-    campaignNumber: campaign?.id,
+    campaignId: id,
     cityName: campaign?.cityName || 'Douala',
     exportedAt: new Date().toISOString(),
     totalTrips: canonicalTrips.length,
@@ -632,11 +674,18 @@ router.get('/api/campaigns/:id/canonical-json', async (req: Request, res: Respon
 // 9. Export CSV / Excel
 router.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targetCamp = findCampaign(id);
-  const campUuid = targetCamp?.uuid || id;
-  const canonicalTrips = await loadCanonicalCampaignResults(campUuid);
+  const canonicalTrips = await loadCanonicalCampaignResults(id);
 
-  let campaign = targetCamp || memoryCampaigns.find(c => c.uuid === campUuid || String(c.id) === String(id));
+  let campaign = memoryCampaigns.find(c => c.id === id);
+  if (!campaign && db) {
+    try {
+      const snap = await getDoc(doc(db, 'campaigns', id));
+      if (snap.exists()) {
+        campaign = { id: snap.id, ...snap.data() } as PricingCampaign;
+      }
+    } catch {}
+  }
+
   const cityName = campaign?.cityName || 'Douala';
 
   const headers = [
@@ -678,26 +727,6 @@ router.get('/api/campaigns/:id/export', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="pricing_${cityName.toLowerCase()}_${canonicalTrips.length}_trajets.csv"`);
   return res.send(csvContent);
-});
-
-// 10. Endpoint déclenché par pg_cron de Supabase (pour la campagne aéroport de 22h)
-router.all('/api/cron/trigger-airport', async (req: Request, res: Response) => {
-  try {
-    const { cityId } = req.method === 'POST' ? req.body : req.query;
-    console.log('[Cron Airport Route] Requête reçue pour /api/cron/trigger-airport:', { cityId, method: req.method });
-
-    const result = await runAutomatedAirportCampaign(cityId, 'Cron Aéroport Supabase (pg_cron)');
-    return res.json({
-      success: true,
-      message: 'Tarification aéroport automatique initiée avec succès en arrière-plan.',
-      campaignId: result.campaignId,
-      totalPairs: result.totalPairs,
-      triggeredAt: new Date().toISOString()
-    });
-  } catch (err: any) {
-    console.error('[Cron Airport Route Error]:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
-  }
 });
 
 export default router;

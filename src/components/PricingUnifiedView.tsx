@@ -381,8 +381,8 @@ export const PricingUnifiedView: React.FC<PricingUnifiedViewProps> = ({
           throw lastErr || new Error(`Échec du lot ${chunkIdx}`);
         };
 
-        // Exécution optimisée par pool de 3 workers concurrents
-        const CONCURRENCY = 3;
+        // Exécution cadencée par pool de 2 workers concurrents (2 x 10 trajets live en parallèle)
+        const CONCURRENCY = 2;
         const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
         let nextIdx = 0;
 

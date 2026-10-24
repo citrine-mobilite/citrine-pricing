@@ -8,6 +8,7 @@ import {
   loadCanonicalCampaignResults,
   saveCampaignToSupabase
 } from '../db/supabase.js';
+// Disk and Supabase persistence only
 import {
   activePricingSessions,
   memoryCampaigns,
@@ -54,7 +55,7 @@ export interface CampaignSessionState {
 // Map local des sessions actives
 export const campaignSessions = new Map<string, CampaignSessionState>();
 
-function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T> {
+function fetchWithTimeout<T>(promise: Promise<T>, ms = 10000, fallback: T): Promise<T> {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((resolve) => {
     timeoutId = setTimeout(() => resolve(fallback), ms);
@@ -234,7 +235,7 @@ export async function processCampaignChunk(
       trips: diskTrips,
       completedPairs: Math.max(camp.completedPairs || 0, diskCanonical.length),
       failedPairs: camp.failedPairs || 0,
-      completedBatches: Math.max(camp.completedBatches || 0, Math.floor(diskCanonical.length / 10)),
+      completedBatches: Math.max(camp.completedBatches || 0, Math.floor(diskCanonical.length / 20)),
       startedAtMs: new Date(camp.startedAt).getTime() || Date.now()
     };
     campaignSessions.set(campaignId, session);
@@ -269,9 +270,9 @@ export async function processCampaignChunk(
 
     try {
       const [yangoStats, heroStats, tmStats] = await Promise.all([
-        fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 3500, emptyStats as any),
-        fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 3500, emptyStats as any),
-        fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 3500, emptyStats as any)
+        fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 10000, emptyStats as any),
+        fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 10000, emptyStats as any),
+        fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 10000, emptyStats as any)
       ]);
 
       const yEco = yangoStats.priceEconom || (yangoStats.classes?.econom?.price) || yangoStats.price || null;
@@ -414,16 +415,22 @@ export async function processCampaignChunk(
   session.campaign.completedBatches = session.completedBatches;
   session.campaign.durationSeconds = Math.max(1, Math.round((Date.now() - session.startedAtMs) / 1000));
 
-  // Enregistrement par lot de 10 trajets sur disque persistant
+  // Enregistrement par lot en arrière-plan non bloquant (ne retarde pas la réponse au client)
   if (chunkCanonicalTrips.length > 0) {
-    await saveCanonicalCampaignBatch(campaignId, chunkIndex, chunkCanonicalTrips, session.city.name);
+    saveCanonicalCampaignBatch(campaignId, chunkIndex, chunkCanonicalTrips, session.city.name).catch((err) => {
+      console.warn(`[Supabase/Disk] Background batch error on chunk ${chunkIndex}:`, err.message);
+    });
   }
 
-  // Synchro mémoire & disque local persistant
+  // Synchro mémoire & persistance disque asynchrone non-bloquante
   memoryCampaignTrips[campaignId] = session.trips;
   memoryCampaignCanonicalTrips[campaignId] = session.canonicalTrips;
-  saveCampaignTripsDiskBackup(campaignId, session.trips, session.canonicalTrips);
-  saveLocalCampaignsDiskBackup();
+  setImmediate(() => {
+    try {
+      saveCampaignTripsDiskBackup(campaignId, session.trips, session.canonicalTrips);
+      saveLocalCampaignsDiskBackup();
+    } catch {}
+  });
 
   return {
     success: true,
@@ -639,6 +646,8 @@ export async function finalizeCampaignExecution(
   }
   saveCampaignTripsDiskBackup(campaignUuid, memoryCampaignTrips[campaignUuid] || [], canonicalTrips);
   saveLocalCampaignsDiskBackup();
+  
+  // Persistance sur le disque et Supabase
   await saveCampaignToSupabase(campaign);
 
   campaignSessions.delete(campaignUuid);

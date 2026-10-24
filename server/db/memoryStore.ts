@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { User, City, Neighborhood, PricingCampaign, TripResult, ActivePricingSession, CanonicalTrip } from '../types.js';
+import { bootstrapSupabaseData, fetchCitiesFromSupabase, fetchNeighborhoodsFromSupabase, fetchUsersFromSupabase } from './supabase.js';
 import defaultNeighborhoods from './defaultNeighborhoods.json' with { type: 'json' };
 
 const DATA_DIR = path.resolve(process.cwd(), 'server/data');
@@ -10,29 +11,6 @@ const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
 const CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'campaigns.json');
 const NEIGHBORHOODS_FILE = path.resolve(process.cwd(), 'server/db/defaultNeighborhoods.json');
 
-export function saveNeighborhoodsDiskBackup() {
-  try {
-    fs.writeFileSync(NEIGHBORHOODS_FILE, JSON.stringify(neighborhoods, null, 2), 'utf8');
-    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans defaultNeighborhoods.json`);
-  } catch (e: any) {
-    console.warn('[Disk Backup] Warning writing neighborhoods to disk:', e.message);
-  }
-}
-
-export function saveLocalCampaignsDiskBackup() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    // Conserver les 25 dernières campagnes
-    const capped = [...memoryCampaigns]
-      .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime())
-      .slice(0, 25);
-    fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(capped, null, 2), 'utf8');
-  } catch (e: any) {
-    console.warn('[Disk Backup] Warning writing campaigns to disk:', e.message);
-  }
-}
-
-const USERS_FILE = path.resolve(DATA_DIR, 'users.json');
 const CITIES_FILE = path.resolve(DATA_DIR, 'cities.json');
 
 export function saveCitiesDiskBackup() {
@@ -51,22 +29,35 @@ export function loadCitiesDiskBackup(): boolean {
       const raw = fs.readFileSync(CITIES_FILE, 'utf8');
       const data = JSON.parse(raw);
       if (Array.isArray(data) && data.length > 0) {
-        cities = data;
+        cities.splice(0, cities.length, ...data);
         return true;
       }
     }
   } catch (e: any) {
     console.warn('[Disk Backup] Warning reading cities from disk:', e.message);
   }
-
-  // Villes par défaut si aucun backup n'existe
-  cities = [
-    { id: '1', uuid: 'city_douala', name: 'Douala', country: 'Cameroun', currency: 'XAF', currencySymbol: 'FCFA', active: true, center: { lat: 4.0511, lng: 9.7679 }, autoSchedule: { enabled: false, slots: [] } },
-    { id: '2', uuid: 'city_yaounde', name: 'Yaoundé', country: 'Cameroun', currency: 'XAF', currencySymbol: 'FCFA', active: true, center: { lat: 3.8480, lng: 11.5021 }, autoSchedule: { enabled: false, slots: [] } }
-  ];
-  saveCitiesDiskBackup();
   return false;
 }
+
+export function saveNeighborhoodsDiskBackup() {
+  try {
+    fs.writeFileSync(NEIGHBORHOODS_FILE, JSON.stringify(neighborhoods, null, 2), 'utf8');
+    console.log(`[Disk Backup] ${neighborhoods.length} quartiers persistés dans defaultNeighborhoods.json`);
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing neighborhoods to disk:', e.message);
+  }
+}
+
+export function saveLocalCampaignsDiskBackup() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(memoryCampaigns, null, 2), 'utf8');
+  } catch (e: any) {
+    console.warn('[Disk Backup] Warning writing campaigns to disk:', e.message);
+  }
+}
+
+const USERS_FILE = path.resolve(DATA_DIR, 'users.json');
 
 export function saveUsersDiskBackup() {
   try {
@@ -145,18 +136,6 @@ export function loadCampaignTripsDiskBackup(campaignId: string): TripResult[] | 
       const data = JSON.parse(raw);
       if (Array.isArray(data) && data.length > 0) {
         memoryCampaignTrips[campaignId] = data;
-        
-        // Charger simultanément le format canonique en RAM s'il existe
-        const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-        if (fs.existsSync(canonPath)) {
-          try {
-            const rawCanon = fs.readFileSync(canonPath, 'utf8');
-            const canonData = JSON.parse(rawCanon);
-            if (Array.isArray(canonData) && canonData.length > 0) {
-              memoryCampaignCanonicalTrips[campaignId] = canonData;
-            }
-          } catch {}
-        }
         return data;
       }
     }
@@ -192,20 +171,6 @@ export function loadCampaignTripsDiskBackup(campaignId: string): TripResult[] | 
   return null;
 }
 
-export function loadCanonicalTripsDiskBackup(campaignId: string | number): CanonicalTrip[] {
-  try {
-    const filePath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data)) return data;
-    }
-  } catch (e: any) {
-    console.warn(`[Disk Backup] Warning reading canonical trips for ${campaignId}:`, e.message);
-  }
-  return [];
-}
-
 export function loadLocalCampaignsDiskBackup() {
   try {
     if (fs.existsSync(CAMPAIGNS_FILE)) {
@@ -215,21 +180,21 @@ export function loadLocalCampaignsDiskBackup() {
         memoryCampaigns = data;
         console.log(`[Disk Backup] ${data.length} campagnes restaurées depuis le stockage local persistant.`);
         
-        // Conserver les 25 campagnes les plus récentes
+        // Trier par date décroissante pour identifier les plus récentes
         const sorted = [...data].sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime());
-        memoryCampaigns = sorted.slice(0, 25);
         
-        // Pré-charger les trajets existants en RAM pour les 25 campagnes les plus récentes
-        for (const camp of memoryCampaigns) {
+        // Pré-charger les trajets existants en RAM uniquement pour les 100 campagnes les plus récentes pour économiser la RAM
+        const limitToPreload = sorted.slice(0, 100);
+        for (const camp of limitToPreload) {
           if (camp?.id) {
-            loadCampaignTripsDiskBackup(String(camp.id));
+            loadCampaignTripsDiskBackup(camp.id);
           }
         }
 
         // Enrichir toutes les campagnes avec les statistiques par arrondissement
         for (const camp of memoryCampaigns) {
           if (!camp.arrondissementStats) {
-            const canonTrips = memoryCampaignCanonicalTrips[String(camp.id)];
+            const canonTrips = memoryCampaignCanonicalTrips[camp.id];
             if (canonTrips && canonTrips.length > 0) {
               const arrMap: Record<string, { sumY: number; countY: number; sumH: number; countH: number; sumT: number; countT: number; count: number }> = {};
               const nbMap = new Map<string, string>();
@@ -297,7 +262,7 @@ export function loadLocalCampaignsDiskBackup() {
             }
           }
         }
-        console.log(`[Memory Shield] Trajets des ${memoryCampaigns.length} campagnes les plus récentes pré-chargés en RAM et statistiques d'arrondissements enrichies.`);
+        console.log(`[Memory Shield] Trajets des ${limitToPreload.length} campagnes les plus récentes pré-chargés en RAM et statistiques d'arrondissements enrichies.`);
       }
     }
   } catch (e: any) {
@@ -305,22 +270,90 @@ export function loadLocalCampaignsDiskBackup() {
   }
 }
 
+// Hachage sécurisé bcrypt avec salt pour le compte administrateur citrinemobilite@gmail.com
 export const CITRINE_ADMIN_PASSWORD = 'Citrine2026!';
+const CITRINE_ADMIN_HASH = bcrypt.hashSync(CITRINE_ADMIN_PASSWORD, 10);
+const DEFAULT_PASSWORD_HASH = CITRINE_ADMIN_HASH;
 
-// États réactifs en RAM chargés dynamiquement depuis les fichiers de persistance
-export let users: User[] = [];
-export let cities: City[] = [];
+export const defaultUsers: User[] = [
+  {
+    id: 'usr_citrine_admin',
+    name: 'Admin Citrine',
+    email: 'citrinemobilite@gmail.com',
+    role: 'admin',
+    active: true,
+    passwordHash: CITRINE_ADMIN_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_landry',
+    name: 'Landry Moutongo',
+    email: 'landrymoutongo97@gmail.com',
+    role: 'admin',
+    active: true,
+    passwordHash: CITRINE_ADMIN_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_doleres',
+    name: 'Doleres',
+    email: 'doleres@citrine-pricing.com',
+    role: 'responsable',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'usr_marc',
+    name: 'Marc',
+    email: 'employe@citrine-pricing.cm',
+    role: 'employe',
+    active: true,
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  }
+];
+
+// Reactive state cache for users loaded from database (initialisé avec les comptes par défaut)
+export let users: User[] = defaultUsers.map(u => ({ ...u }));
+
+export let cities: City[] = [
+  {
+    id: 'city_douala',
+    name: 'Douala',
+    country: 'Cameroun',
+    currency: 'XAF',
+    currencySymbol: 'FCFA',
+    center: { lat: 4.0511, lng: 9.7679 },
+    active: true,
+    autoSchedule: {
+      enabled: false,
+      slots: ['08:00', '13:00', '18:00'],
+      lastRunAt: undefined
+    }
+  },
+  {
+    id: 'city_yaounde',
+    name: 'Yaoundé',
+    country: 'Cameroun',
+    currency: 'XAF',
+    currencySymbol: 'FCFA',
+    center: { lat: 3.8480, lng: 11.5021 },
+    active: true,
+    autoSchedule: {
+      enabled: false,
+      slots: ['08:00', '18:00'],
+      lastRunAt: undefined
+    }
+  }
+];
+
 export let neighborhoods: Neighborhood[] = (defaultNeighborhoods as unknown as Neighborhood[]) || [];
 
 export let memoryCampaigns: PricingCampaign[] = [];
 export const memoryCampaignTrips: Record<string, TripResult[]> = {};
 export const memoryCampaignCanonicalTrips: Record<string, CanonicalTrip[]> = {};
 export let historyRecords: any[] = [];
-
-// Restauration immédiate en RAM dès le chargement du module depuis le stockage persistant
-loadLocalCampaignsDiskBackup();
-loadCitiesDiskBackup();
-loadUsersDiskBackup();
 
 // Session active UNIQUEMENT pendant l'exécution en temps réel
 export const activePricingSessions = new Map<string, ActivePricingSession>();
@@ -335,10 +368,6 @@ export function setCities(newCities: City[]) {
 
 export function setNeighborhoods(newNeighborhoods: Neighborhood[]) {
   neighborhoods = newNeighborhoods;
-}
-
-export function setMemoryCampaigns(newCamps: PricingCampaign[]) {
-  memoryCampaigns = newCamps;
 }
 
 export function setHistoryRecords(newRecords: any[]) {
@@ -371,11 +400,11 @@ export async function recordHistory(record: {
     ...record
   };
   historyRecords.unshift(item);
-  // Historique conservé en mémoire et disque local
+  // Historique conservé en mémoire et disque sans consommer d'écritures Firestore
 }
 
 export async function deleteHistoryForCampaign(campaignId: string) {
-  // L'historique d'audit est géré en mémoire vive locale
+  // L'historique d'audit est géré en mémoire vive locale (0 lecture/écriture Firestore consommée)
   historyRecords = historyRecords.filter(h =>
     h.metadata?.campaignId !== campaignId &&
     !h.description?.includes(campaignId) &&
@@ -383,22 +412,35 @@ export async function deleteHistoryForCampaign(campaignId: string) {
   );
 }
 
-let hasSyncedOnce = false;
-
 /**
- * Synchronisation initiale des données locales et Supabase
+ * Synchronisation initiale avec le disque et Supabase
  */
-export async function syncLocalStorage() {
-  if (hasSyncedOnce) return;
-  hasSyncedOnce = true;
-
-  // Restaurer tout depuis le stockage persistant local
+export async function syncWithSupabase() {
   loadLocalCampaignsDiskBackup();
   loadCitiesDiskBackup();
   loadUsersDiskBackup();
+  try {
+    const [suUsers, suCities, suNbs] = await Promise.allSettled([
+      fetchUsersFromSupabase(),
+      fetchCitiesFromSupabase(),
+      fetchNeighborhoodsFromSupabase()
+    ]);
 
-  console.log(`[Store] Données initialisées (${cities.length} villes, ${neighborhoods.length} quartiers, ${memoryCampaigns.length} campagnes, ${users.length} users).`);
+    if (suUsers.status === 'fulfilled' && suUsers.value && suUsers.value.length > 0) {
+      users = suUsers.value;
+    }
+    if (suCities.status === 'fulfilled' && suCities.value && suCities.value.length > 0) {
+      cities = suCities.value;
+    }
+    if (suNbs.status === 'fulfilled' && suNbs.value && suNbs.value.length > 0) {
+      neighborhoods = suNbs.value;
+    }
+    console.log(`[Supabase Sync] ${users.length} users, ${cities.length} villes, ${neighborhoods.length} quartiers synchronisés.`);
+  } catch (err: any) {
+    console.warn('[Supabase Sync Notice]:', err.message);
+  }
 }
 
-// Alias de rétrocompatibilité
-export const syncFromFirestore = syncLocalStorage;
+export async function syncFromFirestore() {
+  return await syncWithSupabase();
+}

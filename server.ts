@@ -28,9 +28,7 @@ console.error = (...args: any[]) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const portArgIndex = process.argv.indexOf('--port');
-const portArg = portArgIndex !== -1 ? parseInt(process.argv[portArgIndex + 1], 10) : null;
-const PORT = portArg || (process.env.PORT && process.env.PORT !== '8080' ? parseInt(process.env.PORT, 10) : 3000);
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Servir Vite en Développement ou dist en Production
 async function startServer() {
@@ -66,9 +64,6 @@ async function startServer() {
     app.all('/api/*', (req: Request, res: Response) => {
       return res.status(404).json({ error: `Endpoint API de développement non trouvé : ${req.method} ${req.path}` });
     });
-    if (typeof (globalThis as any).__dirname !== 'undefined') {
-      delete (globalThis as any).__dirname;
-    }
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {

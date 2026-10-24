@@ -5,10 +5,8 @@ export interface GeoCoordinate {
 
 export interface Neighborhood {
   id: string;
-  uuid: string;
   cityId: string;
   name: string;
-  cityName?: string;
   ville?: string;
   departement?: string;
   arrondissement?: string;
@@ -27,18 +25,12 @@ export interface Neighborhood {
 
 export interface City {
   id: string;
-  uuid: string;
   name: string;
   country: string;
   currency: string;
   currencySymbol: string;
   center: GeoCoordinate;
   active: boolean;
-  airport?: {
-    name?: string;
-    lat?: number;
-    lng?: number;
-  };
   autoSchedule: {
     enabled: boolean;
     slots: string[];
@@ -70,8 +62,7 @@ export interface CanonicalTripPrices {
 }
 
 export interface CanonicalTrip {
-  id: number | string;
-  uuid: string;
+  id: string;
   origin: string;
   destination: string;
   distanceKm: number;
@@ -91,8 +82,7 @@ export interface CanonicalTrip {
 }
 
 export interface User {
-  id: number | string;
-  uuid: string;
+  id: string;
   email: string;
   name: string;
   role: 'admin' | 'responsable' | 'employe';
@@ -156,7 +146,6 @@ export interface TripMasterQuote {
 
 export interface TripResult {
   id: string;
-  uuid: string;
   campaignId: string;
   cityId?: string;
   cityName?: string;
@@ -241,8 +230,7 @@ export interface TripResult {
 }
 
 export interface PricingCampaign {
-  id: string | number;
-  uuid: string;
+  id: string;
   cityId: string;
   cityName: string;
   currency: string;

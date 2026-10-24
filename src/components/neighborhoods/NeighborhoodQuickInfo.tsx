@@ -1,6 +1,6 @@
 import React from 'react';
 import { Compass, CheckCircle2, Play } from 'lucide-react';
-import { calculatePossiblePricingPairsCount } from '../../utils/routeMatrix';
+import { calculatePossibleBenchmarkPairsCount } from '../../utils/routeMatrix';
 import { Neighborhood } from '../../types';
 
 interface NeighborhoodQuickInfoProps {
@@ -17,7 +17,7 @@ export const NeighborhoodQuickInfo: React.FC<NeighborhoodQuickInfoProps> = ({
   onLaunchPricing
 }) => {
   const activeCount = activeNeighborhoods.length;
-  const totalCombinations = calculatePossiblePricingPairsCount(activeNeighborhoods);
+  const totalCombinations = calculatePossibleBenchmarkPairsCount(activeNeighborhoods);
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -53,7 +53,7 @@ export const NeighborhoodQuickInfo: React.FC<NeighborhoodQuickInfoProps> = ({
             <Play className="w-4 h-4" />
           </div>
           <div>
-            <span className="text-slate-400 text-[11px] block">Matrice pricing générée</span>
+            <span className="text-slate-400 text-[11px] block">Matrice benchmark générée</span>
             <strong className="text-[#1F4F4A] font-bold text-sm font-mono">
               {totalCombinations.toLocaleString('fr-FR')} trajets
             </strong>
@@ -67,7 +67,7 @@ export const NeighborhoodQuickInfo: React.FC<NeighborhoodQuickInfoProps> = ({
         className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#1F4F4A] hover:bg-[#183F3B] text-white rounded-lg transition disabled:opacity-50 cursor-pointer shadow-sm"
       >
         <Play className="w-3.5 h-3.5 fill-white" />
-        <span>Lancer Pricing ({cityName})</span>
+        <span>Lancer Benchmark ({cityName})</span>
       </button>
     </div>
   );

@@ -2,8 +2,8 @@ import React from 'react';
 import { Database, Compass } from 'lucide-react';
 
 interface SettingsTabsHeaderProps {
-  activeTab: 'yango' | 'hero' | 'tripmaster' | 'supabase';
-  onTabChange: (tab: 'yango' | 'hero' | 'tripmaster' | 'supabase') => void;
+  activeTab: 'yango' | 'hero' | 'tripmaster' | 'database';
+  onTabChange: (tab: 'yango' | 'hero' | 'tripmaster' | 'database') => void;
 }
 
 export const SettingsTabsHeader: React.FC<SettingsTabsHeaderProps> = ({
@@ -14,10 +14,10 @@ export const SettingsTabsHeader: React.FC<SettingsTabsHeaderProps> = ({
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
-          Paramètres des Passerelles &amp; API
+          Paramètres des Passerelles & API
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
-          Gestion des accès directs aux API Yango, Hero Cab Pro, Trip Master et de la base de données Supabase.
+          Gestion des accès directs aux API Yango, Hero Cab Pro, Trip Master et de la base de données Supabase / Disque.
         </p>
       </div>
 
@@ -63,15 +63,15 @@ export const SettingsTabsHeader: React.FC<SettingsTabsHeaderProps> = ({
 
         <button
           type="button"
-          onClick={() => onTabChange('supabase')}
+          onClick={() => onTabChange('database')}
           className={`px-3 py-1.5 font-medium rounded-md transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'supabase'
+            activeTab === 'database'
               ? 'bg-white text-slate-900 shadow-2xs font-semibold'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
           <Database className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Base Supabase</span>
+          <span>Supabase & Disque</span>
         </button>
       </div>
     </div>

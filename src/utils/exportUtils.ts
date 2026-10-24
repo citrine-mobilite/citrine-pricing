@@ -214,7 +214,7 @@ export function exportCanonicalJson(
 
   const payload = {
     format: 'citrine.pricing.canonical.v1',
-    campaignName: campaignName || 'Pricing Trajets',
+    campaignName: campaignName || 'Benchmark Trajets',
     cityName: cityName || 'Général',
     exportedAt: new Date().toISOString(),
     totalTrips: formattedTrips.length,

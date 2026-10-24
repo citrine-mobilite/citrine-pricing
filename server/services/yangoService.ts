@@ -1,4 +1,5 @@
 import { SystemSettings } from '../types.js';
+import { pooledPostJson } from '../utils/httpPool.js';
 
 export let yangoSettings: SystemSettings = {
   id: 'yango',
@@ -311,10 +312,9 @@ export async function callYangoRoutestats(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
       'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
@@ -324,17 +324,12 @@ export async function callYangoRoutestats(
       headers['Authorization'] = `Bearer ${yangoSettings.bearerToken}`;
     }
 
-    const res = await fetch(yangoSettings.apiEndpoint || 'https://ya-authproxy.yango.com/3.0/routestats', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: signal || controller.signal
-    });
-
+    const endpoint = yangoSettings.apiEndpoint || 'https://ya-authproxy.yango.com/3.0/routestats';
+    const res = await pooledPostJson(endpoint, payload, headers, 10000);
     clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
+    if (res.status >= 400) {
+      const errText = res.body;
       let errJson = null;
       try { errJson = JSON.parse(errText); } catch {}
       return {
@@ -346,15 +341,20 @@ export async function callYangoRoutestats(
         durationMinutes: durationMin,
         latencyMs: Date.now() - startTime,
         httpStatus: res.status,
-        errorMessage: `HTTP ${res.status}: ${res.statusText}`,
+        errorMessage: `HTTP ${res.status}`,
         rawJson: errJson,
         rawText: errText
       };
     }
 
-    const json: any = await res.json();
+    let json: any = {};
+    try {
+      json = JSON.parse(res.body);
+    } catch {
+      json = {};
+    }
     lastYangoRawJson = json;
-    lastYangoRawText = JSON.stringify(json);
+    lastYangoRawText = res.body;
     lastYangoRawTimestamp = new Date().toISOString();
 
     const serviceLevels: any[] = json.service_levels || json.tariffs || json.options || json.offers || [];

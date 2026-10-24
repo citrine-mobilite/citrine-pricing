@@ -1,39 +1,50 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { cities, neighborhoods, setCities, setNeighborhoods, recordHistory, ensureSynced, saveNeighborhoodsDiskBackup, saveCitiesDiskBackup } from '../db/memoryStore.js';
-import { City, Neighborhood } from '../types.js';
-import { getNextSequence } from '../db/counters.js';
+import {
+  cities,
+  neighborhoods,
+  setCities,
+  setNeighborhoods,
+  recordHistory,
+  ensureSynced,
+  saveCitiesDiskBackup,
+  saveNeighborhoodsDiskBackup
+} from '../db/memoryStore.js';
 import {
   upsertCityToSupabase,
   deleteCityFromSupabase,
+  fetchCitiesFromSupabase,
   upsertNeighborhoodToSupabase,
   deleteNeighborhoodFromSupabase,
-  clearCityNeighborhoodsInSupabase,
-  batchUpsertNeighborhoodsToSupabase
+  fetchNeighborhoodsFromSupabase,
+  clearCityNeighborhoodsInSupabase
 } from '../db/supabase.js';
+import { City, Neighborhood } from '../types.js';
 
 const router = Router();
 
-// Cities (Servies à 100% depuis la RAM et le stockage persistant)
-router.get('/api/cities', async (_req: Request, res: Response) => {
-  // Injecter le nombre de quartiers dynamiquement
-  const enriched = cities.map(c => {
-    const cId = String(c.id);
-    const cUuid = c.uuid;
-    const cName = c.name ? c.name.toLowerCase().trim() : '';
-    const matchNb = (n: Neighborhood) => {
-      if (n.cityId === cUuid || String(n.cityId) === cId) return true;
-      if (cName && (n.ville || n.cityName || '').toLowerCase().trim().includes(cName)) return true;
-      return false;
-    };
-    return {
-      ...c,
-      neighborhoodsCount: neighborhoods.filter(matchNb).length,
-      activeNeighborhoodsCount: c.active ? neighborhoods.filter(n => matchNb(n) && n.active).length : 0
-    };
-  });
+// Cities
+router.get('/api/cities', async (req: Request, res: Response) => {
+  await ensureSynced().catch(() => {});
+  const forceRefresh = req.query.forceRefresh === 'true';
 
-  res.setHeader('X-Cache', 'HIT-RAM');
+  if (cities.length === 0 || forceRefresh) {
+    try {
+      const supaCities = await fetchCitiesFromSupabase();
+      if (supaCities && supaCities.length > 0) {
+        setCities(supaCities);
+      }
+    } catch (e: any) {
+      console.warn('[Supabase] get cities error:', e.message);
+    }
+  }
+
+  const enriched = cities.map(c => ({
+    ...c,
+    neighborhoodsCount: neighborhoods.filter(n => n.cityId === c.id).length,
+    activeNeighborhoodsCount: c.active ? neighborhoods.filter(n => n.cityId === c.id && n.active).length : 0
+  }));
+
   return res.json(enriched);
 });
 
@@ -44,8 +55,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
   }
 
   const newCity: City = {
-    id: String(getNextSequence('cities')),
-    uuid: `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`,
+    id: `city_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`,
     name: name.trim(),
     country: country.trim(),
     currency: currency.trim().toUpperCase(),
@@ -57,7 +67,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
 
   cities.push(newCity);
   saveCitiesDiskBackup();
-  upsertCityToSupabase(newCity).catch(() => {});
+  await upsertCityToSupabase(newCity).catch(() => {});
 
   await recordHistory({
     action: 'create_city',
@@ -71,7 +81,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
 
 router.put('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const city = cities.find(c => String(c.id) === String(id) || c.uuid === id);
+  const city = cities.find(c => c.id === id);
   if (!city) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
@@ -83,28 +93,40 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
   if (currencySymbol !== undefined) city.currencySymbol = currencySymbol;
   if (center !== undefined) city.center = center;
   if (active !== undefined) {
-    city.active = Boolean(active);
+    const isNewActive = Boolean(active);
+    city.active = isNewActive;
+    if (!isNewActive) {
+      neighborhoods.forEach(n => {
+        if (n.cityId === id) {
+          n.active = false;
+          upsertNeighborhoodToSupabase(n).catch(() => {});
+        }
+      });
+      saveNeighborhoodsDiskBackup();
+    }
   }
   if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
 
   saveCitiesDiskBackup();
-  upsertCityToSupabase(city).catch(() => {});
+  await upsertCityToSupabase(city).catch(() => {});
   return res.json(city);
 });
 
 router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = cities.findIndex(c => String(c.id) === String(id) || c.uuid === id);
+  const idx = cities.findIndex(c => c.id === id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Ville introuvable.' });
   }
 
   const deleted = cities.splice(idx, 1)[0];
-  saveCitiesDiskBackup();
-  const remainingNbs = neighborhoods.filter(n => n.cityId !== String(deleted.id) && n.cityId !== deleted.uuid);
+  const remainingNbs = neighborhoods.filter(n => n.cityId !== id);
   setNeighborhoods(remainingNbs);
+  saveCitiesDiskBackup();
   saveNeighborhoodsDiskBackup();
-  deleteCityFromSupabase(String(deleted.id)).catch(() => {});
+
+  await deleteCityFromSupabase(id).catch(() => {});
+  await clearCityNeighborhoodsInSupabase(id).catch(() => {});
 
   await recordHistory({
     action: 'delete_city',
@@ -116,33 +138,35 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Ville et quartiers associés supprimés.' });
 });
 
-// Neighborhoods (Servis à 100% depuis la RAM et defaultNeighborhoods.json)
+// Neighborhoods
 router.get('/api/neighborhoods', async (req: Request, res: Response) => {
-  const { cityId } = req.query;
+  const { cityId, forceRefresh } = req.query;
+  await ensureSynced().catch(() => {});
+
+  if (neighborhoods.length === 0 || forceRefresh === 'true') {
+    try {
+      const supaNbs = await fetchNeighborhoodsFromSupabase();
+      if (supaNbs && supaNbs.length > 0) {
+        setNeighborhoods(supaNbs);
+      }
+    } catch (e: any) {
+      console.warn('[Supabase] get neighborhoods error:', e.message);
+    }
+  }
 
   let list = neighborhoods;
   if (cityId) {
-    const targetCity = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
-    const cUuid = targetCity?.uuid || String(cityId);
-    const cId = targetCity ? String(targetCity.id) : null;
-    const cName = targetCity?.name ? targetCity.name.toLowerCase().trim() : '';
-    list = list.filter(n => 
-      n.cityId === cUuid || 
-      (cId && String(n.cityId) === cId) ||
-      (cName && (n.ville || n.cityName || '').toLowerCase().trim().includes(cName))
-    );
+    list = list.filter(n => n.cityId === String(cityId));
   }
 
-  // Injecter le nom de la ville
   const enriched = list.map(n => {
-    const c = cities.find(city => city.uuid === n.cityId || String(city.id) === n.cityId);
+    const c = cities.find(city => city.id === n.cityId);
     return {
       ...n,
       cityName: c?.name || 'Inconnue'
     };
   });
 
-  res.setHeader('X-Cache', 'HIT-RAM');
   return res.json(enriched);
 });
 
@@ -152,7 +176,7 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'cityId, nom, latitude et longitude sont obligatoires.' });
   }
 
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
+  const city = cities.find(c => c.id === cityId);
   if (!city) {
     return res.status(404).json({ error: 'Ville parente introuvable.' });
   }
@@ -160,33 +184,32 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
   const isActive = active !== undefined ? Boolean(active) : (status ? status.toLowerCase() !== 'inactif' : true);
 
   const newNb: Neighborhood = {
-    id: String(getNextSequence('neighborhoods')),
-    uuid: `nb_${randomUUID()}`,
-    cityId: city.uuid || String(city.id),
+    id: `nb_${randomUUID()}`,
+    cityId,
     name: name.trim(),
+    ville: ville ? String(ville).trim() : city.name,
+    departement: departement ? String(departement).trim() : 'Wouri',
+    arrondissement: arrondissement ? String(arrondissement).trim() : undefined,
+    fullAddress: fullAddress ? String(fullAddress).trim() : `${name.trim()}, ${arrondissement || city.name}`,
     lat: Number(lat),
     lng: Number(lng),
-    zone: zone || 'commercial',
-    zoneType: zoneType || 'commercial',
-    status: isActive ? 'actif' : 'inactif',
     active: isActive,
-    fullAddress: fullAddress || `${name.trim()}, ${city.name}, Cameroun`,
-    arrondissement: arrondissement || undefined,
-    ville: ville || city.name,
-    departement: departement || undefined,
+    status: status ? String(status).trim() : (isActive ? 'actif' : 'inactif'),
+    zone: zone ? String(zone).trim() : (zoneType || 'commercial'),
+    zoneType: (zone || zoneType) || 'commercial',
     createdAt: new Date().toISOString()
   };
 
   neighborhoods.push(newNb);
   saveNeighborhoodsDiskBackup();
-  upsertNeighborhoodToSupabase(newNb).catch(() => {});
+  await upsertNeighborhoodToSupabase(newNb).catch(() => {});
 
   return res.status(201).json({ ...newNb, cityName: city.name });
 });
 
 router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const nb = neighborhoods.find(n => String(n.id) === String(id) || n.uuid === id);
+  const nb = neighborhoods.find(n => n.id === id);
   if (!nb) {
     return res.status(404).json({ error: 'Quartier introuvable.' });
   }
@@ -207,206 +230,30 @@ router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   nb.updatedAt = new Date().toISOString();
 
   saveNeighborhoodsDiskBackup();
-  upsertNeighborhoodToSupabase(nb).catch(() => {});
+  await upsertNeighborhoodToSupabase(nb).catch(() => {});
   return res.json(nb);
 });
 
 router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = neighborhoods.findIndex(n => String(n.id) === String(id) || n.uuid === id);
+  const idx = neighborhoods.findIndex(n => n.id === id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Quartier introuvable.' });
   }
 
-  const deleted = neighborhoods.splice(idx, 1)[0];
+  neighborhoods.splice(idx, 1);
   saveNeighborhoodsDiskBackup();
-  deleteNeighborhoodFromSupabase(String(deleted.id)).catch(() => {});
+  await deleteNeighborhoodFromSupabase(id).catch(() => {});
   return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
 });
 
 router.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Response) => {
   const { cityId } = req.params;
-  const targetCity = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
-  const cUuid = targetCity?.uuid || String(cityId);
-  const cId = targetCity ? String(targetCity.id) : null;
-
-  const countBefore = neighborhoods.length;
-  const filtered = neighborhoods.filter(n => n.cityId !== cUuid && (!cId || String(n.cityId) !== cId));
-  setNeighborhoods(filtered);
+  const remaining = neighborhoods.filter(n => n.cityId !== cityId);
+  setNeighborhoods(remaining);
   saveNeighborhoodsDiskBackup();
-  clearCityNeighborhoodsInSupabase(cUuid).catch(() => {});
-  const deletedCount = countBefore - filtered.length;
-
-  return res.json({
-    success: true,
-    deletedCount,
-    message: `${deletedCount} quartiers supprimés pour la ville.`
-  });
-});
-
-router.post('/api/neighborhoods/bulk-toggle', async (req: Request, res: Response) => {
-  const { active, cityId } = req.body;
-  if (typeof active !== 'boolean') {
-    return res.status(400).json({ error: 'Le champ active (booléen) est requis.' });
-  }
-
-  const targetCity = cityId ? cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId) : null;
-  const cUuid = targetCity?.uuid || String(cityId);
-  const cId = targetCity ? String(targetCity.id) : null;
-
-  let count = 0;
-  for (const nb of neighborhoods) {
-    const matchesCity = !cityId || nb.cityId === cUuid || (cId && String(nb.cityId) === cId);
-    if (matchesCity) {
-      nb.active = active;
-      nb.status = active ? 'actif' : 'inactif';
-      count++;
-    }
-  }
-
-  saveNeighborhoodsDiskBackup();
-  return res.json({ success: true, count, active });
-});
-
-router.post('/api/neighborhoods/import-batch', async (req: Request, res: Response) => {
-  const { cityId, neighborhoods: importedList } = req.body;
-  if (!cityId || !Array.isArray(importedList) || importedList.length === 0) {
-    return res.status(400).json({ error: 'cityId et une liste non-vide de quartiers sont requis.' });
-  }
-
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
-  if (!city) {
-    return res.status(404).json({ error: 'Ville introuvable.' });
-  }
-
-  const createdNeighborhoods: Neighborhood[] = [];
-  for (const item of importedList) {
-    if (!item.name || item.lat === undefined || item.lng === undefined) continue;
-
-    // Protection Douala 6ème (Manoka)
-    const isDla6 = /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.arrondissement || '') ||
-      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.fullAddress || '') ||
-      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.name || '');
-
-    if (isDla6) continue;
-
-    const newNb: Neighborhood = {
-      id: String(getNextSequence('neighborhoods')),
-      uuid: `nb_${randomUUID()}`,
-      cityId: city.uuid || String(city.id),
-      name: String(item.name).trim(),
-      ville: item.ville ? String(item.ville).trim() : city.name,
-      departement: item.departement ? String(item.departement).trim() : 'Wouri',
-      arrondissement: item.arrondissement ? String(item.arrondissement).trim() : undefined,
-      fullAddress: item.fullAddress ? String(item.fullAddress).trim() : `${item.name}, ${city.name}, Cameroun`,
-      lat: Number(item.lat),
-      lng: Number(item.lng),
-      active: item.active !== undefined ? Boolean(item.active) : true,
-      status: item.active === false ? 'inactif' : 'actif',
-      zone: item.zone ? String(item.zone).trim() : 'commercial',
-      zoneType: item.zoneType || 'commercial',
-      createdAt: new Date().toISOString()
-    };
-    createdNeighborhoods.push(newNb);
-  }
-
-  neighborhoods.push(...createdNeighborhoods);
-  saveNeighborhoodsDiskBackup();
-  batchUpsertNeighborhoodsToSupabase(createdNeighborhoods).catch(() => {});
-
-  return res.status(201).json({
-    success: true,
-    count: createdNeighborhoods.length,
-    message: `${createdNeighborhoods.length} quartiers importés avec succès.`
-  });
-});
-
-router.post('/api/neighborhoods/reconcile-batch', async (req: Request, res: Response) => {
-  const { cityId, items } = req.body;
-  if (!cityId || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'cityId et une liste non-vide de rectifications sont requis.' });
-  }
-
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
-  if (!city) {
-    return res.status(404).json({ error: 'Ville introuvable.' });
-  }
-
-  let updatedCount = 0;
-  let createdCount = 0;
-  let ignoredCount = 0;
-
-  for (const item of items) {
-    // Protection Douala 6ème
-    const isDla6 = item.status === 'ignored_douala_6' ||
-      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.arrondissement || '') ||
-      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.fullAddress || '') ||
-      /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.name || '');
-
-    if (isDla6) {
-      ignoredCount++;
-      continue;
-    }
-
-    if (item.status === 'update' && item.targetId) {
-      const existing = neighborhoods.find(n => String(n.id) === String(item.targetId) || n.uuid === String(item.targetId));
-      if (existing) {
-        existing.name = String(item.name).trim();
-        existing.fullAddress = String(item.fullAddress || '').trim();
-        if (item.ville) existing.ville = String(item.ville).trim();
-        if (item.departement) existing.departement = String(item.departement).trim();
-        if (item.arrondissement) existing.arrondissement = String(item.arrondissement).trim();
-        if (item.zone) existing.zone = String(item.zone).trim();
-        if (item.zoneType) existing.zoneType = item.zoneType;
-        if (item.itemStatus) existing.status = String(item.itemStatus).trim();
-        if (item.active !== undefined) existing.active = Boolean(item.active);
-        existing.lat = Number(item.lat);
-        existing.lng = Number(item.lng);
-        existing.updatedAt = new Date().toISOString();
-        updatedCount++;
-      }
-    } else if (item.status === 'create') {
-      const newNb: Neighborhood = {
-        id: String(getNextSequence('neighborhoods')),
-        uuid: `nb_${randomUUID()}`,
-        cityId: city.uuid || String(city.id),
-        name: String(item.name).trim(),
-        ville: item.ville ? String(item.ville).trim() : city.name,
-        departement: item.departement ? String(item.departement).trim() : 'Wouri',
-        arrondissement: item.arrondissement ? String(item.arrondissement).trim() : undefined,
-        fullAddress: String(item.fullAddress || '').trim(),
-        lat: Number(item.lat),
-        lng: Number(item.lng),
-        active: item.active !== undefined ? Boolean(item.active) : true,
-        status: item.itemStatus ? String(item.itemStatus).trim() : (item.active === false ? 'inactif' : 'actif'),
-        zone: item.zone ? String(item.zone).trim() : 'commercial',
-        zoneType: item.zoneType || 'commercial',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      neighborhoods.push(newNb);
-      createdCount++;
-    }
-  }
-
-  saveNeighborhoodsDiskBackup();
-
-  await recordHistory({
-    action: 'reconcile_neighborhoods',
-    eventType: 'neighborhoods',
-    title: 'Rectification des coordonnées et quartiers via Excel',
-    description: `${updatedCount} quartiers rectifiés, ${createdCount} nouveaux créés, ${ignoredCount} ignorés pour ${city.name}.`,
-    status: 'success'
-  });
-
-  return res.json({
-    success: true,
-    updatedCount,
-    createdCount,
-    ignoredCount,
-    totalProcessed: updatedCount + createdCount,
-    message: `${updatedCount} quartier(s) rectifié(s) et ${createdCount} nouveau(x) quartier(s) créé(s) avec succès.`
-  });
+  await clearCityNeighborhoodsInSupabase(cityId).catch(() => {});
+  return res.json({ success: true, message: 'Tous les quartiers de la ville ont été supprimés.' });
 });
 
 export default router;

@@ -334,9 +334,6 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                          <span className="font-mono text-[10px] font-bold text-[#1F4F4A] bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shrink-0">
-                            #{t.id}
-                          </span>
                           <span className="truncate">{orig}</span>
                           <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="truncate">{dest}</span>

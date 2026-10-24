@@ -1,0 +1,404 @@
+[
+  {
+    "id": "20156",
+    "uuid": "d6abd302-90e5-4b9f-b265-935c04410377",
+    "origin": "Quartier Test",
+    "destination": "Djebale I",
+    "distanceKm": 6.13,
+    "durationMin": 15,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 1300,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 1317,
+        "confort": 1630,
+        "suv": 83,
+        "perKm": 215
+      },
+      "tripMaster": {
+        "eco": 3804,
+        "confort": 4464,
+        "moto": 1671
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:37.996Z"
+  },
+  {
+    "id": "20157",
+    "uuid": "307753aa-dd8e-4a61-bc6d-83c4341df8a4",
+    "origin": "Quartier Test",
+    "destination": "Djebale II",
+    "distanceKm": 6.49,
+    "durationMin": 16,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 1300,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 1379,
+        "confort": 1705,
+        "suv": 86,
+        "perKm": 212
+      },
+      "tripMaster": {
+        "eco": 4338,
+        "confort": 5090,
+        "moto": 1913
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:38.128Z"
+  },
+  {
+    "id": "20158",
+    "uuid": "003bfebf-f850-4c92-8e36-a50f72698666",
+    "origin": "Quartier Test",
+    "destination": "Logmayangui",
+    "distanceKm": 7.38,
+    "durationMin": 18,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 1300,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 1534,
+        "confort": 1891,
+        "suv": 95,
+        "perKm": 208
+      },
+      "tripMaster": {
+        "eco": 3295,
+        "confort": 3866,
+        "moto": 1445
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:38.516Z"
+  },
+  {
+    "id": "20159",
+    "uuid": "45f0bfde-6268-4551-a3f3-94d9b3d9345f",
+    "origin": "Djebale II",
+    "destination": "Djebale I",
+    "distanceKm": 0.47,
+    "durationMin": 2,
+    "jams": false,
+    "yangoUnavailable": false,
+    "yangoUnavailableClasses": [],
+    "prices": {
+      "yango": {
+        "eco": 450,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": false
+      },
+      "heroCab": {
+        "eco": 510,
+        "confort": 910,
+        "suv": 27,
+        "perKm": 1085
+      },
+      "tripMaster": {
+        "eco": 2190,
+        "confort": 2570,
+        "moto": 985
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:39.293Z"
+  },
+  {
+    "id": "20160",
+    "uuid": "533081da-9ac5-41f2-a971-b6445847fe48",
+    "origin": "Djebale I",
+    "destination": "Logpom",
+    "distanceKm": 13.31,
+    "durationMin": 32,
+    "jams": false,
+    "yangoUnavailable": false,
+    "yangoUnavailableClasses": [],
+    "prices": {
+      "yango": {
+        "eco": 450,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": false
+      },
+      "heroCab": {
+        "eco": 2566,
+        "confort": 3129,
+        "suv": 156,
+        "perKm": 193
+      },
+      "tripMaster": {
+        "eco": 5994,
+        "confort": 7034,
+        "moto": 2635
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:40.171Z"
+  },
+  {
+    "id": "20161",
+    "uuid": "1e8c3f76-e0a8-44f6-bdb7-dda422b8ef3a",
+    "origin": "Djebale I",
+    "destination": "Djebale II",
+    "distanceKm": 0.47,
+    "durationMin": 2,
+    "jams": false,
+    "yangoUnavailable": false,
+    "yangoUnavailableClasses": [],
+    "prices": {
+      "yango": {
+        "eco": 450,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": false
+      },
+      "heroCab": {
+        "eco": 510,
+        "confort": 910,
+        "suv": 27,
+        "perKm": 1085
+      },
+      "tripMaster": {
+        "eco": 2200,
+        "confort": 2581,
+        "moto": 990
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:40.425Z"
+  },
+  {
+    "id": "20162",
+    "uuid": "b55b7f07-bb3e-4c91-a31e-d55dccdc16be",
+    "origin": "Quartier Test",
+    "destination": "Logpom",
+    "distanceKm": 7.72,
+    "durationMin": 19,
+    "jams": false,
+    "yangoUnavailable": true,
+    "yangoUnavailableClasses": [
+      "econom",
+      "business"
+    ],
+    "prices": {
+      "yango": {
+        "eco": 1300,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": true
+      },
+      "heroCab": {
+        "eco": 1593,
+        "confort": 1962,
+        "suv": 99,
+        "perKm": 206
+      },
+      "tripMaster": {
+        "eco": 3655,
+        "confort": 4289,
+        "moto": 1604
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:40.729Z"
+  },
+  {
+    "id": "20163",
+    "uuid": "07545754-f5aa-4178-9105-1c169b15eeea",
+    "origin": "Djebale I",
+    "destination": "Quartier Test",
+    "distanceKm": 6.13,
+    "durationMin": 15,
+    "jams": false,
+    "yangoUnavailable": false,
+    "yangoUnavailableClasses": [],
+    "prices": {
+      "yango": {
+        "eco": 450,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": false
+      },
+      "heroCab": {
+        "eco": 1317,
+        "confort": 1630,
+        "suv": 83,
+        "perKm": 215
+      },
+      "tripMaster": {
+        "eco": 3755,
+        "confort": 4406,
+        "moto": 1652
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:40.791Z"
+  },
+  {
+    "id": "20164",
+    "uuid": "5cffa98f-a113-45c2-ae17-3e437001a621",
+    "origin": "Djebale II",
+    "destination": "Quartier Test",
+    "distanceKm": 6.49,
+    "durationMin": 16,
+    "jams": false,
+    "yangoUnavailable": false,
+    "yangoUnavailableClasses": [],
+    "prices": {
+      "yango": {
+        "eco": 450,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": false
+      },
+      "heroCab": {
+        "eco": 1379,
+        "confort": 1705,
+        "suv": 86,
+        "perKm": 212
+      },
+      "tripMaster": {
+        "eco": 4282,
+        "confort": 5025,
+        "moto": 1890
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:41.239Z"
+  },
+  {
+    "id": "20165",
+    "uuid": "fbf88585-531c-4da4-b73f-0b6285f0bbfe",
+    "origin": "Djebale I",
+    "destination": "Logmayangui",
+    "distanceKm": 13.48,
+    "durationMin": 32,
+    "jams": false,
+    "yangoUnavailable": false,
+    "yangoUnavailableClasses": [],
+    "prices": {
+      "yango": {
+        "eco": 450,
+        "confort": 650,
+        "confortPlus": 800,
+        "moto": 300,
+        "jams": false,
+        "yangoUnavailable": false
+      },
+      "heroCab": {
+        "eco": 2595,
+        "confort": 3165,
+        "suv": 157,
+        "perKm": 193
+      },
+      "tripMaster": {
+        "eco": 5718,
+        "confort": 6710,
+        "moto": 2509
+      }
+    },
+    "cheapest": {
+      "eco": "yango",
+      "confort": "yango",
+      "overall": "yango"
+    },
+    "status": "success",
+    "createdAt": "2026-10-24T22:40:41.368Z"
+  }
+]
