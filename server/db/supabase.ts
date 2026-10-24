@@ -29,8 +29,8 @@ export interface SupabaseConfig {
 }
 
 let cachedConfig: SupabaseConfig = {
-  url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
-  anonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '',
+  url: process.env.SUPABASE_URL || '',
+  anonKey: process.env.SUPABASE_ANON_KEY || '',
   serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 };
 

@@ -1,5 +1,71 @@
 [
   {
+    "id": 14,
+    "uuid": "9c46b215-25f0-4243-824f-2f63e9a757ca",
+    "cityId": "3",
+    "cityName": "Douala",
+    "currency": "XAF",
+    "triggerType": "scheduled",
+    "scopeMode": "airport",
+    "triggeredByUserId": "cron_supabase_airport",
+    "triggeredByUserName": "Cron Aéroport Supabase (pg_cron)",
+    "triggeredByUserRole": "system",
+    "status": "in_progress",
+    "totalPairs": 364,
+    "completedPairs": 100,
+    "failedPairs": 0,
+    "startedAt": "2026-10-24T21:34:22.323Z",
+    "logs": [
+      {
+        "level": "info",
+        "timestamp": "2026-10-24T21:34:22.323Z",
+        "message": "Démarrage de la tarification spéciale aéroport (364 trajets) programmée par Cron Aéroport Supabase (pg_cron) pour Douala."
+      }
+    ],
+    "totalBatches": 37,
+    "workersCount": 1,
+    "yangoShortageCount": 90,
+    "completedBatches": 10,
+    "durationSeconds": 26,
+    "arrondissementStats": {
+      "DOUALA 2E": {
+        "arrondissement": "DOUALA 2E",
+        "avgPrice": 1032,
+        "heroAvgPrice": 1487,
+        "tripMasterAvgPrice": 3302,
+        "count": 100
+      },
+      "DOUALA 4E": {
+        "arrondissement": "DOUALA 4E",
+        "avgPrice": 800,
+        "heroAvgPrice": 1831,
+        "tripMasterAvgPrice": 4337,
+        "count": 20
+      },
+      "DOUALA 3E": {
+        "arrondissement": "DOUALA 3E",
+        "avgPrice": 1240,
+        "heroAvgPrice": 1470,
+        "tripMasterAvgPrice": 2888,
+        "count": 30
+      },
+      "DOUALA 5E": {
+        "arrondissement": "DOUALA 5E",
+        "avgPrice": 992,
+        "heroAvgPrice": 1552,
+        "tripMasterAvgPrice": 3613,
+        "count": 32
+      },
+      "DOUALA 1ER": {
+        "arrondissement": "DOUALA 1ER",
+        "avgPrice": 971,
+        "heroAvgPrice": 1123,
+        "tripMasterAvgPrice": 2390,
+        "count": 12
+      }
+    }
+  },
+  {
     "id": 13,
     "uuid": "5db3784b-1c53-4097-9345-47f2c49e2360",
     "cityId": "city_douala",

@@ -745,7 +745,16 @@ export async function runAutomatedAirportCampaign(
     throw new Error(`Aucune ville active trouvée pour exécuter le pricing aéroport.`);
   }
 
-  const cityNbs = neighborhoods.filter(n => (String(n.cityId) === String(city.id) || n.cityId === city.uuid) && n.active);
+  const cId = String(city.id);
+  const cUuid = city.uuid || '';
+  const cName = city.name.toLowerCase().trim();
+
+  const cityNbs = neighborhoods.filter(n => {
+    if (!n.active) return false;
+    if (String(n.cityId) === cId || (cUuid && n.cityId === cUuid)) return true;
+    if (cName && (n.ville || (n as any).cityName || '').toLowerCase().trim() === cName) return true;
+    return false;
+  });
   
   // Identifier le quartier aéroport (zoneType === 'airport' ou nom contenant 'aéroport')
   const airportNb = cityNbs.find(n => 
@@ -759,22 +768,26 @@ export async function runAutomatedAirportCampaign(
     throw new Error(`Aucun quartier ou configuration aéroport trouvée pour ${city.name}.`);
   }
 
-  // Créer des paires : de l'aéroport vers tous les autres quartiers, et inversement
+  // Trajets vers l'aéroport (Sens unique : Quartier -> Aéroport)
+  // Si la ville a N quartiers, il y a exactement les N trajets de chaque quartier vers l'aéroport
   const pairs: Array<{ origin: Neighborhood; dest: Neighborhood }> = [];
-  const airportNode: Neighborhood = airportNb || {
-    id: 'airport_virtual',
-    uuid: 'uuid_airport',
+  const airportNode: Neighborhood = {
+    id: airportNb?.id || 'airport_dest_node',
+    uuid: airportNb?.uuid || 'uuid_airport_dest',
     cityId: city.uuid || String(city.id),
-    name: city.airport?.name || `Aéroport de ${city.name}`,
-    lat: city.airport?.lat || city.center.lat,
-    lng: city.airport?.lng || city.center.lng,
+    name: airportNb?.name || city.airport?.name || `Aéroport International de ${city.name}`,
+    lat: airportNb?.lat || city.airport?.lat || (city.name.toLowerCase().includes('douala') ? 4.0061 : 3.7226),
+    lng: airportNb?.lng || city.airport?.lng || (city.name.toLowerCase().includes('douala') ? 9.7195 : 11.5532),
     active: true,
     zoneType: 'airport'
   };
 
   for (const nb of cityNbs) {
-    if (nb.id === airportNode.id) continue;
-    pairs.push({ origin: airportNode, dest: nb });
+    // Ne pas créer un trajet sur place aéroport -> aéroport
+    if (airportNb && (nb.id === airportNb.id || nb.uuid === airportNb.uuid)) {
+      continue;
+    }
+    // Chaque quartier a son trajet unique vers l'aéroport
     pairs.push({ origin: nb, dest: airportNode });
   }
 

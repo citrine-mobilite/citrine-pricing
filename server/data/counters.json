@@ -1,7 +1,8 @@
 {
-  "campaigns": 13,
+  "campaigns": 15,
   "users": 4,
   "cities": 2,
   "neighborhoods": 139,
-  "trips": 20055
+  "trips": 20155,
+  "history": 10
 }
