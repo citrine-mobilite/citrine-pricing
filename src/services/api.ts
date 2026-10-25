@@ -1,5 +1,16 @@
-import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings } from '../types';
-import { getCachedCampaignTrips, setCachedCampaignTrips, invalidateCampaignTripsCache, invalidateAllTripsCache } from './dbCache';
+import { City, HeroSettings, Neighborhood, PricingCampaign, TripMasterSettings, TripResult, User, YangoSettings, StatisticsData, StoredStatsSnapshot, ShortagesResponse, CampaignShortageRecord } from '../types';
+import {
+  getCachedCampaignTrips,
+  setCachedCampaignTrips,
+  invalidateCampaignTripsCache,
+  invalidateAllTripsCache,
+  getCachedCities,
+  setCachedCities,
+  invalidateCitiesCache,
+  getCachedNeighborhoods,
+  setCachedNeighborhoods,
+  invalidateNeighborhoodsCache
+} from './dbCache';
 
 const BASE_URL = '/api';
 
@@ -58,7 +69,7 @@ export const api = {
     return res.json();
   },
 
-  async updateUser(id: string, data: Partial<User> & { password?: string }): Promise<User> {
+  async updateUser(id: string | number, data: Partial<User> & { password?: string }): Promise<User> {
     const res = await fetch(`${BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -71,7 +82,7 @@ export const api = {
     return res.json();
   },
 
-  async changeUserPassword(id: string, password: string): Promise<{ success: boolean; message: string }> {
+  async changeUserPassword(id: string | number, password: string): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${BASE_URL}/users/${id}/change-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -84,10 +95,11 @@ export const api = {
     return res.json();
   },
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: string | number): Promise<void> {
     try {
+      const idStr = String(id);
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_users') || k.includes(id))
+        .filter(k => k.startsWith('citrine_users') || k.includes(idStr))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/users/${id}`, { method: 'DELETE' });
@@ -97,27 +109,37 @@ export const api = {
     }
   },
 
-  // Cities (avec cache navigateur 24h et 0 lecture Firestore)
-  // Cities (Toujours frais depuis le serveur)
+  // Cities (avec cache 30 jours et réinitialisation immédiate à la modification)
   async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
-    try {
-      // Purge proactive des anciens caches persistants
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_cities_cache') || k.startsWith('citrine_nbs_cache_v')).forEach(k => localStorage.removeItem(k));
-    } catch {}
-
     try {
       const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
       const res = await fetch(url);
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          if (data.length === 0) {
+            invalidateCitiesCache();
+            return [];
+          }
+          setCachedCities(data);
+          return data;
+        }
       }
     } catch (e) {
       console.warn('[API Client] getCities error:', e);
+    }
+
+    if (!forceRefresh) {
+      const cached = getCachedCities();
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
     }
     return [];
   },
 
   async createCity(data: Partial<City>): Promise<City> {
+    invalidateCitiesCache();
     const res = await fetch(`${BASE_URL}/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -127,50 +149,73 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la création de la ville.');
     }
+    invalidateCitiesCache();
     return res.json();
   },
 
-  async updateCity(id: string, data: Partial<City>): Promise<City> {
+  async updateCity(id: string | number, data: Partial<City>): Promise<City> {
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
     const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour de la ville.');
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
     return res.json();
   },
 
-  async deleteCity(id: string): Promise<void> {
+  async deleteCity(id: string | number): Promise<void> {
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
     try {
+      const idStr = String(id);
       Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(id))
+        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(idStr))
         .forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
+    invalidateCitiesCache();
+    invalidateNeighborhoodsCache(id);
   },
 
-  // Neighborhoods (Toujours frais depuis le serveur)
-  async getNeighborhoods(cityId?: string, forceRefresh: boolean = false): Promise<Neighborhood[]> {
+  // Neighborhoods (avec cache 30 jours par ville et réinitialisation immédiate à la modification)
+  async getNeighborhoods(cityId?: string | number, forceRefresh: boolean = false): Promise<Neighborhood[]> {
     try {
       const params = new URLSearchParams();
-      if (cityId) params.append('cityId', cityId);
+      if (cityId !== undefined && cityId !== null) params.append('cityId', String(cityId));
       if (forceRefresh) params.append('forceRefresh', 'true');
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          if (data.length === 0) {
+            invalidateNeighborhoodsCache(cityId);
+            return [];
+          }
+          setCachedNeighborhoods(cityId, data);
+          return data;
+        }
       }
     } catch (e) {
       console.warn('[API Client] getNeighborhoods error:', e);
+    }
+
+    if (!forceRefresh) {
+      const cached = getCachedNeighborhoods(cityId);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
     }
     return [];
   },
 
   async createNeighborhood(data: Partial<Neighborhood>): Promise<Neighborhood> {
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
-    } catch {}
+    invalidateNeighborhoodsCache(data.cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -180,69 +225,79 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de l’ajout du quartier.');
     }
+    invalidateNeighborhoodsCache(data.cityId);
     return res.json();
   },
 
-  async updateNeighborhood(id: string, data: Partial<Neighborhood>): Promise<Neighborhood> {
-    try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache')).forEach(k => localStorage.removeItem(k));
-    } catch {}
+  async updateNeighborhood(id: string | number, data: Partial<Neighborhood>): Promise<Neighborhood> {
+    invalidateNeighborhoodsCache(data.cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour du quartier.');
+    invalidateNeighborhoodsCache(data.cityId);
     return res.json();
   },
 
-  async deleteNeighborhood(id: string): Promise<void> {
+  async deleteNeighborhood(id: string | number, cityId?: string | number): Promise<void> {
+    invalidateNeighborhoodsCache(cityId);
     try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(id)).forEach(k => localStorage.removeItem(k));
+      const idStr = String(id);
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(idStr)).forEach(k => localStorage.removeItem(k));
     } catch {}
     const res = await fetch(`${BASE_URL}/neighborhoods/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression du quartier.');
+    invalidateNeighborhoodsCache(cityId);
   },
 
-  async clearCityNeighborhoods(cityId: string): Promise<{ success: boolean; deletedCount: number }> {
+  async clearCityNeighborhoods(cityId: string | number): Promise<{ success: boolean; deletedCount: number }> {
+    invalidateNeighborhoodsCache(cityId);
     try {
-      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(cityId)).forEach(k => localStorage.removeItem(k));
+      const idStr = String(cityId);
+      Object.keys(localStorage).filter(k => k.startsWith('citrine_nbs_cache') || k.includes(idStr)).forEach(k => localStorage.removeItem(k));
     } catch {}
-    const res = await fetch(`${BASE_URL}/neighborhoods/city/${encodeURIComponent(cityId)}`, {
+    const res = await fetch(`${BASE_URL}/neighborhoods/city/${encodeURIComponent(String(cityId))}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Erreur lors de la suppression des quartiers de la ville.');
+    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
-  async batchToggleNeighborhoods(cityId: string, active: boolean): Promise<{ success: boolean; updatedCount: number; active: boolean }> {
+  async batchToggleNeighborhoods(cityId: string | number, active: boolean): Promise<{ success: boolean; updatedCount: number; active: boolean }> {
+    invalidateNeighborhoodsCache(cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods/batch-toggle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId, active })
+      body: JSON.stringify({ cityId: String(cityId), active })
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour globale des quartiers.');
+    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
-  async seedCityNeighborhoods(cityId: string): Promise<{ neighborhoods: Neighborhood[] }> {
+  async seedCityNeighborhoods(cityId: string | number): Promise<{ neighborhoods: Neighborhood[] }> {
+    invalidateNeighborhoodsCache(cityId);
     const res = await fetch(`${BASE_URL}/neighborhoods/seed-city`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId })
+      body: JSON.stringify({ cityId: String(cityId) })
     });
     if (!res.ok) throw new Error('Erreur de réinitialisation des quartiers.');
+    invalidateNeighborhoodsCache(cityId);
     return res.json();
   },
 
   async importNeighborhoodsBatch(
-    cityId: string,
+    cityId: string | number,
     neighborhoods: Array<{ name: string; lat: number; lng: number; zoneType?: string; active?: boolean }>
   ): Promise<{ success: boolean; count: number; neighborhoods: Neighborhood[] }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/import-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId, neighborhoods })
+      body: JSON.stringify({ cityId: String(cityId), neighborhoods })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -252,13 +307,13 @@ export const api = {
   },
 
   async reconcileNeighborhoodsBatch(
-    cityId: string,
+    cityId: string | number,
     items: any[]
   ): Promise<{ success: boolean; updatedCount: number; createdCount: number; ignoredCount: number; message: string }> {
     const res = await fetch(`${BASE_URL}/neighborhoods/reconcile-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cityId, items })
+      body: JSON.stringify({ cityId: String(cityId), items })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -272,15 +327,22 @@ export const api = {
   },
 
   // Campaigns
-  async getCampaigns(cityId?: string): Promise<PricingCampaign[]> {
-    const CACHE_KEY = `citrine_campaigns_v7_${cityId || 'all'}`;
+  async getCampaigns(cityId?: string | number, forceRefresh: boolean = false): Promise<PricingCampaign[]> {
+    const cityIdStr = cityId ? String(cityId) : 'all';
+    const CACHE_KEY = `citrine_campaigns_v7_${cityIdStr}`;
 
     try {
-      const url = cityId ? `${BASE_URL}/campaigns?cityId=${encodeURIComponent(cityId)}` : `${BASE_URL}/campaigns`;
+      const params = new URLSearchParams();
+      if (cityId) params.append('cityId', String(cityId));
+      if (forceRefresh) params.append('forceRefresh', 'true');
+      params.append('_cb', String(Date.now()));
+      const queryStr = `?${params.toString()}`;
+      const url = `${BASE_URL}/campaigns${queryStr}`;
+
       const res = await fetch(url);
       if (res.ok) {
         const freshList: PricingCampaign[] = await res.json();
-        // Le serveur fait foi : mise à jour immédiate du cache local (y compris si la liste est vide)
+        // Le serveur fait foi : mise à jour immédiate du cache local
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify({ data: freshList, timestamp: Date.now() }));
         } catch {}
@@ -288,20 +350,21 @@ export const api = {
       }
     } catch (e) {
       console.warn('[API Client] getCampaigns network error:', e);
-      // En cas d'erreur réseau complète (hors-ligne), lecture de secours du cache local
-      try {
-        const raw = localStorage.getItem(CACHE_KEY);
-        if (raw) {
-          const { data } = JSON.parse(raw);
-          if (Array.isArray(data)) return data;
-        }
-      } catch {}
+      if (!forceRefresh) {
+        try {
+          const raw = localStorage.getItem(CACHE_KEY);
+          if (raw) {
+            const { data } = JSON.parse(raw);
+            if (Array.isArray(data)) return data;
+          }
+        } catch {}
+      }
     }
 
     return [];
   },
 
-  async getCampaign(id: string): Promise<PricingCampaign | null> {
+  async getCampaign(id: string | number): Promise<PricingCampaign | null> {
     try {
       const res = await fetch(`${BASE_URL}/campaigns/${id}`);
       if (res.status === 404) return null;
@@ -326,19 +389,20 @@ export const api = {
   },
 
   async startCampaign(data: {
-    cityId: string;
-    triggeredByUserId?: string;
+    cityId: string | number;
+    triggeredByUserId?: string | number;
     triggeredByUserName?: string;
     triggeredByUserRole?: string;
     triggerType?: 'manual' | 'scheduled';
     selectedClasses?: string[];
     sampleLimit?: number | 'all';
-    scopeMode?: 'global' | 'intra' | 'inter';
+    scopeMode?: 'global' | 'intra' | 'inter' | 'airport' | 'city';
     arrondissement?: string;
     originArrondissement?: string;
     destArrondissement?: string;
     comment?: string;
     timeSlotOverride?: string;
+    restartCampaignId?: string | number;
   }): Promise<{ message: string; campaign: PricingCampaign; totalChunks: number; totalPairs: number }> {
     const res = await fetch(`${BASE_URL}/campaigns/start`, {
       method: 'POST',
@@ -374,11 +438,11 @@ export const api = {
   },
 
   async processCampaignChunk(
-    campaignId: string, 
+    campaignId: string | number, 
     chunkIndex: number, 
     signal?: AbortSignal,
     meta?: {
-      cityId?: string;
+      cityId?: string | number;
       cityName?: string;
       currency?: string;
       scopeMode?: string;
@@ -395,21 +459,35 @@ export const api = {
     chunkTrips: TripResult[];
     chunkCanonicalTrips?: any[];
   }> {
-    const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/process-chunk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chunkIndex, ...meta, fallbackMeta: meta }),
-      signal
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Erreur lors du traitement du lot ${chunkIndex}.`);
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), 120000);
+    const combinedSignal = signal ? (() => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      signal.addEventListener('abort', abort, { once: true });
+      timeoutController.signal.addEventListener('abort', abort, { once: true });
+      return controller.signal;
+    })() : timeoutController.signal;
+
+    try {
+      const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/process-chunk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chunkIndex, ...meta, fallbackMeta: meta }),
+        signal: combinedSignal
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Erreur lors du traitement du lot ${chunkIndex}.`);
+      }
+      return res.json();
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return res.json();
   },
 
   async finalizeCampaign(
-    campaignId: string, 
+    campaignId: string | number, 
     canonicalTrips?: any[], 
     trips?: TripResult[]
   ): Promise<{ success: boolean; campaign: PricingCampaign }> {
@@ -422,16 +500,20 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la finalisation de la campagne.');
     }
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(trips) && trips.length > 0) {
+      setCachedCampaignTrips(String(campaignId), trips).catch(() => {});
+    }
+    return data;
   },
 
-  async cancelCampaign(id: string): Promise<{ campaign: PricingCampaign }> {
+  async cancelCampaign(id: string | number): Promise<{ campaign: PricingCampaign }> {
     const res = await fetch(`${BASE_URL}/campaigns/${id}/cancel`, { method: 'POST' });
     if (!res.ok) throw new Error('Erreur lors de l’interruption de la campagne.');
     return res.json();
   },
 
-  async updateCampaignComment(id: string, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
+  async updateCampaignComment(id: string | number, comment: string, timeSlotOverride?: string): Promise<PricingCampaign> {
     const res = await fetch(`${BASE_URL}/campaigns/${id}/comment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -443,6 +525,7 @@ export const api = {
     }
     const data = await res.json();
     try {
+      const idStr = String(id);
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('citrine_campaigns_')) {
@@ -451,7 +534,7 @@ export const api = {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed.data)) {
               parsed.data = parsed.data.map((c: any) =>
-                c.id === id
+                String(c.id) === idStr
                   ? {
                       ...c,
                       comment,
@@ -469,7 +552,7 @@ export const api = {
     return data.campaign;
   },
 
-  async stepCampaign(id: string): Promise<{ success: boolean; campaign?: PricingCampaign }> {
+  async stepCampaign(id: string | number): Promise<{ success: boolean; campaign?: PricingCampaign }> {
     try {
       const res = await fetch(`${BASE_URL}/campaigns/${id}/step`, { method: 'POST' });
       if (res.ok) return await res.json();
@@ -477,36 +560,60 @@ export const api = {
     return { success: false };
   },
 
-  async deleteCampaign(id: string): Promise<void> {
-    await invalidateCampaignTripsCache(id);
+  async deleteCampaign(id: string | number): Promise<void> {
+    const idStr = String(id);
+    await invalidateCampaignTripsCache(idStr);
     try {
-      localStorage.removeItem(`citrine_campaigns_${id}`);
-      localStorage.removeItem(`citrine_trips_${id}`);
-      localStorage.removeItem(`citrine_canonical_${id}`);
-      localStorage.removeItem(`trips_${id}`);
+      const campaignKeys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_') || key.startsWith('citrine_canonical_') || key.startsWith('trips_'))) {
+          campaignKeys.push(key);
+        }
+      }
 
-      const allKeys = Object.keys(localStorage);
-      for (const key of allKeys) {
-        if (key.startsWith('citrine_campaigns_') || key.startsWith('citrine_trips_')) {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed.data)) {
-                parsed.data = parsed.data.filter((c: any) => c.id !== id);
-                localStorage.setItem(key, JSON.stringify(parsed));
-              } else if (Array.isArray(parsed)) {
-                const filtered = parsed.filter((c: any) => c.id !== id);
-                localStorage.setItem(key, JSON.stringify(filtered));
-              }
-            } catch {}
+      for (const key of campaignKeys) {
+        const raw = localStorage.getItem(key);
+        localStorage.removeItem(key);
+
+        if (key.startsWith('citrine_campaigns_')) {
+          try {
+            const parsed = raw ? JSON.parse(raw) : null;
+            const nextList = Array.isArray(parsed?.data)
+              ? parsed.data.filter((c: any) => String(c.id) !== idStr && c.uuid !== idStr)
+              : [];
+            localStorage.setItem(key, JSON.stringify({ data: nextList, timestamp: Date.now() }));
+          } catch {
+            localStorage.setItem(key, JSON.stringify({ data: [], timestamp: Date.now() }));
           }
         }
       }
+
+      localStorage.setItem('citrine_campaigns_v7_all', JSON.stringify({ data: [], timestamp: Date.now() }));
+      localStorage.setItem(`citrine_campaigns_v7_${idStr}`, JSON.stringify({ data: [], timestamp: Date.now() }));
+      localStorage.removeItem(`citrine_campaigns_${idStr}`);
+      localStorage.removeItem(`citrine_trips_${idStr}`);
+      localStorage.removeItem(`citrine_canonical_${idStr}`);
+      localStorage.removeItem(`trips_${idStr}`);
     } catch {}
 
     const res = await fetch(`${BASE_URL}/campaigns/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la campagne.');
+
+    try {
+      const allCampaignKeys = Object.keys(localStorage).filter((key) => key.startsWith('citrine_campaigns_'));
+      for (const key of allCampaignKeys) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          const list = Array.isArray(parsed?.data) ? parsed.data.filter((c: any) => String(c.id) !== idStr && String(c.uuid || '') !== idStr) : [];
+          localStorage.setItem(key, JSON.stringify({ data: list, timestamp: Date.now() }));
+        } catch {
+          localStorage.setItem(key, JSON.stringify({ data: [], timestamp: Date.now() }));
+        }
+      }
+    } catch {}
   },
 
   async deleteAllCampaigns(): Promise<void> {
@@ -528,9 +635,9 @@ export const api = {
     if (!res.ok) throw new Error('Erreur lors de la suppression de toutes les campagnes.');
   },
 
-  // Trip Results avec Cache Local PWA IndexedDB (0 lecture Firestore)
+  // Trip Results (Données réelles du serveur en priorité absolue, 0 trajet synthétique)
   async getCampaignResults(
-    campaignId: string,
+    campaignId: string | number,
     filters?: {
       startNeighborhood?: string;
       endNeighborhood?: string;
@@ -541,7 +648,7 @@ export const api = {
       all?: boolean;
     }
   ): Promise<TripResult[]> {
-    // Si aucun filtre spécifique, tenter d'abord de servir depuis le cache local IndexedDB
+    const campIdStr = String(campaignId);
     const hasCustomFilters = Boolean(
       filters?.startNeighborhood ||
       filters?.endNeighborhood ||
@@ -550,19 +657,6 @@ export const api = {
       filters?.search ||
       filters?.limit
     );
-
-    if (!hasCustomFilters) {
-      const cached = await getCachedCampaignTrips(campaignId);
-      if (cached && cached.length > 0) {
-        // En arrière-plan non-bloquant, synchroniser le serveur si nécessaire
-        fetch(`${BASE_URL}/campaigns/${campaignId}/sync-trips`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trips: cached })
-        }).catch(() => {});
-        return cached as TripResult[];
-      }
-    }
 
     try {
       const params = new URLSearchParams();
@@ -575,23 +669,33 @@ export const api = {
       if (filters?.search) params.append('search', filters.search);
 
       const qs = params.toString();
-      const res = await fetch(`${BASE_URL}/campaigns/${campaignId}/results${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`${BASE_URL}/campaigns/${campIdStr}/results${qs ? `?${qs}` : ''}`);
       if (res.status === 404) return [];
       if (!res.ok) throw new Error('Erreur lors de la récupération des trajets.');
       const data = await res.json();
 
-      // Sauvegarde dans IndexedDB si données reçues et sans filtres restrictifs
-      if (!hasCustomFilters && Array.isArray(data) && data.length > 0) {
-        setCachedCampaignTrips(campaignId, data).catch(() => {});
+      if (Array.isArray(data)) {
+        if (!hasCustomFilters && data.length > 0) {
+          setCachedCampaignTrips(campIdStr, data).catch(() => {});
+        }
+        return data;
       }
-
-      return data;
+      return [];
     } catch {
+      // Secours réseau uniquement si hors-ligne : renvoyer le cache local sans données fictives
+      if (!hasCustomFilters) {
+        try {
+          const cached = await getCachedCampaignTrips(campIdStr);
+          if (cached && cached.length > 0) {
+            return cached as TripResult[];
+          }
+        } catch {}
+      }
       return [];
     }
   },
 
-  getExportCsvUrl(campaignId: string): string {
+  getExportCsvUrl(campaignId: string | number): string {
     return `${BASE_URL}/campaigns/${campaignId}/export`;
   },
 
@@ -665,6 +769,25 @@ export const api = {
     return res.json();
   },
 
+  async getSupabaseStats(): Promise<{
+    connected: boolean;
+    projectId: string;
+    url: string;
+    databaseEngine: string;
+    stats: {
+      userCount: number;
+      cityCount: number;
+      neighborhoodCount: number;
+      campaignCount: number;
+      tripsCount: number;
+      shortagesCount: number;
+    };
+  }> {
+    const res = await fetch(`${BASE_URL}/supabase/stats`);
+    if (!res.ok) throw new Error('Impossible de charger les statistiques Supabase.');
+    return res.json();
+  },
+
   async updateTripMasterSettings(data: Partial<TripMasterSettings>): Promise<{ success: boolean; settings: TripMasterSettings }> {
     const res = await fetch(`${BASE_URL}/settings/tripmaster`, {
       method: 'POST',
@@ -717,7 +840,7 @@ export const api = {
     return cachedList;
   },
 
-  async deleteHistoryItem(id: string): Promise<void> {
+  async deleteHistoryItem(id: string | number): Promise<void> {
     try { localStorage.removeItem('citrine_history_v7'); } catch {}
     await fetch(`${BASE_URL}/history/${id}`, { method: 'DELETE' });
   },
@@ -735,5 +858,117 @@ export const api = {
 
   getDbFullDataExportUrl(): string {
     return `${BASE_URL}/export/db-full`;
+  },
+
+  // Statistics & Snapshots
+  async getStatistics(cityId?: string | number): Promise<StatisticsData> {
+    const qs = cityId ? `?cityId=${encodeURIComponent(String(cityId))}` : '';
+    const res = await fetch(`${BASE_URL}/statistics${qs}`);
+    if (!res.ok) throw new Error('Impossible de charger les statistiques.');
+    return res.json();
+  },
+
+  async saveStatisticsSnapshot(data: {
+    title?: string;
+    cityName?: string;
+    notes?: string;
+    customData?: any;
+  }): Promise<{ success: boolean; snapshot: StoredStatsSnapshot }> {
+    const res = await fetch(`${BASE_URL}/statistics/snapshots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors de la sauvegarde de l’instantané.');
+    }
+    return res.json();
+  },
+
+  async deleteStatisticsSnapshot(id: string | number): Promise<{ success: boolean }> {
+    const res = await fetch(`${BASE_URL}/statistics/snapshots/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error('Erreur lors de la suppression de l’instantané.');
+    return res.json();
+  },
+
+  // Shortages (Pénuries & Ruptures)
+  async getShortages(params?: {
+    cityId?: string | number;
+    timeSlot?: string;
+    arrondissement?: string;
+    campaignId?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ShortagesResponse> {
+    const sp = new URLSearchParams();
+    if (params?.cityId && params.cityId !== 'all') sp.append('cityId', String(params.cityId));
+    if (params?.timeSlot && params.timeSlot !== 'all') sp.append('timeSlot', params.timeSlot);
+    if (params?.arrondissement && params.arrondissement !== 'all') sp.append('arrondissement', params.arrondissement);
+    if (params?.campaignId && params.campaignId !== 'all') sp.append('campaignId', String(params.campaignId));
+    if (params?.search) sp.append('search', params.search);
+    if (params?.limit) sp.append('limit', String(params.limit));
+    if (params?.offset) sp.append('offset', String(params.offset));
+
+    const qs = sp.toString() ? `?${sp.toString()}` : '';
+    const res = await fetch(`${BASE_URL}/shortages${qs}`);
+    if (!res.ok) throw new Error('Impossible de charger les trajets en pénurie.');
+    return res.json();
+  },
+
+  getShortagesExportUrl(cityId?: string | number, timeSlot?: string): string {
+    const sp = new URLSearchParams();
+    if (cityId && cityId !== 'all') sp.append('cityId', String(cityId));
+    if (timeSlot && timeSlot !== 'all') sp.append('timeSlot', timeSlot);
+    const qs = sp.toString() ? `?${sp.toString()}` : '';
+    return `${BASE_URL}/shortages/export${qs}`;
+  },
+
+  async deleteShortage(id: string | number): Promise<{ success: boolean }> {
+    const res = await fetch(`${BASE_URL}/shortages/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Erreur lors de la suppression du trajet en pénurie.');
+    return res.json();
+  },
+
+  async reExtractShortages(): Promise<{ success: boolean; extractedCount: number; total: number }> {
+    const res = await fetch(`${BASE_URL}/shortages/re-extract`, { method: 'POST' });
+    if (!res.ok) throw new Error('Erreur lors de la ré-extraction des pénuries.');
+    return res.json();
+  },
+
+  // Cron automation endpoints
+  async triggerPricingCron(cityId?: string | number): Promise<any> {
+    const res = await fetch(`${BASE_URL}/cron/trigger-pricing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cityId, mode: 'all' })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors du déclenchement du cron pricing.');
+    }
+    return res.json();
+  },
+
+  async triggerAirportCron(cityId?: string | number): Promise<any> {
+    const res = await fetch(`${BASE_URL}/cron/trigger-airport-pricing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cityId })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur lors du déclenchement du cron aéroport.');
+    }
+    return res.json();
+  },
+
+  async getCronStatus(): Promise<any> {
+    const res = await fetch(`${BASE_URL}/cron/status`);
+    if (!res.ok) throw new Error('Impossible de charger le statut des crons.');
+    return res.json();
   }
 };

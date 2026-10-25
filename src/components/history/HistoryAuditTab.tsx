@@ -158,7 +158,7 @@ export const HistoryAuditTab: React.FC<HistoryAuditTabProps> = ({
               </div>
 
               <button
-                onClick={() => handleDeleteLog(log.id)}
+                onClick={() => handleDeleteLog(String(log.id))}
                 title="Supprimer cet événement"
                 className="p-1 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
               >

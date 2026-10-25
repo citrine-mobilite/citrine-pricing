@@ -65,10 +65,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
 
   // Determine current active city for contextual actions (Add/Import/Seeding)
   const currentCity = useMemo(() => {
-    if (selectedCityFilter && selectedCityFilter !== 'all') {
-      return cities.find((c) => c.id === selectedCityFilter) || cities[0];
-    }
-    return cities.find((c) => c.id === selectedCityId) || cities[0] || {
+    const fallbackCity: City = {
       id: selectedCityId || 'default_city',
       name: 'Ville active',
       country: 'Cameroun',
@@ -77,8 +74,16 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
       active: true,
       center: { lat: 4.0511, lng: 9.7679 },
       autoSchedule: { enabled: false, slots: [] }
-    };
+    } as City;
+
+    if (selectedCityFilter && selectedCityFilter !== 'all') {
+      return cities.find((c) => c.id === selectedCityFilter) || cities[0] || fallbackCity;
+    }
+
+    return cities.find((c) => c.id === selectedCityId) || cities[0] || fallbackCity;
   }, [cities, selectedCityFilter, selectedCityId]);
+
+  const currentCityName = currentCity?.name || 'Ville active';
 
   // 1. Filtrage préalable par Ville (100% dynamique pour n'importe quelle ville actuelle ou future)
   const cityFilteredNeighborhoods = useMemo(() => {
@@ -203,7 +208,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const [editNbZone, setEditNbZone] = useState('commercial');
   const [editNbStatus, setEditNbStatus] = useState('actif');
   const [editNbActive, setEditNbActive] = useState(true);
-  const [editNbCityId, setEditNbCityId] = useState(currentCity?.id || 'city_douala');
+  const [editNbCityId, setEditNbCityId] = useState(String(currentCity?.id || 'city_douala'));
   const [editError, setEditError] = useState<string | null>(null);
 
   // Import Modal State
@@ -222,7 +227,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     setEditNbZone(nb.zone || nb.zoneType || 'commercial');
     setEditNbStatus(typeof nb.status === 'string' ? nb.status : (nb.active !== false ? 'actif' : 'inactif'));
     setEditNbActive(nb.active ?? true);
-    setEditNbCityId(nb.cityId || currentCity?.id || '');
+    setEditNbCityId(String(nb.cityId || currentCity?.id || ''));
     setEditError(null);
   };
 
@@ -244,7 +249,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         zoneType: editNbZone as any,
         status: editNbStatus,
         active: editNbActive,
-        cityId: editNbCityId
+        cityId: String(editNbCityId)
       });
       setEditingNb(null);
       onRefresh();
@@ -261,7 +266,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     setIsSubmitting(true);
     try {
       await api.createNeighborhood({
-        cityId: currentCity?.id || cities[0]?.id || '',
+        cityId: String(currentCity?.id || cities[0]?.id || ''),
         name: newNbName.trim(),
         ville: newNbVille.trim() || currentCity?.name || '',
         departement: newNbDepartement.trim() || availableDepartements[0] || '',
@@ -294,7 +299,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     }
   };
 
-  const handleDelete = async (nbId: string) => {
+  const handleDelete = async (nbId: string | number) => {
     if (!confirm('Supprimer ce quartier ?')) return;
     try {
       await api.deleteNeighborhood(nbId);
@@ -307,7 +312,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
   const handleBatchToggle = async (activeState: boolean) => {
     if (selectedCityFilter !== 'all' && currentCity?.id) {
       try {
-        await api.batchToggleNeighborhoods(currentCity.id, activeState);
+        await api.batchToggleNeighborhoods(String(currentCity.id), activeState);
         onRefresh();
       } catch (err: any) {
         alert(err.message || 'Erreur.');
@@ -315,7 +320,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     } else {
       // Activer/Désactiver pour toutes les villes
       try {
-        await Promise.all(cities.map((c) => api.batchToggleNeighborhoods(c.id, activeState)));
+        await Promise.all(cities.map((c) => api.batchToggleNeighborhoods(String(c.id), activeState)));
         onRefresh();
       } catch (err: any) {
         alert(err.message || 'Erreur.');
@@ -327,7 +332,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     if (!currentCity?.id || selectedCityFilter === 'all') return;
     if (!confirm(`Voulez-vous vraiment vider tous les quartiers de ${currentCity.name} ?`)) return;
     try {
-      await api.clearCityNeighborhoods(currentCity.id);
+      await api.clearCityNeighborhoods(String(currentCity.id));
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Erreur.');
@@ -338,7 +343,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
     if (!currentCity?.id) return;
     try {
       setIsLoadingOfficial(true);
-      await api.seedCityNeighborhoods(currentCity.id);
+      await api.seedCityNeighborhoods(String(currentCity.id));
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Erreur.');
@@ -378,10 +383,10 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
       />
 
       {/* Warning if current selected city is deactivated */}
-      {selectedCityFilter !== 'all' && !currentCity?.active && (
+      {selectedCityFilter !== 'all' && currentCity && !currentCity.active && (
         <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2.5 shadow-2xs">
           <span className="font-semibold text-amber-900 shrink-0">⚠️ Ville désactivée :</span>
-          <span>Les quartiers de <strong>{currentCity.name}</strong> ne sont pas monitorés et les relevés de pricing y sont suspendus.</span>
+          <span>Les quartiers de <strong>{currentCityName}</strong> ne sont pas monitorés et les relevés de pricing y sont suspendus.</span>
         </div>
       )}
 
@@ -389,14 +394,14 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
       <NeighborhoodQuickInfo
         totalCount={filteredNeighborhoods.length}
         activeNeighborhoods={activeFilteredNeighborhoods}
-        cityName={selectedCityFilter === 'all' ? 'Toutes les villes (Intra-ville strict)' : currentCity.name}
-        onLaunchPricing={() => onLaunchPricingForCity(currentCity.id)}
+        cityName={selectedCityFilter === 'all' ? 'Toutes les villes (Intra-ville strict)' : currentCityName}
+        onLaunchPricing={currentCity?.id ? () => onLaunchPricingForCity(String(currentCity.id)) : () => undefined}
       />
 
       {/* Data Table */}
       <NeighborhoodsTable
         neighborhoods={filteredNeighborhoods}
-        cityName={selectedCityFilter === 'all' ? 'Cameroun' : currentCity.name}
+        cityName={selectedCityFilter === 'all' ? 'Cameroun' : currentCityName}
         onToggleActive={handleToggleActive}
         onOpenEditModal={openEditModal}
         onDelete={handleDelete}
@@ -426,7 +431,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         onStatusChange={setNewNbStatus}
         active={newNbActive}
         onActiveChange={setNewNbActive}
-        cityId={currentCity?.id || 'city_douala'}
+        cityId={String(currentCity?.id || 'city_douala')}
         cities={cities}
         isSubmitting={isSubmitting}
         onSubmit={handleAddNeighborhood}
@@ -471,7 +476,7 @@ export const NeighborhoodsView: React.FC<NeighborhoodsViewProps> = ({
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         cities={cities}
-        currentCityId={currentCity?.id || cities[0]?.id || ''}
+        currentCityId={String(currentCity?.id || cities[0]?.id || '')}
         existingNeighborhoods={neighborhoods}
         onSuccess={onRefresh}
       />

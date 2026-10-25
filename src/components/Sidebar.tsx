@@ -3,11 +3,13 @@ import { HeroLogo } from './HeroLogo';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   LayoutDashboard,
+  BarChart3,
+  AlertOctagon,
   Zap,
   Activity,
   Building2,
   Compass,
-  History,
+  Download,
   Settings,
   Users,
   Clock,
@@ -31,20 +33,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile
 }) => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isSuperAdmin = user?.email?.toLowerCase() === 'citrinemobilite@gmail.com' || user?.role === 'super_admin';
+  const isAdminOrSuper = user?.role === 'admin' || isSuperAdmin;
 
   const navigation = [
     { id: 'dashboard', label: 'Accueil', icon: LayoutDashboard },
+    { id: 'statistics', label: 'Statistiques', icon: BarChart3 },
+    { id: 'shortages', label: 'Pénuries Trajets', icon: AlertOctagon },
     { id: 'pricing', label: 'Pricing', icon: Zap },
     { id: 'campaigns', label: 'Campagnes', icon: Activity, badge: activeCampaignCount > 0 ? activeCampaignCount : undefined },
     { id: 'temporal', label: 'Évolution Prix', icon: Clock },
     { id: 'cities', label: 'Villes', icon: Building2 },
     { id: 'neighborhoods', label: 'Quartiers', icon: Compass },
-    { id: 'history', label: 'Historique', icon: History },
+    { id: 'history', label: 'Téléchargement', icon: Download },
     { id: 'profile', label: 'Mon Profil', icon: UserCircle },
-    ...(isAdmin
+    ...(isAdminOrSuper
       ? [
-          { id: 'users', label: 'Utilisateurs', icon: Users },
+          { id: 'users', label: 'Utilisateurs', icon: Users }
+        ]
+      : []),
+    ...(isSuperAdmin
+      ? [
           { id: 'settings', label: 'Paramètres', icon: Settings }
         ]
       : [])
@@ -117,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="min-w-0 flex-1">
               <div className="text-xs font-bold text-slate-900 truncate group-hover:text-[#1F4F4A]">{user.name}</div>
               <div className="text-[10px] text-slate-400 capitalize">
-                {user.role === 'admin' ? 'Super Admin' : user.role === 'responsable' ? 'Responsable' : 'Opérateur'}
+                {user.email?.toLowerCase() === 'citrinemobilite@gmail.com' || user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Administrateur' : user.role === 'responsable' ? 'Responsable' : 'Opérateur'}
               </div>
             </div>
           </button>

@@ -3,13 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { City, Neighborhood, PricingCampaign, TripResult, CanonicalTrip } from '../types.js';
 import {
-  saveCanonicalCampaignBatch,
-  saveCanonicalCampaignResults,
-  loadCanonicalCampaignResults,
-  saveCampaignToSupabase
-} from '../db/supabase.js';
-// Disk and Supabase persistence only
-import {
   activePricingSessions,
   memoryCampaigns,
   memoryCampaignTrips,
@@ -20,12 +13,23 @@ import {
   ensureSynced,
   saveCampaignTripsDiskBackup,
   loadCampaignTripsDiskBackup,
-  saveLocalCampaignsDiskBackup
+  loadCanonicalTripsDiskBackup,
+  saveLocalCampaignsDiskBackup,
+  dedupeCampaigns,
+  campaignMatchesId
 } from '../db/memoryStore.js';
+import {
+  saveCampaignResultsInSupabase,
+  saveCampaignShortagesInSupabase,
+  bulkInsertTripsInPostgres,
+  saveCampaignTripChunkInSupabase,
+  upsertCampaignInSupabase
+} from '../db/supabase.js';
+import { extractAndSaveCampaignShortages } from '../db/shortageStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
 import { callHeroStats } from './heroService.js';
 import { callTripMasterStats } from './tripMasterService.js';
-import { generateBenchmarkPairs, detectArrondissement } from '../../src/utils/routeMatrix.js';
+import { generatePricingPairs, detectArrondissement, isAirportNeighborhood } from '../../src/utils/routeMatrix.js';
 import { getNextSequence } from '../db/counters.js';
 
 export function cleanNeighborhoodName(name: string | null | undefined): string {
@@ -53,9 +57,9 @@ export interface CampaignSessionState {
 }
 
 // Map local des sessions actives
-export const campaignSessions = new Map<string, CampaignSessionState>();
+export const campaignSessions = new Map<string | number, CampaignSessionState>();
 
-function fetchWithTimeout<T>(promise: Promise<T>, ms = 10000, fallback: T): Promise<T> {
+function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T> {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((resolve) => {
     timeoutId = setTimeout(() => resolve(fallback), ms);
@@ -63,26 +67,36 @@ function fetchWithTimeout<T>(promise: Promise<T>, ms = 10000, fallback: T): Prom
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-export const cancelledCampaignIds = new Set<string>();
+function getTrustedCompletedPairs(campaign: PricingCampaign, fallback: number): number {
+  const expectedTotal = Math.max(0, Number(campaign.totalPairs) || 0);
+  const currentValue = Math.max(0, Number(fallback) || 0);
 
-export function cancelChunkCampaignSession(campaignId: string): boolean {
-  const strId = String(campaignId);
-  cancelledCampaignIds.add(strId);
+  if (expectedTotal > 0) {
+    return Math.min(Math.max(currentValue, 0), expectedTotal);
+  }
 
-  const memCamp = memoryCampaigns.find(c => String(c.id) === strId || c.uuid === strId);
-  const campUuid = memCamp?.uuid || strId;
-  cancelledCampaignIds.add(campUuid);
+  return Math.max(currentValue, 0);
+}
 
-  const session = campaignSessions.get(campUuid) || campaignSessions.get(strId);
+export function cancelChunkCampaignSession(campaignId: string | number): boolean {
+  const session = campaignSessions.get(campaignId) ||
+    campaignSessions.get(Number(campaignId)) ||
+    Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, campaignId));
   if (session) {
     session.campaign.status = 'cancelled';
+    session.campaign.finalizing = false;
+    // Ne PAS supprimer de campaignSessions afin que les requêtes de lots suivantes soient rejetées immédiatement
   }
+  const memCamp = memoryCampaigns.find(c => campaignMatchesId(c, campaignId));
   if (memCamp) {
     memCamp.status = 'cancelled';
+    memCamp.finalizing = false;
   }
 
-  campaignSessions.delete(campUuid);
-  campaignSessions.delete(strId);
+  // Persistance du statut annulé dans Supabase PostgreSQL
+  if (session?.campaign) {
+    upsertCampaignInSupabase({ ...session.campaign, status: 'cancelled' }).catch(() => {});
+  }
 
   return true;
 }
@@ -107,8 +121,9 @@ export async function initializeCampaignSession(
   }
 
   campaign.totalBatches = chunks.length;
-  campaign.workersCount = 1;
+  campaign.workersCount = Math.min(20, Math.max(1, chunks.length));
   campaign.status = 'in_progress';
+  campaign.finalizing = false;
 
   const sessionState: CampaignSessionState = {
     campaign,
@@ -122,15 +137,16 @@ export async function initializeCampaignSession(
     startedAtMs: Date.now()
   };
 
-  const campUuid = campaign.uuid || String(campaign.id);
-  campaignSessions.set(campUuid, sessionState);
-  campaignSessions.set(String(campaign.id), sessionState);
+  campaignSessions.set(campaign.id, sessionState);
 
-  // Mémoire et persistance locale
-  saveLocalCampaignsDiskBackup();
-  memoryCampaigns.unshift(campaign);
-  memoryCampaignTrips[campUuid] = sessionState.trips;
-  memoryCampaignCanonicalTrips[campUuid] = sessionState.canonicalTrips;
+  // Sauvegarde initiale dans Supabase PostgreSQL
+  upsertCampaignInSupabase(campaign).catch(() => {});
+
+  // Mémoire - garantir une seule occurrence de la campagne même si des doublons sont déjà présents
+  const dedupedInitial = dedupeCampaigns([campaign, ...memoryCampaigns]);
+  memoryCampaigns.splice(0, memoryCampaigns.length, ...dedupedInitial);
+  memoryCampaignTrips[campaign.id] = sessionState.trips;
+  memoryCampaignCanonicalTrips[campaign.id] = sessionState.canonicalTrips;
 
   return { totalChunks: chunks.length, totalPairs: pairs.length };
 }
@@ -159,12 +175,14 @@ export async function processCampaignChunk(
   chunkTrips: TripResult[];
   chunkCanonicalTrips?: CanonicalTrip[];
 }> {
-  let session = campaignSessions.get(campaignId);
+  let session = campaignSessions.get(campaignId) ||
+    campaignSessions.get(Number(campaignId)) ||
+    Array.from(campaignSessions.values()).find(s => String(s.campaign.id) === String(campaignId) || s.campaign.uuid === String(campaignId));
 
   // Reconstitution si le serveur a redémarré (cold start Serverless ou instance Cloud Run secondaire)
   if (!session) {
     await ensureSynced();
-    let camp = memoryCampaigns.find(c => c.id === campaignId);
+    let camp = memoryCampaigns.find(c => String(c.id) === String(campaignId) || c.uuid === String(campaignId));
 
     // Si la campagne n'est toujours pas trouvée, la reconstruire à partir des métadonnées du client
     if (!camp) {
@@ -191,12 +209,51 @@ export async function processCampaignChunk(
       memoryCampaigns.unshift(camp);
     }
 
-    const city = cities.find(c => c.id === camp?.cityId) || { id: camp.cityId, name: camp.cityName, currency: camp.currency } as City;
-    const activeNbs = neighborhoods.filter(n => n.cityId === city.id && n.active);
-    let pairs = generateBenchmarkPairs(activeNbs);
+    const city = cities.find(c => c.id === camp?.cityId || c.uuid === camp?.cityId || String(c.id) === String(camp?.cityId)) || { id: camp.cityId, name: camp.cityName, currency: camp.currency } as City;
+    const activeNbs = neighborhoods.filter(n => (
+      String(n.cityId ?? '') === String(city.id ?? '') ||
+      String(n.cityId ?? '') === String(city.uuid ?? '') ||
+      String(city.id ?? '') === String(n.cityId ?? '')
+    ) && n.active);
+    let pairs: Array<{ origin: any; dest: any }> = [];
+    if (camp.scopeMode === 'airport') {
+      const cityAirport = city.airport;
+      let airportDest: any = null;
+      if (cityAirport && cityAirport.lat && cityAirport.lng) {
+        airportDest = {
+          id: `airport_${city.id}`,
+          cityId: String(city.uuid || city.id),
+          name: cityAirport.name || `Aéroport de ${city.name}`,
+          lat: cityAirport.lat,
+          lng: cityAirport.lng,
+          zoneType: 'airport',
+          active: true
+        };
+      } else {
+        airportDest = activeNbs.find(n => isAirportNeighborhood(n));
+      }
+      if (airportDest) {
+        const others = activeNbs.filter(n => !isAirportNeighborhood(n) && String(n.id) !== String(airportDest.id));
+        pairs = others.map(origin => ({ origin, dest: airportDest }));
+      } else {
+        pairs = generatePricingPairs(activeNbs.filter(n => !isAirportNeighborhood(n)), { sampleLimit: camp.sampleLimit });
+      }
+    } else {
+      const nonAirportNbs = activeNbs.filter(n => !isAirportNeighborhood(n));
+      pairs = generatePricingPairs(nonAirportNbs, { sampleLimit: camp.sampleLimit }).filter(p => !isAirportNeighborhood(p.origin) && !isAirportNeighborhood(p.dest));
+    }
     const limitNum = typeof camp.sampleLimit === 'number' ? camp.sampleLimit : (camp.sampleLimit && String(camp.sampleLimit) !== 'all' ? parseInt(String(camp.sampleLimit), 10) : undefined);
     if (limitNum && limitNum < pairs.length) {
-      pairs = pairs.slice(0, limitNum);
+      if (limitNum <= 50) {
+        const shuffled = [...pairs];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        pairs = shuffled.slice(0, limitNum);
+      } else {
+        pairs = pairs.slice(0, limitNum);
+      }
     }
 
     const LOT_SIZE = 10;
@@ -218,13 +275,7 @@ export async function processCampaignChunk(
     const diskTrips = loadCampaignTripsDiskBackup(campaignId) || [];
     let diskCanonical = memoryCampaignCanonicalTrips[campaignId] || [];
     if (diskCanonical.length === 0) {
-      try {
-        const TRIPS_DIR = path.resolve(process.cwd(), 'server/data/trips');
-        const canonPath = path.resolve(TRIPS_DIR, `canonical_${campaignId}.json`);
-        if (fs.existsSync(canonPath)) {
-          diskCanonical = JSON.parse(fs.readFileSync(canonPath, 'utf8'));
-        }
-      } catch {}
+      diskCanonical = loadCanonicalTripsDiskBackup(campaignId) || [];
     }
 
     session = {
@@ -235,17 +286,20 @@ export async function processCampaignChunk(
       trips: diskTrips,
       completedPairs: Math.max(camp.completedPairs || 0, diskCanonical.length),
       failedPairs: camp.failedPairs || 0,
-      completedBatches: Math.max(camp.completedBatches || 0, Math.floor(diskCanonical.length / 20)),
+      completedBatches: Math.max(camp.completedBatches || 0, Math.floor(diskCanonical.length / 10)),
       startedAtMs: new Date(camp.startedAt).getTime() || Date.now()
     };
     campaignSessions.set(campaignId, session);
   }
 
-  const memCamp = memoryCampaigns.find(c => c.id === campaignId);
+  const memCamp = memoryCampaigns.find(c => c.id === campaignId || c.uuid === campaignId || String(c.id) === String(campaignId) || String(c.uuid) === String(campaignId));
   const targetChunk = session.chunks.find(c => c.chunkIndex === chunkIndex);
-  if (!targetChunk || session.campaign.status === 'cancelled' || memCamp?.status === 'cancelled') {
+  const sessionCancelled = Boolean(session && session.campaign.status === 'cancelled');
+  const staleMemoryCancelled = !session && Boolean(memCamp && memCamp.status === 'cancelled');
+
+  if (!targetChunk || sessionCancelled || staleMemoryCancelled) {
     if (session) session.campaign.status = 'cancelled';
-    if (memCamp) memCamp.status = 'cancelled';
+    if (memCamp && !session) memCamp.status = 'cancelled';
     return {
       success: false,
       chunkIndex,
@@ -260,177 +314,215 @@ export async function processCampaignChunk(
 
   const emptyStats = { price: null, priceEconom: null, priceConfort: null, priceStandard: null, priceEco: null };
 
-  await Promise.all(targetChunk.pairs.map(async (pair) => {
-    if (session.campaign.status === 'cancelled' || memCamp?.status === 'cancelled') {
-      return;
+  // Traitement concurrent optimisé par sous-groupes de 3 paires simultanées (accélération x3 sans surcharge réseau)
+  const PAIR_CONCURRENCY = 3;
+  for (let pIdx = 0; pIdx < targetChunk.pairs.length; pIdx += PAIR_CONCURRENCY) {
+    const activeSessionCancelled = session && session.campaign.status === 'cancelled';
+    const staleCacheCancelled = !session && Boolean(memCamp && memCamp.status === 'cancelled');
+    if (activeSessionCancelled || staleCacheCancelled) {
+      break;
     }
-    const { origin, dest } = pair;
-    const distKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
-    const durationMin = Math.max(2, Math.round((distKm / 25) * 60));
+    const currentSubBatch = targetChunk.pairs.slice(pIdx, pIdx + PAIR_CONCURRENCY);
+    await Promise.all(currentSubBatch.map(async (pair) => {
+      const { origin, dest } = pair;
+      // Distance/Duration calculée seulement si nécessaire
+      
+      try {
+        const [yangoStats, heroStats, tmStats] = await Promise.all([
+          fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 7000, emptyStats as any),
+          fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 7000, emptyStats as any),
+          fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 7000, emptyStats as any)
+        ]);
 
-    try {
-      const [yangoStats, heroStats, tmStats] = await Promise.all([
-        fetchWithTimeout(callYangoRoutestats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency), 10000, emptyStats as any),
-        fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 10000, emptyStats as any),
-        fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 10000, emptyStats as any)
-      ]);
+        const yEco = yangoStats.priceEconom || (yangoStats.classes?.econom?.price) || yangoStats.price || null;
+        const yConf = yangoStats.priceConfort || yangoStats.classes?.business?.price || yangoStats.classes?.comfort?.price || null;
+        const yConfPlus = yangoStats.priceConfortPlus || yangoStats.classes?.comfortplus?.price || null;
+        const yMoto = yangoStats.priceMoto || yangoStats.classes?.moto?.price || null;
 
-      const yEco = yangoStats.priceEconom || (yangoStats.classes?.econom?.price) || yangoStats.price || null;
-      const yConf = yangoStats.priceConfort || yangoStats.classes?.business?.price || yangoStats.classes?.comfort?.price || null;
-      const yConfPlus = yangoStats.priceConfortPlus || yangoStats.classes?.comfortplus?.price || null;
-      const yMoto = yangoStats.priceMoto || yangoStats.classes?.moto?.price || null;
+        const hEco = heroStats.priceStandard || heroStats.price || null;
+        const hConf = heroStats.priceConfort || null;
+        const hSuv = heroStats.priceSuv || null;
+        const hPerKm = heroStats.pricePerKm || null;
 
-      const hEco = heroStats.priceStandard || heroStats.price || null;
-      const hConf = heroStats.priceConfort || null;
-      const hSuv = heroStats.priceSuv || null;
-      const hPerKm = heroStats.pricePerKm || null;
+        const tmEco = tmStats.priceEco || null;
+        const tmConf = tmStats.priceConfort || null;
+        const tmMoto = tmStats.priceMoto || null;
 
-      const tmEco = tmStats.priceEco || null;
-      const tmConf = tmStats.priceConfort || null;
-      const tmMoto = tmStats.priceMoto || null;
+        const ecoCandidates = [
+          { name: 'yango', p: yEco },
+          { name: 'hero', p: hEco },
+          { name: 'tripmaster', p: tmEco }
+        ].filter(c => c.p && c.p > 0);
+        ecoCandidates.sort((a, b) => (a.p as number) - (b.p as number));
 
-      const ecoCandidates = [
-        { name: 'yango', p: yEco },
-        { name: 'hero', p: hEco },
-        { name: 'tripmaster', p: tmEco }
-      ].filter(c => c.p && c.p > 0);
-      ecoCandidates.sort((a, b) => (a.p as number) - (b.p as number));
+        const cheaperEco = ecoCandidates[0]?.name || null;
 
-      const cheaperEco = ecoCandidates[0]?.name || null;
-      const deltaEco = ecoCandidates.length > 1 ? (ecoCandidates[1].p as number) - (ecoCandidates[0].p as number) : 0;
+        const confCandidates = [
+          { name: 'yango', p: yConf },
+          { name: 'hero', p: hConf },
+          { name: 'tripmaster', p: tmConf }
+        ].filter(c => c.p && c.p > 0);
+        confCandidates.sort((a, b) => (a.p as number) - (b.p as number));
+        const cheaperConf = confCandidates[0]?.name || null;
 
-      const confCandidates = [
-        { name: 'yango', p: yConf },
-        { name: 'hero', p: hConf },
-        { name: 'tripmaster', p: tmConf }
-      ].filter(c => c.p && c.p > 0);
-      confCandidates.sort((a, b) => (a.p as number) - (b.p as number));
-      const cheaperConf = confCandidates[0]?.name || null;
+        const tripSeqId = getNextSequence('trips');
+        const tripUuid = randomUUID();
+        const cleanOrigin = cleanNeighborhoodName(origin.name);
+        const cleanDest = cleanNeighborhoodName(dest.name);
 
-      const tripUuid = randomUUID();
-      const tripId = getNextSequence('trips');
-      const cleanOrigin = cleanNeighborhoodName(origin.name);
-      const cleanDest = cleanNeighborhoodName(dest.name);
+        // Priorité absolue à Yango. Fallback seulement si Yango ne renvoie rien.
+        let tripDistanceKm = (yangoStats.distanceKm && yangoStats.distanceKm > 0) ? yangoStats.distanceKm : 0;
+        if (tripDistanceKm === 0) tripDistanceKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
 
-      const tripDistanceKm = (yangoStats.distanceKm && yangoStats.distanceKm > 0) ? yangoStats.distanceKm : distKm;
-      const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) ? yangoStats.durationMinutes : durationMin;
+        const fallbackDuration = Math.max(2, Math.round((tripDistanceKm / 25) * 60));
+        const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) 
+            ? yangoStats.durationMinutes 
+            : fallbackDuration;
 
-      const canonicalTrip: CanonicalTrip = {
-        id: String(tripId),
-        uuid: tripUuid,
-        origin: cleanOrigin,
-        destination: cleanDest,
-        distanceKm: tripDistanceKm,
-        durationMin: tripDurationMin,
-        jams: Boolean(yangoStats.jams),
-        yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
-        yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
-        yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
-        prices: {
-          yango: { 
-            eco: yEco, 
-            confort: yConf, 
-            confortPlus: yConfPlus, 
-            moto: yMoto,
-            jams: Boolean(yangoStats.jams),
-            yangoUnavailable: Boolean(yangoStats.yangoUnavailable)
+        const canonicalTrip: CanonicalTrip = {
+          id: tripSeqId,
+          uuid: tripUuid,
+          origin: cleanOrigin,
+          destination: cleanDest,
+          distanceKm: tripDistanceKm,
+          durationMin: tripDurationMin,
+          jams: Boolean(yangoStats.jams),
+          yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
+          yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
+          yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
+          prices: {
+            yango: { 
+              eco: yEco, 
+              confort: yConf, 
+              confortPlus: yConfPlus, 
+              moto: yMoto,
+              jams: Boolean(yangoStats.jams),
+              yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
+              rawResponse: yangoStats.rawJson
+            },
+            heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
+            tripMaster: { eco: tmEco, confort: tmConf, moto: tmMoto }
           },
-          heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
-          tripMaster: { eco: tmEco, confort: tmConf, moto: tmMoto }
-        },
-        cheapest: {
-          eco: cheaperEco,
-          confort: cheaperConf,
-          overall: cheaperEco
-        },
-        status: (yEco || hEco || tmEco) ? 'success' : 'failed',
-        createdAt: new Date().toISOString()
-      };
-
-      const tripRow: TripResult = {
-        id: String(tripId),
-        uuid: tripUuid,
-        campaignId: session.campaign.uuid || campaignId,
-        origin: cleanOrigin,
-        destination: cleanDest,
-        distanceKm: tripDistanceKm,
-        durationMinutes: tripDurationMin,
-        jams: Boolean(yangoStats.jams),
-        yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
-        yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
-        yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
-        prices: {
-          yango: { 
-            eco: yEco, 
-            confort: yConf, 
-            confortPlus: yConfPlus, 
-            moto: yMoto,
-            jams: Boolean(yangoStats.jams),
-            yangoUnavailable: Boolean(yangoStats.yangoUnavailable)
+          cheapest: {
+            eco: cheaperEco,
+            confort: cheaperConf,
+            overall: cheaperEco
           },
-          heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
-          tripMaster: { eco: tmEco, confort: tmConf, moto: tmMoto }
-        },
-        cheapest: {
-          eco: cheaperEco,
-          confort: cheaperConf,
-          overall: cheaperEco
-        },
-        status: (yEco || hEco || tmEco) ? 'success' : 'failed',
-        createdAt: new Date().toISOString()
-      };
+          status: (yEco || hEco || tmEco) ? 'success' : 'failed',
+          createdAt: new Date().toISOString()
+        };
 
-      if (yangoStats.jams) {
-        session.campaign.hasJamsCount = (session.campaign.hasJamsCount || 0) + 1;
-      }
-      if (yangoStats.yangoUnavailable) {
-        session.campaign.yangoShortageCount = (session.campaign.yangoShortageCount || 0) + 1;
-      }
+        const tripRow: TripResult = {
+          id: tripSeqId,
+          uuid: tripUuid,
+          campaignId,
+          origin: cleanOrigin,
+          destination: cleanDest,
+          distanceKm: tripDistanceKm,
+          durationMinutes: tripDurationMin,
+          jams: Boolean(yangoStats.jams),
+          yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
+          yangoWaitingMinutes: yangoStats.yangoWaitingMinutes,
+          yangoUnavailableClasses: yangoStats.yangoUnavailableClasses,
+          prices: {
+            yango: { 
+              eco: yEco, 
+              confort: yConf, 
+              confortPlus: yConfPlus, 
+              moto: yMoto,
+              jams: Boolean(yangoStats.jams),
+              yangoUnavailable: Boolean(yangoStats.yangoUnavailable),
+              rawResponse: yangoStats.rawJson
+            },
+            heroCab: { eco: hEco, confort: hConf, suv: hSuv, perKm: hPerKm },
+            tripMaster: { eco: tmEco, confort: tmConf, moto: tmMoto }
+          },
+          cheapest: {
+            eco: cheaperEco,
+            confort: cheaperConf,
+            overall: cheaperEco
+          },
+          status: (yEco || hEco || tmEco) ? 'success' : 'failed',
+          createdAt: new Date().toISOString()
+        };
 
-      chunkCanonicalTrips.push(canonicalTrip);
-      chunkTrips.push(tripRow);
-      session.canonicalTrips.push(canonicalTrip);
-      session.trips.push(tripRow);
+        if (yangoStats.jams) {
+          session.campaign.hasJamsCount = (session.campaign.hasJamsCount || 0) + 1;
+        }
+        if (yangoStats.yangoUnavailable) {
+          session.campaign.yangoShortageCount = (session.campaign.yangoShortageCount || 0) + 1;
+        }
 
-      if (yEco || hEco || tmEco) {
-        session.successfulPairs = (session.successfulPairs || 0) + 1;
-      } else {
+        chunkCanonicalTrips.push(canonicalTrip);
+        chunkTrips.push(tripRow);
+        session.canonicalTrips.push(canonicalTrip);
+        session.trips.push(tripRow);
+
+        if (yEco || hEco || tmEco) {
+          session.successfulPairs = (session.successfulPairs || 0) + 1;
+        } else {
+          session.failedPairs++;
+        }
+      } catch {
+        const tripSeqId = getNextSequence('trips');
+        const tripUuid = randomUUID();
+        const cleanOrigin = cleanNeighborhoodName(origin.name);
+        const cleanDest = cleanNeighborhoodName(dest.name);
+        const distKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
+        const durationMin = Math.max(2, Math.round((distKm / 25) * 60));
+        const fallbackCanonical: CanonicalTrip = {
+          id: tripSeqId,
+          uuid: tripUuid,
+          origin: cleanOrigin,
+          destination: cleanDest,
+          distanceKm: distKm,
+          durationMin,
+          jams: false,
+          yangoUnavailable: false,
+          prices: {
+            yango: { eco: null, confort: null, confortPlus: null, moto: null },
+            heroCab: { eco: null, confort: null, suv: null, perKm: null },
+            tripMaster: { eco: null, confort: null, moto: null }
+          },
+          cheapest: { eco: null, confort: null, overall: null },
+          status: 'failed',
+          createdAt: new Date().toISOString()
+        };
+        const fallbackTripRow: TripResult = {
+          id: tripSeqId,
+          uuid: tripUuid,
+          campaignId,
+          origin: cleanOrigin,
+          destination: cleanDest,
+          distanceKm: distKm,
+          durationMinutes: durationMin,
+          jams: false,
+          yangoUnavailable: false,
+          prices: fallbackCanonical.prices,
+          cheapest: fallbackCanonical.cheapest,
+          status: 'failed',
+          createdAt: fallbackCanonical.createdAt
+        };
+        chunkCanonicalTrips.push(fallbackCanonical);
+        chunkTrips.push(fallbackTripRow);
+        session.canonicalTrips.push(fallbackCanonical);
+        session.trips.push(fallbackTripRow);
         session.failedPairs++;
       }
-      session.completedPairs++;
-    } catch {
-      session.failedPairs++;
-      session.completedPairs++;
-    }
-  }));
+    }));
+  }
 
-  const previousChunksPairs = session.chunks
-    .filter(c => c.chunkIndex < chunkIndex)
-    .reduce((sum, c) => sum + c.pairs.length, 0);
-
-  session.completedPairs = previousChunksPairs + targetChunk.pairs.length;
-  session.completedBatches = chunkIndex;
-  session.campaign.completedPairs = session.completedPairs;
+  session.completedPairs = session.canonicalTrips.length;
+  session.completedBatches = Math.max(session.completedBatches || 0, chunkIndex);
+  session.campaign.completedPairs = session.canonicalTrips.length;
   session.campaign.failedPairs = session.failedPairs;
   session.campaign.completedBatches = session.completedBatches;
   session.campaign.durationSeconds = Math.max(1, Math.round((Date.now() - session.startedAtMs) / 1000));
 
-  // Enregistrement par lot en arrière-plan non bloquant (ne retarde pas la réponse au client)
-  if (chunkCanonicalTrips.length > 0) {
-    saveCanonicalCampaignBatch(campaignId, chunkIndex, chunkCanonicalTrips, session.city.name).catch((err) => {
-      console.warn(`[Supabase/Disk] Background batch error on chunk ${chunkIndex}:`, err.message);
-    });
-  }
-
-  // Synchro mémoire & persistance disque asynchrone non-bloquante
+  // Trajets (trips) conservés en RAM pendant le relevé pour une rapidité maximale (0 écriture réseau/disque bloquante par lot).
+  // L'enregistrement en base de données et sur disque se fera en masse à la toute fin de la campagne.
   memoryCampaignTrips[campaignId] = session.trips;
   memoryCampaignCanonicalTrips[campaignId] = session.canonicalTrips;
-  setImmediate(() => {
-    try {
-      saveCampaignTripsDiskBackup(campaignId, session.trips, session.canonicalTrips);
-      saveLocalCampaignsDiskBackup();
-    } catch {}
-  });
 
   return {
     success: true,
@@ -450,18 +542,21 @@ export async function finalizeCampaignExecution(
   clientCanonicalTrips?: CanonicalTrip[],
   clientTrips?: TripResult[]
 ): Promise<PricingCampaign> {
-  const strId = String(campaignId);
-  if (cancelledCampaignIds.has(strId)) {
-    console.log(`[Pricing] Campagne #${strId} supprimée ou annulée. Finalisation ignorée.`);
-    throw new Error('Campagne annulée ou supprimée');
-  }
-  const session = campaignSessions.get(strId) || campaignSessions.get(campaignId);
-  if (session && session.campaign.status === 'cancelled') {
-    console.log(`[Pricing] Session de campagne #${strId} marquée comme annulée. Finalisation ignorée.`);
-    throw new Error('Campagne annulée');
-  }
-  const rawCampaign = session ? session.campaign : memoryCampaigns.find(c => String(c.id) === strId || c.uuid === strId);
+  const session = campaignSessions.get(campaignId) ||
+    campaignSessions.get(Number(campaignId)) ||
+    Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, campaignId));
+  const rawCampaign = session ? session.campaign : memoryCampaigns.find(c => campaignMatchesId(c, campaignId));
   let campaign: PricingCampaign;
+
+  const sessionCancelled = Boolean(session && session.campaign.status === 'cancelled');
+  const staleMemoryCancelled = !session && Boolean(rawCampaign && rawCampaign.status === 'cancelled');
+
+  if (rawCampaign && (rawCampaign.status === 'completed' || rawCampaign.finalizing)) {
+    return rawCampaign;
+  }
+  if (sessionCancelled || staleMemoryCancelled) {
+    return rawCampaign || session?.campaign || { id: campaignId, status: 'cancelled' } as PricingCampaign;
+  }
 
   if (!rawCampaign) {
     if (clientCanonicalTrips && clientCanonicalTrips.length > 0) {
@@ -484,12 +579,16 @@ export async function finalizeCampaignExecution(
     campaign = rawCampaign;
   }
 
-  let canonicalTrips = session ? session.canonicalTrips : memoryCampaignCanonicalTrips[campaignId] || [];
-  if (canonicalTrips.length === 0) {
-    try {
-      canonicalTrips = await loadCanonicalCampaignResults(campaignId);
-    } catch {}
+  if (campaign) {
+    campaign.finalizing = true;
   }
+  if (session) {
+    session.campaign.finalizing = true;
+  }
+
+  let canonicalTrips = session
+    ? session.canonicalTrips
+    : (memoryCampaignCanonicalTrips[campaignId] || loadCanonicalTripsDiskBackup(campaignId) || []);
 
   // Fusion infaillible avec les trajets collectés par le client (évite toute perte entre conteneurs Serverless Cloud Run)
   if (Array.isArray(clientCanonicalTrips) && clientCanonicalTrips.length > 0) {
@@ -506,10 +605,10 @@ export async function finalizeCampaignExecution(
   if (Array.isArray(clientTrips) && clientTrips.length > 0 && session) {
     const rMap = new Map<string, TripResult>();
     for (const t of session.trips) {
-      rMap.set(t.id || `${t.origin}-${t.destination}`, t);
+      rMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
     }
     for (const ct of clientTrips) {
-      rMap.set(ct.id || `${ct.origin}-${ct.destination}`, ct);
+      rMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
     }
     session.trips = Array.from(rMap.values());
   }
@@ -551,6 +650,7 @@ export async function finalizeCampaignExecution(
   if (campaign.status !== 'cancelled') {
     campaign.status = 'completed';
   }
+  campaign.finalizing = false;
   campaign.finishedAt = new Date().toISOString();
   campaign.completedAt = campaign.finishedAt;
   campaign.durationSeconds = Math.max(1, Math.round((new Date(campaign.finishedAt).getTime() - new Date(campaign.startedAt).getTime()) / 1000));
@@ -624,34 +724,84 @@ export async function finalizeCampaignExecution(
   }
 
   campaign.canonicalTripsCount = canonicalTrips.length;
-  const campaignUuid = campaign.uuid || campaignId;
 
+  // Persistance Supabase PostgreSQL (sans quota et avec requêtes relationnelles)
+  await upsertCampaignInSupabase(campaign);
   if (canonicalTrips && canonicalTrips.length > 0) {
-    await saveCanonicalCampaignResults(campaignUuid, canonicalTrips, campaign.cityName);
+    await saveCampaignResultsInSupabase(campaignId, campaign.cityName, canonicalTrips, campaign.uuid);
   }
 
-  const existingIdx = memoryCampaigns.findIndex(c => c.uuid === campaignUuid || String(c.id) === String(campaign.id));
+  const existingIdx = memoryCampaigns.findIndex(c => c.id === campaignId || c.uuid === campaignId || String(c.id) === String(campaignId));
   if (existingIdx >= 0) {
     memoryCampaigns[existingIdx] = campaign;
   } else {
     memoryCampaigns.unshift(campaign);
   }
+  const dedupedFinal = dedupeCampaigns(memoryCampaigns);
+  memoryCampaigns.splice(0, memoryCampaigns.length, ...dedupedFinal);
 
-  // Cache mémoire RAM serveur immédiat
-  if (session?.trips && session.trips.length > 0) {
-    memoryCampaignTrips[campaignUuid] = session.trips;
+  // Cache mémoire RAM serveur immédiat (0 lecture Firestore pour les futures consultations)
+  let finalTrips = (session?.trips && session.trips.length > 0) ? session.trips : (memoryCampaignTrips[campaignId] || []);
+  if (Array.isArray(clientTrips) && clientTrips.length > 0) {
+    const rMap = new Map<string, TripResult>();
+    for (const t of finalTrips) {
+      rMap.set(String(t.id || `${t.origin}-${t.destination}`), t);
+    }
+    for (const ct of clientTrips) {
+      rMap.set(String(ct.id || `${ct.origin}-${ct.destination}`), ct);
+    }
+    finalTrips = Array.from(rMap.values());
   }
-  if (canonicalTrips && canonicalTrips.length > 0) {
-    memoryCampaignCanonicalTrips[campaignUuid] = canonicalTrips;
+
+  // Si finalTrips est vide mais que canonicalTrips existe, générer les TripResult correspondants
+  if (finalTrips.length === 0 && canonicalTrips.length > 0) {
+    finalTrips = canonicalTrips.map(ct => ({
+      id: ct.id,
+      uuid: ct.uuid,
+      campaignId: String(campaign.id),
+      origin: ct.origin,
+      destination: ct.destination,
+      distanceKm: ct.distanceKm,
+      durationMinutes: ct.durationMin,
+      jams: ct.jams,
+      yangoUnavailable: ct.yangoUnavailable,
+      yangoWaitingMinutes: ct.yangoWaitingMinutes,
+      yangoUnavailableClasses: ct.yangoUnavailableClasses,
+      prices: ct.prices,
+      cheapest: ct.cheapest,
+      status: ct.status,
+      createdAt: ct.createdAt
+    }));
   }
-  saveCampaignTripsDiskBackup(campaignUuid, memoryCampaignTrips[campaignUuid] || [], canonicalTrips);
+
+  memoryCampaignTrips[campaignId] = finalTrips;
+  memoryCampaignTrips[String(campaign.id)] = finalTrips;
+  if (campaign.uuid) memoryCampaignTrips[campaign.uuid] = finalTrips;
+
+  memoryCampaignCanonicalTrips[campaignId] = canonicalTrips;
+  memoryCampaignCanonicalTrips[String(campaign.id)] = canonicalTrips;
+  if (campaign.uuid) memoryCampaignCanonicalTrips[campaign.uuid] = canonicalTrips;
+
+  saveCampaignTripsDiskBackup(campaign.id, finalTrips, canonicalTrips);
+  if (campaign.uuid && campaign.uuid !== String(campaign.id)) {
+    saveCampaignTripsDiskBackup(campaign.uuid, finalTrips, canonicalTrips);
+  }
   saveLocalCampaignsDiskBackup();
-  
-  // Persistance sur le disque et Supabase
-  await saveCampaignToSupabase(campaign);
 
-  campaignSessions.delete(campaignUuid);
-  campaignSessions.delete(String(campaign.id));
+  // Enregistrement des trajets en pénurie (UNIQUEMENT à la fin de la campagne)
+  try {
+    const shortageRecords = extractAndSaveCampaignShortages(campaign, canonicalTrips || [], memoryCampaignTrips[campaignId] || []);
+    if (shortageRecords.length > 0) {
+      await saveCampaignShortagesInSupabase(campaign.id, campaign.uuid, campaign.cityName, shortageRecords);
+    }
+  } catch (err: any) {
+    console.warn('[CampaignEngine] Warning extracting campaign shortages:', err?.message);
+  }
+
+  if (session) {
+    session.campaign.finalizing = false;
+  }
+  campaignSessions.delete(campaignId);
 
   await recordHistory({
     action: 'complete_campaign',
@@ -676,17 +826,17 @@ export async function startCampaignExecution(
 }
 
 /**
- * Exécution automatique complète en arrière-plan d'une campagne (appelée par pg_cron / webhooks)
+ * Exécution automatique complète en arrière-plan d'une campagne de tarification générale (8h, 13h, 18h)
  */
 export async function runAutomatedServerCampaign(
   targetCityId?: string | number,
-  triggeredByName: string = 'Cron Supabase (pg_cron)'
+  triggeredByName: string = 'Cron Supabase (8h, 13h, 18h)'
 ): Promise<{ campaignId: number; totalPairs: number }> {
   await ensureSynced();
 
   const city = cities.find(c => 
     targetCityId 
-      ? (String(c.id) === String(targetCityId) || c.uuid === targetCityId)
+      ? (c.id === targetCityId || String(c.id) === String(targetCityId) || c.uuid === targetCityId)
       : c.active
   ) || cities[0];
 
@@ -694,19 +844,25 @@ export async function runAutomatedServerCampaign(
     throw new Error(`Aucune ville active trouvée pour exécuter le pricing automatique.`);
   }
 
-  const activeNbs = neighborhoods.filter(n => (String(n.cityId) === String(city.id) || n.cityId === city.uuid) && n.active);
-  if (activeNbs.length < 2) {
-    throw new Error(`Moins de 2 quartiers actifs pour ${city.name}.`);
+  const activeNbs = neighborhoods.filter(n => (
+    String(n.cityId ?? '') === String(city.id ?? '') ||
+    String(n.cityId ?? '') === String(city.uuid ?? '') ||
+    String(city.id ?? '') === String(n.cityId ?? '')
+  ) && n.active);
+
+  const nonAirportNbs = activeNbs.filter(n => !isAirportNeighborhood(n));
+  if (nonAirportNbs.length < 2) {
+    throw new Error(`Moins de 2 quartiers actifs non-aéroportuaires pour ${city.name}.`);
   }
 
-  const pairs = generateBenchmarkPairs(activeNbs);
+  const pairs = generatePricingPairs(nonAirportNbs);
   const campaignSeqId = getNextSequence('campaigns');
   const campaignUuid = randomUUID();
 
   const campaign: PricingCampaign = {
     id: campaignSeqId,
     uuid: campaignUuid,
-    cityId: String(city.id),
+    cityId: String(city.uuid || city.id),
     cityName: city.name,
     currency: city.currency || 'XAF',
     triggerType: 'scheduled',
@@ -714,6 +870,8 @@ export async function runAutomatedServerCampaign(
     triggeredByUserName: triggeredByName,
     triggeredByUserRole: 'system',
     status: 'in_progress',
+    campaignType: 'all',
+    scopeMode: 'city',
     totalPairs: pairs.length,
     completedPairs: 0,
     failedPairs: 0,
@@ -722,49 +880,41 @@ export async function runAutomatedServerCampaign(
       {
         level: 'info',
         timestamp: new Date().toISOString(),
-        message: `Démarrage de la tarification automatique (${pairs.length} trajets) programmée par ${triggeredByName} pour ${city.name}.`
+        message: `Démarrage de la tarification automatique générale (${pairs.length} trajets) programmée par ${triggeredByName} pour ${city.name}.`
       }
     ]
   };
 
+  await upsertCampaignInSupabase(campaign);
   const { totalChunks } = await initializeCampaignSession(campaign, city, pairs);
+  saveLocalCampaignsDiskBackup();
+
+  await recordHistory({
+    action: 'start_campaign',
+    eventType: 'campaign',
+    title: `Démarrage de campagne automatique (Pricing): ${city.name}`,
+    description: `${pairs.length} trajets prévus (${totalChunks} lots).`,
+    performedByName: triggeredByName,
+    performedBy: 'cron_supabase'
+  });
 
   // Exécution asynchrone lot par lot sans bloquer la requête HTTP
   (async () => {
     try {
-      console.log(`[Cron Pricing] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots - 3 workers parallèles)`);
-      const CONCURRENCY = 3;
-      const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
-      let nextIdx = 0;
-
-      const runWorker = async () => {
-        while (nextIdx < chunkIndices.length) {
-          if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
-            console.log(`[Cron Pricing] Campagne #${campaignSeqId} supprimée/annulée en cours de route. Arrêt immédiat.`);
-            return;
-          }
-          const chunkIdx = chunkIndices[nextIdx++];
-          const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
-          if (!session || session.campaign.status === 'cancelled') {
-            console.log(`[Cron Pricing] Campagne #${campaignSeqId} interrompue.`);
-            return;
-          }
-          await processCampaignChunk(String(campaignSeqId), chunkIdx);
+      console.log(`[Cron Pricing 8h-13h-18h] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
+      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+        const session = campaignSessions.get(campaignSeqId);
+        if (!session || session.campaign.status === 'cancelled') {
+          console.log(`[Cron Pricing 8h-13h-18h] Campagne #${campaignSeqId} interrompue.`);
+          break;
         }
-      };
-
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker()));
-
-      if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
-        return;
+        await processCampaignChunk(String(campaignSeqId), chunkIdx);
       }
 
       await finalizeCampaignExecution(String(campaignSeqId));
-      console.log(`[Cron Pricing] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
+      console.log(`[Cron Pricing 8h-13h-18h] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
     } catch (err: any) {
-      if (!cancelledCampaignIds.has(String(campaignSeqId))) {
-        console.error(`[Cron Pricing] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
-      }
+      console.error(`[Cron Pricing 8h-13h-18h] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
     }
   })();
 
@@ -772,17 +922,17 @@ export async function runAutomatedServerCampaign(
 }
 
 /**
- * Exécution automatique complète en arrière-plan d'une campagne aéroport (appelée par pg_cron à 22h)
+ * Exécution automatique complète en arrière-plan d'une campagne de tarification dédiée AÉROPORT (20h, 23h, 2h)
  */
 export async function runAutomatedAirportCampaign(
   targetCityId?: string | number,
-  triggeredByName: string = 'Cron Aéroport (pg_cron)'
+  triggeredByName: string = 'Cron Aéroport (20h, 23h, 2h)'
 ): Promise<{ campaignId: number; totalPairs: number }> {
   await ensureSynced();
 
   const city = cities.find(c => 
     targetCityId 
-      ? (String(c.id) === String(targetCityId) || c.uuid === targetCityId)
+      ? (c.id === targetCityId || String(c.id) === String(targetCityId) || c.uuid === targetCityId)
       : c.active
   ) || cities[0];
 
@@ -790,55 +940,41 @@ export async function runAutomatedAirportCampaign(
     throw new Error(`Aucune ville active trouvée pour exécuter le pricing aéroport.`);
   }
 
-  const cId = String(city.id);
-  const cUuid = city.uuid || '';
-  const cName = city.name.toLowerCase().trim();
+  const activeNbs = neighborhoods.filter(n => (
+    String(n.cityId ?? '') === String(city.id ?? '') ||
+    String(n.cityId ?? '') === String(city.uuid ?? '') ||
+    String(city.id ?? '') === String(n.cityId ?? '')
+  ) && n.active);
 
-  const cityNbs = neighborhoods.filter(n => {
-    if (!n.active) return false;
-    if (String(n.cityId) === cId || (cUuid && n.cityId === cUuid)) return true;
-    if (cName && (n.ville || (n as any).cityName || '').toLowerCase().trim() === cName) return true;
-    return false;
-  });
-  
-  // Identifier le quartier aéroport (zoneType === 'airport' ou nom contenant 'aéroport')
-  const airportNb = cityNbs.find(n => 
-    n.zoneType === 'airport' || 
-    n.zone === 'airport' || 
-    n.name.toLowerCase().includes('aéroport') ||
-    n.name.toLowerCase().includes('aeroport')
-  );
-
-  if (!airportNb && !city.airport) {
-    throw new Error(`Aucun quartier ou configuration aéroport trouvée pour ${city.name}.`);
+  const cityAirport = city.airport;
+  let airportDest: any = null;
+  if (cityAirport && cityAirport.lat && cityAirport.lng) {
+    airportDest = {
+      id: `airport_${city.id}`,
+      cityId: String(city.uuid || city.id),
+      name: cityAirport.name || `Aéroport de ${city.name}`,
+      lat: cityAirport.lat,
+      lng: cityAirport.lng,
+      zoneType: 'airport',
+      active: true
+    };
+  } else {
+    airportDest = activeNbs.find(n => isAirportNeighborhood(n));
   }
 
-  // Trajets vers l'aéroport (Sens unique : Quartier -> Aéroport)
-  // Si la ville a N quartiers, il y a exactement les N trajets de chaque quartier vers l'aéroport
-  const pairs: Array<{ origin: Neighborhood; dest: Neighborhood }> = [];
-  const airportNode: Neighborhood = {
-    id: airportNb?.id || 'airport_dest_node',
-    uuid: airportNb?.uuid || 'uuid_airport_dest',
-    cityId: city.uuid || String(city.id),
-    name: airportNb?.name || city.airport?.name || `Aéroport International de ${city.name}`,
-    lat: airportNb?.lat || city.airport?.lat || (city.name.toLowerCase().includes('douala') ? 4.0061 : 3.7226),
-    lng: airportNb?.lng || city.airport?.lng || (city.name.toLowerCase().includes('douala') ? 9.7195 : 11.5532),
-    active: true,
-    zoneType: 'airport'
-  };
-
-  for (const nb of cityNbs) {
-    // Ne pas créer un trajet sur place aéroport -> aéroport
-    if (airportNb && (nb.id === airportNb.id || nb.uuid === airportNb.uuid)) {
-      continue;
-    }
-    // Chaque quartier a son trajet unique vers l'aéroport
-    pairs.push({ origin: nb, dest: airportNode });
+  if (!airportDest) {
+    throw new Error(`Coordonnées de l'aéroport non configurées pour ${city.name}. Renseignez l'aéroport dans la gestion des villes.`);
   }
 
-  if (pairs.length === 0) {
-    throw new Error(`Aucune paire aéroport n'a pu être générée.`);
+  const standardOrigins = activeNbs.filter(n => !isAirportNeighborhood(n) && String(n.id) !== String(airportDest.id));
+  if (standardOrigins.length === 0) {
+    throw new Error(`Aucun quartier d'origine actif trouvé pour les trajets aéroport à ${city.name}.`);
   }
+
+  const pairs: Array<{ origin: Neighborhood; dest: Neighborhood }> = standardOrigins.map(origin => ({
+    origin,
+    dest: airportDest
+  }));
 
   const campaignSeqId = getNextSequence('campaigns');
   const campaignUuid = randomUUID();
@@ -846,15 +982,17 @@ export async function runAutomatedAirportCampaign(
   const campaign: PricingCampaign = {
     id: campaignSeqId,
     uuid: campaignUuid,
-    cityId: String(city.id),
+    cityId: String(city.uuid || city.id),
     cityName: city.name,
     currency: city.currency || 'XAF',
     triggerType: 'scheduled',
-    scopeMode: 'airport' as any,
-    triggeredByUserId: 'cron_supabase_airport',
+    triggeredByUserId: 'cron_airport',
     triggeredByUserName: triggeredByName,
     triggeredByUserRole: 'system',
     status: 'in_progress',
+    campaignType: 'aeroport',
+    scopeMode: 'airport',
+    comment: 'Relevé automatique exclusif des destinations vers l’Aéroport (20h, 23h, 2h)',
     totalPairs: pairs.length,
     completedPairs: 0,
     failedPairs: 0,
@@ -863,49 +1001,41 @@ export async function runAutomatedAirportCampaign(
       {
         level: 'info',
         timestamp: new Date().toISOString(),
-        message: `Démarrage de la tarification spéciale aéroport (${pairs.length} trajets) programmée par ${triggeredByName} pour ${city.name}.`
+        message: `Démarrage de la tarification automatique Aéroport (${pairs.length} trajets vers l'aéroport) programmée par ${triggeredByName} pour ${city.name}.`
       }
     ]
   };
 
+  await upsertCampaignInSupabase(campaign);
   const { totalChunks } = await initializeCampaignSession(campaign, city, pairs);
+  saveLocalCampaignsDiskBackup();
 
-  // Exécution asynchrone lot par lot
+  await recordHistory({
+    action: 'start_campaign',
+    eventType: 'campaign',
+    title: `Démarrage de campagne automatique Aéroport: ${city.name}`,
+    description: `${pairs.length} trajets vers l'aéroport prévus (${totalChunks} lots).`,
+    performedByName: triggeredByName,
+    performedBy: 'cron_airport'
+  });
+
+  // Exécution asynchrone lot par lot sans bloquer la requête HTTP
   (async () => {
     try {
-      console.log(`[Airport Pricing] Démarrage de la campagne aéroport #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots - 3 workers parallèles)`);
-      const CONCURRENCY = 3;
-      const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
-      let nextIdx = 0;
-
-      const runWorker = async () => {
-        while (nextIdx < chunkIndices.length) {
-          if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
-            console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} supprimée/annulée en cours de route. Arrêt immédiat.`);
-            return;
-          }
-          const chunkIdx = chunkIndices[nextIdx++];
-          const session = campaignSessions.get(campaignUuid) || campaignSessions.get(String(campaignSeqId));
-          if (!session || session.campaign.status === 'cancelled') {
-            console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} interrompue.`);
-            return;
-          }
-          await processCampaignChunk(String(campaignSeqId), chunkIdx);
+      console.log(`[Cron Airport 20h-23h-2h] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
+      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
+        const session = campaignSessions.get(campaignSeqId);
+        if (!session || session.campaign.status === 'cancelled') {
+          console.log(`[Cron Airport 20h-23h-2h] Campagne #${campaignSeqId} interrompue.`);
+          break;
         }
-      };
-
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker()));
-
-      if (cancelledCampaignIds.has(String(campaignSeqId)) || cancelledCampaignIds.has(campaignUuid)) {
-        return;
+        await processCampaignChunk(String(campaignSeqId), chunkIdx);
       }
 
       await finalizeCampaignExecution(String(campaignSeqId));
-      console.log(`[Airport Pricing] Campagne aéroport #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
+      console.log(`[Cron Airport 20h-23h-2h] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
     } catch (err: any) {
-      if (!cancelledCampaignIds.has(String(campaignSeqId))) {
-        console.error(`[Airport Pricing] Erreur lors de l'exécution automatique aéroport #${campaignSeqId}:`, err.message);
-      }
+      console.error(`[Cron Airport 20h-23h-2h] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
     }
   })();
 

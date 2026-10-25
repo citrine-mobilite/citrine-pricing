@@ -175,7 +175,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
                 <span className="text-xs font-bold tracking-widest uppercase text-slate-400">| RAPPORT DIRECTION</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
-                Synthèse Stratégique & Benchmark VTC
+                Synthèse Stratégique & Pricing VTC
               </h1>
               <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                 <span className="flex items-center gap-1 font-semibold text-slate-700">
@@ -276,7 +276,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({
                   <p className="text-slate-400 text-xs">Aucune donnée suffisante.</p>
                 ) : (
                   stats.topTrips.map((t, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                    <div key={`report-item-${idx}`} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
                       <div className="min-w-0">
                         <div className="font-bold text-slate-900 truncate text-[11px]">
                           {t.origin} ➔ {t.destination}

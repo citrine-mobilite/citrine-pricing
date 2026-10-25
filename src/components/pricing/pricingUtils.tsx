@@ -220,7 +220,7 @@ export interface TripSurgeInfo {
 }
 
 /**
- * Détecte de façon 100% déterministe si un trajet individuel subit une majoration / forte demande Yango.
+ * Détecte de façon 100% déterministe si un trajet individuel subit un tarif ajusté / forte demande Yango.
  * Évite les faux positifs historiques où `t.jams` était à `true` sur des courses au tarif minimum (650 FCFA).
  */
 export function getTripSurgeInfo(t: TripResult): TripSurgeInfo {
@@ -260,6 +260,8 @@ export interface PricingStatsSummary {
   yangoWins: number;
   heroWins: number;
   totalTrips: number;
+  shortagesCount: number;
+  tensionCount: number;
 }
 
 export function computePricingStats(trips: TripResult[]): PricingStatsSummary {
@@ -273,12 +275,22 @@ export function computePricingStats(trips: TripResult[]): PricingStatsSummary {
   const hVip: number[] = [];
   let yangoWins = 0;
   let heroWins = 0;
+  let shortagesCount = 0;
+  let tensionCount = 0;
 
   const tmEco: number[] = [];
   const tmConf: number[] = [];
   const tmMoto: number[] = [];
 
   trips.forEach((t) => {
+    if (t.yangoUnavailable) {
+      shortagesCount++;
+    }
+    const surgeInfo = getTripSurgeInfo(t);
+    if (surgeInfo.isSurge || t.jams || (t as any).surgeMultiplier > 1) {
+      tensionCount++;
+    }
+
     const pYE = getYangoPrice(t, 'econom');
     const pYC = getYangoPrice(t, 'business');
     const pYCP = getYangoPrice(t, 'comfortplus');
@@ -334,6 +346,8 @@ export function computePricingStats(trips: TripResult[]): PricingStatsSummary {
     },
     yangoWins,
     heroWins,
-    totalTrips: trips.length
+    totalTrips: trips.length,
+    shortagesCount,
+    tensionCount
   };
 }

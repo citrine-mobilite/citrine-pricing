@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
+import { StatisticsView } from './components/StatisticsView';
+import { ShortagesView } from './components/ShortagesView';
 import { PricingUnifiedView } from './components/PricingUnifiedView';
 import { CampaignsView } from './components/CampaignsView';
 import { TemporalComparisonView } from './components/TemporalComparisonView';
@@ -42,9 +44,9 @@ function AppContent() {
   // Campaign selection helper: updates both selectedCampaignId and selectedCityId
   const handleSelectCampaign = useCallback((campaignId: string) => {
     setSelectedCampaignId(campaignId);
-    const targetCampaign = campaigns.find((c) => c.id === campaignId);
+    const targetCampaign = campaigns.find((c) => String(c.id) === String(campaignId));
     if (targetCampaign) {
-      setSelectedCityId(targetCampaign.cityId);
+      setSelectedCityId(String(targetCampaign.cityId));
     }
     setActiveTab('pricing');
   }, [campaigns]);
@@ -60,12 +62,28 @@ function AppContent() {
 
       if (citiesData && citiesData.length > 0) {
         setCities(citiesData);
-        setSelectedCityId((prev) => (citiesData.some((c) => c.id === prev) ? prev : citiesData[0].id));
+        setSelectedCityId((prev) => (citiesData.some((c) => String(c.id) === String(prev)) ? prev : String(citiesData[0].id)));
+      } else {
+        setCities([]);
+        setSelectedCityId('');
       }
 
       if (campaignsData && campaignsData.length > 0) {
-        setCampaigns(campaignsData);
-        setSelectedCampaignId((prev) => (prev && campaignsData.some((c) => c.id === prev) ? prev : campaignsData[0].id));
+        setCampaigns((prev) => {
+          const next = campaignsData;
+          const deduped = [...next].filter((camp, index, arr) =>
+            arr.findIndex((item) => String(item.id) === String(camp.id) || item.uuid === camp.uuid || item.uuid === camp.id || String(item.uuid || '') === String(camp.id)) === index
+          );
+          const merged = [...deduped, ...prev.filter((old) => !deduped.some((camp) => String(camp.id) === String(old.id) || camp.uuid === old.uuid || camp.uuid === old.id || String(camp.id) === String(old.uuid)))]
+            .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime());
+          return merged;
+        });
+        setSelectedCampaignId((prev) => {
+          if (prev && campaignsData.some((c) => String(c.id) === String(prev) || c.uuid === prev)) {
+            return prev;
+          }
+          return String(campaignsData[0].id);
+        });
       } else {
         setCampaigns([]);
         setSelectedCampaignId(null);
@@ -77,12 +95,16 @@ function AppContent() {
 
       // Fetch neighborhoods for all cities
       if (citiesData && citiesData.length > 0) {
-        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(c.id, forceRefresh));
+        const nbsPromises = citiesData.map((c) => api.getNeighborhoods(String(c.id), forceRefresh));
         const nbsResults = await Promise.all(nbsPromises);
         const allNbs = nbsResults.flat();
         if (allNbs && allNbs.length > 0) {
           setNeighborhoods(allNbs);
+        } else {
+          setNeighborhoods([]);
         }
+      } else {
+        setNeighborhoods([]);
       }
     } catch (err) {
       console.error('Error fetching initial data:', err);
@@ -114,7 +136,7 @@ function AppContent() {
       } catch (err) {
         console.error('Error refreshing campaign list:', err);
       }
-    }, 10000); // 10s interval instead of 1s to save 90% Vercel quota
+    }, 3000); // Polling plus fréquent pour refléter la progression sans actualisation manuelle.
 
     return () => clearInterval(interval);
   }, [isAuthenticated, campaigns]);
@@ -135,7 +157,11 @@ function AppContent() {
 
   // Enriched cities for CitiesView
   const enrichedCities = cities.map((c) => {
-    const cityNbs = neighborhoods.filter((n) => n.cityId === c.id);
+    const cityNbs = neighborhoods.filter((n) => {
+      const nbCityId = String(n.cityId ?? '');
+      const cityId = String(c.id ?? '');
+      return nbCityId === cityId || String(n.cityId ?? '') === String(c.uuid ?? '');
+    });
     const activeNbs = cityNbs.filter((n) => n.active);
     const count = activeNbs.length;
     return {
@@ -166,10 +192,47 @@ function AppContent() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          activeCampaigns={activeCampaigns}
         />
 
         {/* Global Quota Notice Banner (Passive Exception Catch) */}
         <QuotaNoticeBanner />
+
+        {/* Global Active Campaign Progress Banner */}
+        {campaigns.filter(c => c.status === 'in_progress')[0] && (() => {
+          const runCamp = campaigns.filter(c => c.status === 'in_progress')[0];
+          const pct = runCamp.totalPairs > 0 ? Math.min(100, Math.round(((runCamp.completedPairs || 0) / runCamp.totalPairs) * 100)) : 0;
+          return (
+            <div className="bg-gradient-to-r from-[#1F4F4A] to-[#3D8B85] text-white px-4 py-2.5 shadow-md flex items-center justify-between gap-4 sticky top-0 z-30">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-400" />
+                </span>
+                <div className="text-xs">
+                  <span className="font-bold">Campagne en cours ({runCamp.cityName})</span> : <span className="font-mono">{runCamp.completedPairs || 0} / {runCamp.totalPairs || 0}</span> trajets traités ({pct}%)
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-28 sm:w-40 bg-black/20 h-2 rounded-full overflow-hidden hidden xs:block">
+                  <div 
+                    className="bg-amber-400 h-full transition-all duration-300 rounded-full"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedCampaignId(String(runCamp.id));
+                    setActiveTab('pricing');
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold bg-white text-[#1F4F4A] rounded-lg hover:bg-emerald-50 transition cursor-pointer shadow-2xs"
+                >
+                  Voir le suivi & progression
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Content Workspace */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
@@ -196,6 +259,25 @@ function AppContent() {
                       setSelectedCityId(cityId);
                       setActiveTab('pricing');
                     }}
+                  />
+                )}
+
+                {activeTab === 'statistics' && (
+                  <StatisticsView
+                    cities={cities}
+                    campaigns={campaigns}
+                    neighborhoods={neighborhoods}
+                    onNavigate={setActiveTab}
+                    onSelectCampaign={handleSelectCampaign}
+                  />
+                )}
+
+                {activeTab === 'shortages' && (
+                  <ShortagesView
+                    cities={cities}
+                    campaigns={campaigns}
+                    onNavigate={setActiveTab}
+                    onSelectCampaign={handleSelectCampaign}
                   />
                 )}
 
@@ -281,14 +363,14 @@ function AppContent() {
                   />
                 )}
 
-                {activeTab === 'users' && user?.role === 'admin' && (
+                {activeTab === 'users' && (user?.role === 'admin' || user?.email?.toLowerCase() === 'citrinemobilite@gmail.com' || user?.role === 'super_admin') && (
                   <UsersView
                     users={users}
                     onRefresh={fetchData}
                   />
                 )}
 
-                {activeTab === 'settings' && user?.role === 'admin' && (
+                {activeTab === 'settings' && (user?.email?.toLowerCase() === 'citrinemobilite@gmail.com' || user?.role === 'super_admin') && (
                   <SettingsView />
                 )}
               </>

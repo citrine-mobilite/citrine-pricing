@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import { PricingCampaign } from '../types';
 import { api } from '../services/api';
@@ -19,6 +19,7 @@ import {
   Award
 } from 'lucide-react';
 import { computeCampaignDuration, getCampaignPeakHourInfo, matchesTimeSlotFilter, TimeSlotFilter } from '../utils/durationUtils';
+import { getCampaignType, getCampaignTypeLabel } from '../utils/routeMatrix';
 
 interface CampaignsViewProps {
   campaigns: PricingCampaign[];
@@ -38,8 +39,18 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
 
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all_city'>('all');
   const [timeSlotFilter, setTimeSlotFilter] = useState<TimeSlotFilter>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    // Premier accès à Campagnes : chargement direct depuis la base de données (sans cache)
+    api.getCampaigns(undefined, true).then(() => {
+      onRefresh();
+    }).catch(() => {
+      onRefresh();
+    });
+  }, []);
 
   const availableCities = useMemo(() => {
     const map = new Map<string, string>();
@@ -69,6 +80,14 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
     return campaigns.filter(c => {
       if (cityFilter !== 'all' && c.cityId !== cityFilter) return false;
       if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+      if (typeFilter !== 'all') {
+        const cType = getCampaignType(c);
+        if (typeFilter === 'all_city') {
+          if (cType !== 'all') return false;
+        } else if (cType !== typeFilter) {
+          return false;
+        }
+      }
       if (arrondissementFilter !== 'all') {
         const target = arrondissementFilter.toLowerCase().trim();
         const matchExplicit =
@@ -84,11 +103,12 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       if (!matchesTimeSlotFilter(c, timeSlotFilter)) return false;
       return true;
     });
-  }, [campaigns, cityFilter, statusFilter, arrondissementFilter, timeSlotFilter]);
+  }, [campaigns, cityFilter, statusFilter, typeFilter, arrondissementFilter, timeSlotFilter]);
 
   const isFiltered =
     cityFilter !== 'all' ||
     arrondissementFilter !== 'all' ||
+    typeFilter !== 'all' ||
     timeSlotFilter !== 'all' ||
     statusFilter !== 'all';
 
@@ -154,31 +174,17 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   }, [filteredCampaigns, arrondissementFilter]);
 
   const handleEditComment = async (c: PricingCampaign) => {
-    const peak = getCampaignPeakHourInfo(c);
-    const currentSlot = c.timeSlotOverride || 'auto';
     const currentComment = (c.comment || c.comments || '').replace(/"/g, '&quot;');
 
-    const { value: formValues, isConfirmed } = await Swal.fire({
-      title: 'Créneau & Commentaire du relevé',
+    const { value: commentText, isConfirmed } = await Swal.fire({
+      title: 'Commentaire du relevé',
       html: `
         <div style="text-align: left; font-size: 12px; color: #334155;">
           <p style="margin-bottom: 10px; font-weight: 600; color: #0f172a;">
             ${c.cityName} — Relevé du ${new Date(c.startedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
           <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
-            1. Créneau horaire / Heure de pointe :
-          </label>
-          <select id="swal-camp-slot" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 12px; font-size: 12px; background: #f8fafc;">
-            <option value="auto" ${currentSlot === 'auto' ? 'selected' : ''}>⏱️ Automatique selon l'heure (${peak.exactTimeStr})</option>
-            <option value="morning_peak" ${currentSlot === 'morning_peak' ? 'selected' : ''}>🌅 Pointe Matin (06h00 – 10h00)</option>
-            <option value="off_peak_morning" ${currentSlot === 'off_peak_morning' ? 'selected' : ''}>🟢 Creuse Matinée (10h00 – 12h00)</option>
-            <option value="midday_peak" ${currentSlot === 'midday_peak' ? 'selected' : ''}>☀️ Pointe Midi (12h00 – 14h30)</option>
-            <option value="off_peak_afternoon" ${currentSlot === 'off_peak_afternoon' ? 'selected' : ''}>🌤️ Creuse Après-midi (14h30 – 16h30)</option>
-            <option value="evening_peak" ${currentSlot === 'evening_peak' ? 'selected' : ''}>🌆 Pointe Soir (16h30 – 20h30)</option>
-            <option value="night" ${currentSlot === 'night' ? 'selected' : ''}>🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
-          </select>
-          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
-            2. Commentaire / Observation (météo, trafic, événement) :
+            Commentaire / Observation (météo, trafic, événement) :
           </label>
           <textarea id="swal-camp-comment" rows="3" placeholder="Ex: Forte pluie, embouteillages, jour férié..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">${currentComment}</textarea>
         </div>
@@ -189,21 +195,16 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
       confirmButtonText: 'Enregistrer',
       cancelButtonText: 'Annuler',
       preConfirm: () => {
-        const slotEl = document.getElementById('swal-camp-slot') as HTMLSelectElement | null;
         const commentEl = document.getElementById('swal-camp-comment') as HTMLTextAreaElement | null;
-        return {
-          timeSlotOverride: slotEl ? slotEl.value : 'auto',
-          comment: commentEl ? commentEl.value.trim() : ''
-        };
+        return commentEl ? commentEl.value.trim() : '';
       }
     });
 
-    if (isConfirmed && formValues) {
+    if (isConfirmed && commentText !== undefined) {
       try {
-        await api.updateCampaignComment(c.id, formValues.comment, formValues.timeSlotOverride);
-        c.comment = formValues.comment;
-        c.comments = formValues.comment;
-        c.timeSlotOverride = formValues.timeSlotOverride === 'auto' ? undefined : formValues.timeSlotOverride;
+        await api.updateCampaignComment(c.id, commentText, c.timeSlotOverride);
+        c.comment = commentText;
+        c.comments = commentText;
         onRefresh();
         Swal.fire({
           icon: 'success',
@@ -250,12 +251,12 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         cityId: c.cityId,
         triggerType: 'manual',
         sampleLimit: c.sampleLimit,
-        triggeredByUserId: user?.id,
+        triggeredByUserId: user?.id ? String(user.id) : undefined,
         triggeredByUserName: user?.name || 'Citrine Opérateur',
         triggeredByUserRole: user?.role || 'employe'
       });
       if (res?.campaign) {
-        onSelectCampaign(res.campaign.id);
+        onSelectCampaign(String(res.campaign.id));
         onNavigate('pricing');
       }
     } catch (err: any) {
@@ -283,6 +284,26 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           ) : null}
         </div>
       )
+    },
+    {
+      key: 'campaignType',
+      label: 'Type',
+      sortable: true,
+      render: (c) => {
+        const t = getCampaignType(c);
+        const label = getCampaignTypeLabel(t);
+        const colorClass =
+          t === 'aeroport' ? 'bg-sky-100 text-sky-800 border-sky-300' :
+          t === 'test_25' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+          t === 'mt_arrondissement' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+          t === 'arrondissement' ? 'bg-teal-100 text-teal-800 border-teal-300' :
+          'bg-slate-100 text-slate-800 border-slate-300';
+        return (
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${colorClass}`}>
+            <span>{label}</span>
+          </span>
+        );
+      }
     },
     {
       key: 'triggeredByUserName',
@@ -452,7 +473,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           )}
           <button
             onClick={() => {
-              onSelectCampaign(c.id);
+              onSelectCampaign(String(c.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-[#1F4F4A] text-white rounded-lg hover:bg-[#183F3B] transition cursor-pointer shadow-xs"
@@ -462,7 +483,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
           </button>
           {isAdminOrResponsable && (
             <button
-              onClick={() => handleDelete(c.id)}
+              onClick={() => handleDelete(String(c.id))}
               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
               title="Supprimer la campagne"
             >
@@ -496,6 +517,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
                 onClick={() => {
                   setCityFilter('all');
                   setArrondissementFilter('all');
+                  setTypeFilter('all');
                   setTimeSlotFilter('all');
                   setStatusFilter('all');
                 }}
@@ -516,7 +538,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         </div>
 
         {/* Barre de filtres responsive */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-3 border-t border-slate-100 text-xs">
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
               <Building2 className="w-3 h-3 text-[#1F4F4A]" />
@@ -534,6 +556,29 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
               {availableCities.map(([id, name]) => (
                 <option key={id} value={id}>{name}</option>
               ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+              <Filter className="w-3 h-3 text-[#1F4F4A]" />
+              <span>Type</span>
+            </label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className={`w-full rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
+                typeFilter !== 'all'
+                  ? 'bg-emerald-50 border border-emerald-300 text-emerald-900 font-semibold'
+                  : 'bg-slate-50 border border-slate-200 text-slate-700'
+              }`}
+            >
+              <option value="all">Tous les types (5 types)</option>
+              <option value="arrondissement">1 Arrondissement</option>
+              <option value="mt_arrondissement">MT Arrondissement</option>
+              <option value="aeroport">Pricing Aéroport</option>
+              <option value="test_25">Test 25</option>
+              <option value="all_city">Tout (Complet)</option>
             </select>
           </div>
 

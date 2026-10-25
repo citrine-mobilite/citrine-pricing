@@ -35,8 +35,8 @@ export const NeighborhoodExcelImportModal: React.FC<NeighborhoodExcelImportModal
   existingNeighborhoods,
   onSuccess
 }) => {
-  const [importCityId, setImportCityId] = useState(currentCityId || cities[0]?.id || '');
-  const selectedCity = cities.find((c) => c.id === importCityId) || cities[0];
+  const [importCityId, setImportCityId] = useState(String(currentCityId || cities[0]?.id || ''));
+  const selectedCity = cities.find((c) => String(c.id) === String(importCityId)) || cities[0];
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
@@ -373,7 +373,7 @@ export const NeighborhoodExcelImportModal: React.FC<NeighborhoodExcelImportModal
                       </tr>
                     ) : (
                       filteredItems.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/80 transition">
+                        <tr key={`import-row-${idx}`} className="hover:bg-slate-50/80 transition">
                           {/* Statut Import */}
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             {item.status === 'update' && (

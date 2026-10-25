@@ -71,7 +71,7 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <span>Simulateur Direct : Tester un trajet spécifique en temps réel</span>
         </h3>
         <span className="text-[11px] text-slate-500">
-          Interrogation simultanée en direct : Yango, Hero Cab & Trip Master
+          Interrogation simultanée en direct : ROUGE, Hero Cab & Trip Master
         </span>
       </div>
 
@@ -84,7 +84,7 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <SearchableSelect
             id="quick-origin-select"
             options={cityActiveNeighborhoods.map((n) => ({
-              value: n.id,
+              value: String(n.id),
               label: n.name,
               sublabel: n.zoneType ? `Zone ${n.zoneType}` : undefined
             }))}
@@ -107,7 +107,7 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
           <SearchableSelect
             id="quick-dest-select"
             options={cityActiveNeighborhoods.map((n) => ({
-              value: n.id,
+              value: String(n.id),
               label: n.name,
               sublabel: n.zoneType ? `Zone ${n.zoneType}` : undefined
             }))}
@@ -163,12 +163,12 @@ export const PricingQuickTester: React.FC<PricingQuickTesterProps> = ({
             <div className="p-3 bg-red-50/40 border border-red-200/80 rounded-lg space-y-2">
               <div className="flex items-center justify-between pb-1.5 border-b border-red-200/60">
                 <strong className="text-red-900 font-bold uppercase text-[11px] flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-red-600 inline-block" /> Yango (4 Classes)
+                  <span className="w-2 h-2 rounded-full bg-red-600 inline-block" /> ROUGE (4 Classes)
                 </strong>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleCopyProviderData('yango')}
-                    title="Copier la réponse brute Yango"
+                    title="Copier la réponse brute ROUGE"
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded transition cursor-pointer"
                   >
                     {copiedKey === 'yango' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}

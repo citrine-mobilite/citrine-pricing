@@ -1,9 +1,9 @@
 import React from 'react';
-import { Database, Compass } from 'lucide-react';
+import { Compass, Database, ShieldCheck } from 'lucide-react';
 
 interface SettingsTabsHeaderProps {
-  activeTab: 'yango' | 'hero' | 'tripmaster' | 'database';
-  onTabChange: (tab: 'yango' | 'hero' | 'tripmaster' | 'database') => void;
+  activeTab: 'yango' | 'hero' | 'tripmaster' | 'supabase' | 'admin';
+  onTabChange: (tab: 'yango' | 'hero' | 'tripmaster' | 'supabase' | 'admin') => void;
 }
 
 export const SettingsTabsHeader: React.FC<SettingsTabsHeaderProps> = ({
@@ -14,10 +14,10 @@ export const SettingsTabsHeader: React.FC<SettingsTabsHeaderProps> = ({
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
-          Paramètres des Passerelles & API
+          Paramètres des Passerelles & Base de Données
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
-          Gestion des accès directs aux API Yango, Hero Cab Pro, Trip Master et de la base de données Supabase / Disque.
+          Gestion des accès directs aux API Yango, Hero Cab Pro, Trip Master, de la base Supabase et du compte Administrateur (BD).
         </p>
       </div>
 
@@ -63,15 +63,28 @@ export const SettingsTabsHeader: React.FC<SettingsTabsHeaderProps> = ({
 
         <button
           type="button"
-          onClick={() => onTabChange('database')}
+          onClick={() => onTabChange('supabase')}
           className={`px-3 py-1.5 font-medium rounded-md transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'database'
-              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+            activeTab === 'supabase'
+              ? 'bg-white text-emerald-800 shadow-2xs font-semibold'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
           <Database className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Supabase & Disque</span>
+          <span>Base Supabase</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onTabChange('admin')}
+          className={`px-3 py-1.5 font-medium rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'admin'
+              ? 'bg-white text-purple-800 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+          <span>Compte Admin (BD)</span>
         </button>
       </div>
     </div>

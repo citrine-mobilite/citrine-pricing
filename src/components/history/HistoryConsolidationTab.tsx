@@ -258,7 +258,7 @@ export const HistoryConsolidationTab: React.FC<HistoryConsolidationTabProps> = (
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {group.items.map((c) => {
-                  const isSelected = selectedCampaignIds.includes(c.id);
+                  const isSelected = selectedCampaignIds.includes(String(c.id));
                   const timeStr = new Date(c.startedAt).toLocaleTimeString('fr-FR', {
                     hour: '2-digit',
                     minute: '2-digit'
@@ -266,7 +266,7 @@ export const HistoryConsolidationTab: React.FC<HistoryConsolidationTabProps> = (
                   return (
                     <div
                       key={c.id}
-                      onClick={() => onToggleCampaignSelection(c.id)}
+                      onClick={() => onToggleCampaignSelection(String(c.id))}
                       className={`p-3 rounded-xl border transition cursor-pointer flex items-start gap-2.5 ${
                         isSelected
                           ? 'border-[#1F4F4A] bg-[#1F4F4A]/5 shadow-xs'

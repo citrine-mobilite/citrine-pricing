@@ -1,4 +1,4 @@
-# 🚖 Citrine Pricing — Plateforme d'Intelligence Tarifaire & Benchmark VTC
+# 🚖 Citrine Pricing — Plateforme d'Intelligence Tarifaire & Pricing VTC
 
 **Citrine Pricing** est une plateforme SaaS d'analyse de marché et de comparaison tarifaire en temps réel pour les services de transport VTC (Véhicules de Transport avec Chauffeur) en Afrique Centrale (Cameroun, Douala, Yaoundé).
 

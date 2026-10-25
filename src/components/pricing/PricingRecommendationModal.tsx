@@ -101,7 +101,7 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
           const targetPrice = Math.round((h + 150) / 50) * 50;
           const increaseAmount = targetPrice - h;
           marginGains.push({
-            tripId: t.id,
+            tripId: String(t.id),
             origin: orig,
             destination: dest,
             distanceKm: t.distanceKm,
@@ -110,18 +110,18 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
             delta: y - h,
             type: 'margin_gain',
             suggestedHeroPrice: targetPrice,
-            strategicGain: `+${increaseAmount} F de hausse de marge (${h} F + ${increaseAmount} F = ${targetPrice} F, restant ${y - targetPrice} F sous Yango)`
+            strategicGain: `+${increaseAmount} F de hausse de marge (${h} F + ${increaseAmount} F = ${targetPrice} F, restant ${y - targetPrice} F sous ROUGE)`
           });
         }
       } else if (y < h) {
         yangoCheaperCount++;
-        // Quick Win : Yango est moins cher (h > y)
+        // Quick Win : ROUGE est moins cher (h > y)
         if (delta <= 300 && delta > 0) {
           const targetPrice = Math.max(100, Math.round((y - 50) / 50) * 50);
           const reductionAmount = h - targetPrice;
 
           quickWins.push({
-            tripId: t.id,
+            tripId: String(t.id),
             origin: orig,
             destination: dest,
             distanceKm: t.distanceKm,
@@ -130,7 +130,7 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
             delta,
             type: 'quick_win',
             suggestedHeroPrice: targetPrice,
-            strategicGain: `Retirer -${reductionAmount} F (${h} F - ${reductionAmount} F = ${targetPrice} F, soit 50 F sous Yango)`
+            strategicGain: `Retirer -${reductionAmount} F (${h} F - ${reductionAmount} F = ${targetPrice} F, soit 50 F sous ROUGE)`
           });
         }
       } else {
@@ -177,7 +177,7 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
       '',
       `Top Ajustements Tactiques (${analysis.quickWins.length} trajets) :`,
       ...analysis.quickWins.slice(0, 10).map((t, i) =>
-        `${i + 1}. ${t.origin} ➔ ${t.destination} : Hero ${t.currentHero}F | Yango ${t.currentYango}F ➔ Nouveau tarif suggéré : ${t.suggestedHeroPrice}F`
+        `${i + 1}. ${t.origin} ➔ ${t.destination} : Hero ${t.currentHero}F | ROUGE ${t.currentYango}F ➔ Nouveau tarif suggéré : ${t.suggestedHeroPrice}F`
       )
     ];
 
@@ -192,23 +192,23 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200/90 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
         
         {/* Header - Clean, modern, restrained */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-slate-900 tracking-tight">
+              <h2 className="text-sm sm:text-base font-semibold text-slate-900 tracking-tight">
                 Recommandations Tarifaires Hero Cab
               </h2>
               <span className="text-xs font-medium text-slate-400">•</span>
               <span className="text-xs font-medium text-slate-500">{cityName}</span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-1">
               Optimisation de grille concurrentielle calculée par classe de véhicule
             </p>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
             aria-label="Fermer"
           >
             <X className="w-5 h-5" />
@@ -216,15 +216,15 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
         </div>
 
         {/* Vehicle Class Segmented Bar */}
-        <div className="px-6 py-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl">
+        <div className="px-4 sm:px-6 py-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-200/70 p-1 rounded-xl overflow-x-auto max-w-full">
             {VEHICLE_CLASSES.map((vc) => {
               const isSelected = selectedClass === vc.key;
               return (
                 <button
                   key={vc.key}
                   onClick={() => setSelectedClass(vc.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
                     isSelected
                       ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                       : 'text-slate-600 hover:text-slate-900'
@@ -345,7 +345,7 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
         </div>
 
         {/* Table / List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-x-auto overflow-y-auto">
           {displayedList.length === 0 ? (
             <div className="py-16 text-center text-xs text-slate-400 space-y-1">
               <p className="font-medium text-slate-600">Aucune opportunité dans cette sélection</p>
@@ -356,12 +356,12 @@ export const PricingRecommendationModal: React.FC<PricingRecommendationModalProp
               </p>
             </div>
           ) : (
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[580px] sm:min-w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-100 text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
                 <tr>
                   <th className="py-2.5 px-4 sm:px-6">Trajet</th>
                   <th className="py-2.5 px-3 text-right">Hero Actuel</th>
-                  <th className="py-2.5 px-3 text-right">Yango</th>
+                  <th className="py-2.5 px-3 text-right">ROUGE</th>
                   <th className="py-2.5 px-3 text-right">Écart</th>
                   <th className="py-2.5 px-4 text-right">Prix Suggéré</th>
                   <th className="py-2.5 px-4 hidden md:table-cell">Impact</th>

@@ -4,7 +4,8 @@ export interface GeoCoordinate {
 }
 
 export interface Neighborhood {
-  id: string;
+  id: number | string;
+  uuid?: string;
   cityId: string;
   name: string;
   ville?: string;
@@ -23,13 +24,23 @@ export interface Neighborhood {
   orderIndex?: number;
 }
 
+export interface AirportConfig {
+  name: string;
+  lat: number;
+  lng: number;
+  code?: string;
+  active?: boolean;
+}
+
 export interface City {
-  id: string;
+  id: number | string;
+  uuid?: string;
   name: string;
   country: string;
   currency: string;
   currencySymbol: string;
   center: GeoCoordinate;
+  airport?: AirportConfig;
   active: boolean;
   autoSchedule: {
     enabled: boolean;
@@ -62,7 +73,8 @@ export interface CanonicalTripPrices {
 }
 
 export interface CanonicalTrip {
-  id: string;
+  id: number | string;
+  uuid?: string;
   origin: string;
   destination: string;
   distanceKm: number;
@@ -82,7 +94,8 @@ export interface CanonicalTrip {
 }
 
 export interface User {
-  id: string;
+  id: number | string;
+  uuid?: string;
   email: string;
   name: string;
   role: 'admin' | 'responsable' | 'employe';
@@ -145,8 +158,9 @@ export interface TripMasterQuote {
 }
 
 export interface TripResult {
-  id: string;
-  campaignId: string;
+  id: number | string;
+  uuid?: string;
+  campaignId: number | string;
   cityId?: string;
   cityName?: string;
   origin: string;
@@ -188,7 +202,7 @@ export interface TripResult {
   priceConfortPlus?: number;
   priceMoto?: number;
 
-  // Dual Provider Benchmark (legacy optional)
+  // Dual Provider Pricing (legacy optional)
   heroQuote?: HeroQuote;
   priceHero?: number;
   priceHeroStandard?: number;
@@ -229,8 +243,11 @@ export interface TripResult {
   apiCallDetails?: any;
 }
 
+export type CampaignType = 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all';
+
 export interface PricingCampaign {
-  id: string;
+  id: number | string;
+  uuid?: string;
   cityId: string;
   cityName: string;
   currency: string;
@@ -239,7 +256,9 @@ export interface PricingCampaign {
   triggeredByUserName?: string;
   triggeredByUserRole?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'error' | 'failed' | 'cancelled';
-  providerMode?: 'benchmark' | 'yango' | 'hero';
+  campaignType?: CampaignType;
+  finalizing?: boolean;
+  providerMode?: 'pricing' | 'yango' | 'hero';
   selectedClasses?: string[];
   totalPairs: number;
   completedPairs: number;
@@ -264,7 +283,7 @@ export interface PricingCampaign {
   comment?: string; // Commentaire libre sur la campagne (ex: météo, pluie, contexte de circulation, etc.)
   comments?: string; // Alias
   timeSlotOverride?: 'auto' | 'morning_peak' | 'midday_peak' | 'evening_peak' | 'off_peak' | 'night' | string;
-  scopeMode?: 'city' | 'intra' | 'inter' | 'global';
+  scopeMode?: 'city' | 'intra' | 'inter' | 'global' | 'airport';
   arrondissement?: string;
   originArrondissement?: string;
   destArrondissement?: string;

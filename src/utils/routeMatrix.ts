@@ -54,6 +54,91 @@ export function cleanNeighborhoodBaseName(name: string | null | undefined): stri
  * Détecte l'arrondissement, le district ou la zone d'un quartier de manière 100% dynamique.
  * Ne dépend d'aucune liste codée en dur et fonctionne pour toute nouvelle ville ajoutée.
  */
+export function isAirportNeighborhood(n: { id?: string | number; name?: string; zoneType?: string; zone?: string; destination?: string; fullAddress?: string } | null | undefined): boolean {
+  if (!n) return false;
+  const idStr = String(n.id || '');
+  if (idStr.startsWith('airport_')) return true;
+
+  const zoneType = String(n.zoneType || (n as any).zone || '').trim().toLowerCase();
+  if (zoneType === 'airport') return true;
+
+  const rawText = `${String(n.name || '')} ${String(n.destination || '')} ${String(n.fullAddress || '')}`;
+  const normalized = rawText
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+  return /aeroport|aerop|nsimalen|airport/.test(normalized);
+}
+
+/**
+ * Normalise et identifie de manière infaillible le type parmi les 5 types officiels :
+ * 1. 'arrondissement' (1 Arrondissement)
+ * 2. 'mt_arrondissement' (MT Arrondissement / 2 Arrondissements)
+ * 3. 'aeroport' (Pricing Aéroport)
+ * 4. 'test_25' (Test 25)
+ * 5. 'all' (Tout / Ville entière)
+ */
+export function getCampaignType(camp: {
+  campaignType?: string;
+  scopeMode?: string;
+  isTestSample?: boolean;
+  sampleLimit?: number | string;
+  totalPairs?: number;
+  arrondissement?: string;
+  originArrondissement?: string;
+  destArrondissement?: string;
+  comment?: string;
+  comments?: string;
+}): 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all' {
+  if (camp.campaignType) {
+    if (camp.campaignType === 'aeroport' || camp.campaignType === 'airport') return 'aeroport';
+    if (camp.campaignType === 'test_25' || camp.campaignType === 'sample_25') return 'test_25';
+    if (camp.campaignType === 'mt_arrondissement' || camp.campaignType === 'multi_arrondissement' || camp.campaignType === 'inter') return 'mt_arrondissement';
+    if (camp.campaignType === 'arrondissement' || camp.campaignType === 'intra') return 'arrondissement';
+    if (camp.campaignType === 'all' || camp.campaignType === 'global' || camp.campaignType === 'city') return 'all';
+  }
+
+  // 1. Aéroport
+  if (camp.scopeMode === 'airport' || camp.scopeMode === 'aeroport') {
+    return 'aeroport';
+  }
+  const comment = String(camp.comment || camp.comments || '').toLowerCase();
+  if (comment.includes('aéroport') || comment.includes('aeroport')) {
+    return 'aeroport';
+  }
+
+  // 2. Test 25
+  const isSample25 = camp.sampleLimit === 25 || camp.sampleLimit === '25' || (camp.isTestSample && camp.totalPairs === 25);
+  if (isSample25) {
+    return 'test_25';
+  }
+
+  // 3. Multi / Inter Arrondissements
+  if (camp.scopeMode === 'inter' || (camp.originArrondissement && camp.destArrondissement)) {
+    return 'mt_arrondissement';
+  }
+
+  // 4. 1 Arrondissement
+  if (camp.scopeMode === 'intra' || (camp.arrondissement && !camp.destArrondissement)) {
+    return 'arrondissement';
+  }
+
+  // 5. Tout (All)
+  return 'all';
+}
+
+export function getCampaignTypeLabel(type: 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all'): string {
+  switch (type) {
+    case 'arrondissement': return '1 Arrondissement';
+    case 'mt_arrondissement': return 'MT Arrondissement';
+    case 'aeroport': return 'Pricing Aéroport';
+    case 'test_25': return 'Test 25';
+    case 'all': return 'Tout (Complet)';
+  }
+}
+
 export function detectArrondissement(n: {
   name: string;
   district?: string;
@@ -96,10 +181,11 @@ export interface RouteMatrixOptions {
   maxDestsPerOrigin?: number;           // Défaut: 12 (sécurité globale de destinations par quartier)
   maxGlobalPairs?: number;              // Défaut: 3000 (plafond global de sécurité)
   minDistanceKm?: number;               // Défaut: 0.3 km (interdit trajets sur-place)
+  sampleLimit?: number | 'all';         // Si 'all', génère la matrice exhaustive complète de tous les trajets possibles
 }
 
 /**
- * Génère la matrice intelligente et équilibrée de trajets pour un benchmark VTC multi-villes.
+ * Génère la matrice intelligente et équilibrée de trajets pour un pricing VTC multi-villes.
  * 
  * RÈGLE D'OR UNIVERSELLE :
  * 1. Isolation stricte par ville :
@@ -107,21 +193,30 @@ export interface RouteMatrixOptions {
  *    - Tout trajet inter-villes est formellement rejeté.
  * 2. Évolutivité totale :
  *    - Fonctionne automatiquement pour Douala, Yaoundé, Bafoussam, Kribi, Garoua, etc.
- * 3. Échantillonnage équilibré :
- *    - Si la ville a plusieurs arrondissements/zones, les trajets sont répartis équitablement.
- *    - Si la ville n'a pas de sous-découpage, les trajets sont échantillonnés par distance progressive.
- * 4. Paires bidirectionnelles et uniques (A -> B et B -> A ne sont pas dupliquées).
+ * 3. Échantillonnage équilibré ou Matrice Exhaustive Complète si sampleLimit === 'all'.
  */
-export function generateBenchmarkPairs(
+export function generatePricingPairs(
   neighborhoods: Neighborhood[],
   options?: RouteMatrixOptions
 ): Array<{ origin: Neighborhood; dest: Neighborhood }> {
-  let activeNbs = neighborhoods.filter((n) => n.active);
+  let activeNbs = neighborhoods.filter((n) => n.active && !isAirportNeighborhood(n));
+  if (activeNbs.length === 0) {
+    return [];
+  }
   if (options?.cityId && options.cityId !== 'all') {
-    const targetKey = options.cityId.toLowerCase().trim();
+    const targetKey = String(options.cityId).toLowerCase().trim();
     activeNbs = activeNbs.filter((n) => {
       const cId = getNeighborhoodCityId(n);
-      return cId === targetKey || n.cityId === options.cityId || cId.includes(targetKey);
+      const nbCityId = String(n.cityId || '').toLowerCase().trim();
+      const nbVille = String((n as any).ville || (n as any).cityName || '').toLowerCase().trim();
+      return (
+        cId === targetKey ||
+        nbCityId === targetKey ||
+        nbVille === targetKey ||
+        (nbVille && targetKey.includes(nbVille)) ||
+        (targetKey && nbVille.includes(targetKey)) ||
+        cId.includes(targetKey)
+      );
     });
   }
   if (activeNbs.length < 2) return [];
@@ -146,8 +241,10 @@ export function generateBenchmarkPairs(
     list.push(nb);
   }
 
-  const getPairKey = (id1: string, id2: string): string => {
-    return id1 < id2 ? `${id1}---${id2}` : `${id2}---${id1}`;
+  const getPairKey = (id1: string | number, id2: string | number): string => {
+    const s1 = String(id1);
+    const s2 = String(id2);
+    return s1 < s2 ? `${s1}---${s2}` : `${s2}---${s1}`;
   };
 
   // 2. Traiter chaque ville de manière 100% indépendante
@@ -157,14 +254,15 @@ export function generateBenchmarkPairs(
 
     // Suivi des quotas dans cette ville
     const quotaTracker = new Map<string, Map<string, number>>();
-    const getQuotaCount = (nbId: string, targetKey: string): number => {
-      return quotaTracker.get(nbId)?.get(targetKey) || 0;
+    const getQuotaCount = (nbId: string | number, targetKey: string): number => {
+      return quotaTracker.get(String(nbId))?.get(targetKey) || 0;
     };
-    const incrementQuota = (nbId: string, targetKey: string) => {
-      let map = quotaTracker.get(nbId);
+    const incrementQuota = (nbId: string | number, targetKey: string) => {
+      const sId = String(nbId);
+      let map = quotaTracker.get(sId);
       if (!map) {
         map = new Map<string, number>();
-        quotaTracker.set(nbId, map);
+        quotaTracker.set(sId, map);
       }
       map.set(targetKey, (map.get(targetKey) || 0) + 1);
     };
@@ -278,9 +376,9 @@ export function generateBenchmarkPairs(
 /**
  * Calcule rapidement le nombre de combinaisons effectives selon la matrice intelligente.
  */
-export function calculatePossibleBenchmarkPairsCount(
+export function calculatePossiblePricingPairsCount(
   neighborhoods: Neighborhood[],
   options?: RouteMatrixOptions
 ): number {
-  return generateBenchmarkPairs(neighborhoods, options).length;
+  return generatePricingPairs(neighborhoods, options).length;
 }

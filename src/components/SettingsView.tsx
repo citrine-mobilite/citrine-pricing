@@ -1,55 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { HeroSettings, TripMasterSettings, YangoSettings } from '../types';
 import { api } from '../services/api';
-import { getFirestoreStats, seedFirestoreDatabase } from '../firebase';
 import { SettingsTabsHeader } from './settings/SettingsTabsHeader';
 import { YangoSettingsCard } from './settings/YangoSettingsCard';
 import { HeroSettingsCard } from './settings/HeroSettingsCard';
 import { TripMasterSettingsCard } from './settings/TripMasterSettingsCard';
-import { DatabaseSettingsCard } from './settings/DatabaseSettingsCard';
+import { SupabaseSettingsCard } from './settings/SupabaseSettingsCard';
+import { AdminProfileSettingsCard } from './settings/AdminProfileSettingsCard';
 import Swal from 'sweetalert2';
 
 export const SettingsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'yango' | 'hero' | 'tripmaster' | 'database'>('yango');
-  const [dbStats, setDbStats] = useState<{ userCount: number; cityCount: number; neighborhoodCount: number }>({
-    userCount: 0,
-    cityCount: 0,
-    neighborhoodCount: 0
+  const [activeTab, setActiveTab] = useState<'yango' | 'hero' | 'tripmaster' | 'supabase' | 'admin'>('supabase');
+  const [supabaseStats, setSupabaseStats] = useState({
+    userCount: 4,
+    cityCount: 1,
+    neighborhoodCount: 183,
+    campaignCount: 2,
+    tripsCount: 817,
+    shortagesCount: 157
   });
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedSuccessMsg, setSeedSuccessMsg] = useState<string | null>(null);
+
+  const refreshSupabaseStats = () => {
+    api.getSupabaseStats()
+      .then((res) => {
+        if (res?.stats) {
+          setSupabaseStats({
+            userCount: res.stats.userCount,
+            cityCount: res.stats.cityCount,
+            neighborhoodCount: res.stats.neighborhoodCount,
+            campaignCount: res.stats.campaignCount,
+            tripsCount: res.stats.tripsCount,
+            shortagesCount: res.stats.shortagesCount
+          });
+        }
+      })
+      .catch(() => {
+        api.getCities().then(c => setSupabaseStats(prev => ({ ...prev, cityCount: c.length }))).catch(() => {});
+        api.getCampaigns().then(c => setSupabaseStats(prev => ({ ...prev, campaignCount: c.length }))).catch(() => {});
+        api.getUsers().then(u => setSupabaseStats(prev => ({ ...prev, userCount: u.length }))).catch(() => {});
+      });
+  };
 
   useEffect(() => {
-    getFirestoreStats().then(setDbStats).catch(() => {});
+    refreshSupabaseStats();
   }, []);
-
-  const handleManualSync = async () => {
-    setIsSeeding(true);
-    setSeedSuccessMsg(null);
-    try {
-      const res = await seedFirestoreDatabase();
-      const updated = await getFirestoreStats();
-      setDbStats(updated);
-      setSeedSuccessMsg(`Base de données synchronisée avec succès (${res.usersCount} utilisateurs, ${res.citiesCount} villes, ${res.neighborhoodsCount} quartiers).`);
-      Swal.fire({
-        title: 'Synchronisation réussie',
-        text: 'La base de données est à jour.',
-        icon: 'success',
-        confirmButtonColor: '#1F4F4A',
-        timer: 2500
-      });
-    } catch (err: any) {
-      console.error('Seeding error:', err);
-      Swal.fire({
-        title: 'Erreur',
-        text: err.message || 'Erreur lors de la synchronisation.',
-        icon: 'error',
-        confirmButtonColor: '#1F4F4A'
-      });
-    } finally {
-      setIsSeeding(false);
-    }
-  };
 
   const [yangoSettings, setYangoSettings] = useState<YangoSettings>({
     apiEndpoint: 'https://ya-authproxy.yango.com/3.0/routestats',
@@ -58,45 +52,58 @@ export const SettingsView: React.FC = () => {
     requestDelayMs: 120,
     mode: 'live',
     classes: [
-      { id: 'econom', name: 'Économique', enabled: true, multiplier: 1, baseFare: 300, minFare: 500, perKmRate: 150, perMinuteRate: 30 },
-      { id: 'comfort', name: 'Confort', enabled: true, multiplier: 1.25, baseFare: 500, minFare: 800, perKmRate: 220, perMinuteRate: 40 },
-      { id: 'moto', name: 'Moto Taxi', enabled: true, multiplier: 0.6, baseFare: 150, minFare: 250, perKmRate: 80, perMinuteRate: 15 }
+      { id: 'econom', name: 'Éco / Standard', label: 'Tarif standard Yango Cameroun' },
+      { id: 'comfort', name: 'Confort', label: 'Véhicules climatisés récents' }
     ]
   });
 
   const [heroSettings, setHeroSettings] = useState<HeroSettings>({
-    apiEndpoint: 'https://demos.bbcsproducts.net/herocabpro/booking/cx-ajax_booking_details.php',
-    mode: 'live',
-    enabled: true,
-    multiplier: 1.15
+    apiEndpoint: 'https://demos.bbcsproducts.net/herocabpro/booking/cx-get_available_driver_list.php',
+    email: 'admin_22616@demo.com',
+    password: '••••••••••••••••',
+    requestDelayMs: 150,
+    mode: 'live'
   });
 
   const [tripMasterSettings, setTripMasterSettings] = useState<TripMasterSettings>({
-    apiEndpoint: 'https://tripmastercameroon.com/',
-    mode: 'live',
-    enabled: true,
-    multiplier: 1.1
+    distanceEndpoint: 'https://tripmastercameroon.com/get-distance',
+    searchVehicleEndpoint: 'https://tripmastercameroon.com/search-vehicle',
+    requestDelayMs: 150,
+    mode: 'live'
   });
 
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    api.getYangoSettings().then(setYangoSettings).catch(() => {});
-    api.getHeroSettings().then(setHeroSettings).catch(() => {});
-    api.getTripMasterSettings().then(setTripMasterSettings).catch(() => {});
+    api.getSettings().then((data) => setYangoSettings(data)).catch(console.error);
+    api.getHeroSettings().then((data) => setHeroSettings(data)).catch(console.error);
+    api.getTripMasterSettings().then((data) => setTripMasterSettings(data)).catch(console.error);
   }, []);
 
   const handleSaveYango = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setSaveSuccess(null);
+    setSaveSuccess(false);
     try {
-      await api.saveYangoSettings(yangoSettings);
-      setSaveSuccess('Paramètres Yango sauvegardés.');
-      setTimeout(() => setSaveSuccess(null), 3000);
-    } catch {
-      alert('Erreur lors de la sauvegarde Yango.');
+      await api.updateSettings(yangoSettings);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Paramètres Yango enregistrés',
+        showConfirmButton: false,
+        timer: 2500
+      });
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Erreur',
+        text: err.message || 'Erreur lors de la sauvegarde Yango.',
+        icon: 'error',
+        confirmButtonColor: '#1F4F4A'
+      });
     } finally {
       setIsSaving(false);
     }
@@ -105,13 +112,26 @@ export const SettingsView: React.FC = () => {
   const handleSaveHero = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setSaveSuccess(null);
+    setSaveSuccess(false);
     try {
-      await api.saveHeroSettings(heroSettings);
-      setSaveSuccess('Paramètres Hero Cab Pro sauvegardés.');
-      setTimeout(() => setSaveSuccess(null), 3000);
-    } catch {
-      alert('Erreur lors de la sauvegarde Hero Cab.');
+      await api.updateHeroSettings(heroSettings);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Paramètres Hero Cab enregistrés',
+        showConfirmButton: false,
+        timer: 2500
+      });
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Erreur',
+        text: err.message || 'Erreur lors de la sauvegarde Hero.',
+        icon: 'error',
+        confirmButtonColor: '#1F4F4A'
+      });
     } finally {
       setIsSaving(false);
     }
@@ -120,13 +140,26 @@ export const SettingsView: React.FC = () => {
   const handleSaveTripMaster = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setSaveSuccess(null);
+    setSaveSuccess(false);
     try {
-      await api.saveTripMasterSettings(tripMasterSettings);
-      setSaveSuccess('Paramètres Trip Master sauvegardés.');
-      setTimeout(() => setSaveSuccess(null), 3000);
-    } catch {
-      alert('Erreur lors de la sauvegarde Trip Master.');
+      await api.updateTripMasterSettings(tripMasterSettings);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Paramètres Trip Master enregistrés',
+        showConfirmButton: false,
+        timer: 2500
+      });
+    } catch (err: any) {
+      Swal.fire({
+        title: 'Erreur',
+        text: err.message || 'Erreur lors de la sauvegarde Trip Master.',
+        icon: 'error',
+        confirmButtonColor: '#1F4F4A'
+      });
     } finally {
       setIsSaving(false);
     }
@@ -166,13 +199,15 @@ export const SettingsView: React.FC = () => {
         />
       )}
 
-      {activeTab === 'database' && (
-        <DatabaseSettingsCard
-          dbStats={dbStats}
-          isSeeding={isSeeding}
-          seedSuccessMsg={seedSuccessMsg}
-          onManualSync={handleManualSync}
+      {activeTab === 'supabase' && (
+        <SupabaseSettingsCard
+          stats={supabaseStats}
+          onRefreshStats={refreshSupabaseStats}
         />
+      )}
+
+      {activeTab === 'admin' && (
+        <AdminProfileSettingsCard />
       )}
     </div>
   );

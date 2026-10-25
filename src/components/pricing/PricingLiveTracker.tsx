@@ -1,7 +1,8 @@
 import React from 'react';
 import { PricingCampaign } from '../../types';
-import { StopCircle, RotateCw, Clock, UserCircle } from 'lucide-react';
+import { StopCircle, RotateCw, Clock, UserCircle, Tag } from 'lucide-react';
 import { computeCampaignDuration } from '../../utils/durationUtils';
+import { getCampaignType, getCampaignTypeLabel } from '../../utils/routeMatrix';
 
 interface PricingLiveTrackerProps {
   campaign: PricingCampaign;
@@ -17,10 +18,14 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
   onRestartCampaign
 }) => {
   const isRunning = campaign.status === 'in_progress';
+  const effectiveCompleted = campaign.completedPairs || 0;
   const progressPercent =
     campaign.totalPairs > 0
-      ? Math.min(100, Math.round(((campaign.completedPairs || 0) / campaign.totalPairs) * 100))
+      ? Math.min(100, Math.round((effectiveCompleted / campaign.totalPairs) * 100))
       : 0;
+
+  const campType = getCampaignType(campaign);
+  const campTypeLabel = getCampaignTypeLabel(campType);
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
@@ -49,6 +54,10 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
               <span className="text-[11px] text-slate-400 font-medium">
                 ({campaign.cityName})
               </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200">
+                <Tag className="w-2.5 h-2.5 text-[#1F4F4A]" />
+                <span>Type : {campTypeLabel}</span>
+              </span>
               {campaign.triggeredByUserName && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#1F4F4A] bg-[#1F4F4A]/10 px-2 py-0.5 rounded-full border border-[#1F4F4A]/20">
                   <UserCircle className="w-3 h-3" />
@@ -57,7 +66,7 @@ export const PricingLiveTracker: React.FC<PricingLiveTrackerProps> = ({
               )}
             </div>
             <p className="text-[11px] text-slate-500">
-              Traitement automatique par lots de 10 trajets
+              Traitement par lots de 10 trajets — progression temps réel
             </p>
           </div>
         </div>

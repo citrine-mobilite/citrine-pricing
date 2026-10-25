@@ -119,31 +119,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleEditComment = async (c: PricingCampaign, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const peak = getCampaignPeakHourInfo(c);
-    const currentSlot = c.timeSlotOverride || 'auto';
     const currentComment = (c.comment || c.comments || '').replace(/"/g, '&quot;');
 
-    const { value: formValues, isConfirmed } = await Swal.fire({
-      title: 'Créneau & Commentaire du relevé',
+    const { value: commentText, isConfirmed } = await Swal.fire({
+      title: 'Commentaire du relevé',
       html: `
         <div style="text-align: left; font-size: 12px; color: #334155;">
           <p style="margin-bottom: 10px; font-weight: 600; color: #0f172a;">
             ${c.cityName} — Relevé du ${new Date(c.startedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
           <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
-            1. Créneau horaire / Heure de pointe :
-          </label>
-          <select id="swal-slot-select" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 12px; font-size: 12px; background: #f8fafc;">
-            <option value="auto" ${currentSlot === 'auto' ? 'selected' : ''}>⏱️ Automatique selon l'heure (${peak.exactTimeStr})</option>
-            <option value="morning_peak" ${currentSlot === 'morning_peak' ? 'selected' : ''}>🌅 Pointe Matin (06h00 – 10h00)</option>
-            <option value="off_peak_morning" ${currentSlot === 'off_peak_morning' ? 'selected' : ''}>🟢 Creuse Matinée (10h00 – 12h00)</option>
-            <option value="midday_peak" ${currentSlot === 'midday_peak' ? 'selected' : ''}>☀️ Pointe Midi (12h00 – 14h30)</option>
-            <option value="off_peak_afternoon" ${currentSlot === 'off_peak_afternoon' ? 'selected' : ''}>🌤️ Creuse Après-midi (14h30 – 16h30)</option>
-            <option value="evening_peak" ${currentSlot === 'evening_peak' ? 'selected' : ''}>🌆 Pointe Soir (16h30 – 20h30)</option>
-            <option value="night" ${currentSlot === 'night' ? 'selected' : ''}>🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
-          </select>
-          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
-            2. Commentaire / Observation (météo, trafic, événement) :
+            Commentaire / Observation (météo, trafic, événement) :
           </label>
           <textarea id="swal-comment-input" rows="3" placeholder="Ex: Forte pluie sur Akwa, embouteillages Rond-point Deïdo..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">${currentComment}</textarea>
         </div>
@@ -154,21 +140,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       confirmButtonText: 'Enregistrer',
       cancelButtonText: 'Annuler',
       preConfirm: () => {
-        const slotEl = document.getElementById('swal-slot-select') as HTMLSelectElement | null;
         const commentEl = document.getElementById('swal-comment-input') as HTMLTextAreaElement | null;
-        return {
-          timeSlotOverride: slotEl ? slotEl.value : 'auto',
-          comment: commentEl ? commentEl.value.trim() : ''
-        };
+        return commentEl ? commentEl.value.trim() : '';
       }
     });
 
-    if (isConfirmed && formValues) {
+    if (isConfirmed && commentText !== undefined) {
       try {
-        await api.updateCampaignComment(c.id, formValues.comment, formValues.timeSlotOverride);
-        c.comment = formValues.comment;
-        c.comments = formValues.comment;
-        c.timeSlotOverride = formValues.timeSlotOverride === 'auto' ? undefined : formValues.timeSlotOverride;
+        await api.updateCampaignComment(c.id, commentText, c.timeSlotOverride);
+        c.comment = commentText;
+        c.comments = commentText;
         onRefresh?.();
         Swal.fire({
           icon: 'success',
@@ -282,7 +263,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {peak.surgePct > 0 && (
                 <span
                   className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-950 bg-amber-200 px-1.5 py-0.5 rounded border border-amber-300"
-                  title="Forte demande / hausse tarifaire Yango par rapport au tarif creux"
+                  title="Forte demande / hausse tarifaire ROUGE par rapport au tarif creux"
                 >
                   <Zap className="w-2.5 h-2.5 text-amber-700" />
                   <span>+{peak.surgePct}%</span>
@@ -341,7 +322,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     },
     {
       key: 'yangoEcoAvg',
-      label: 'Moy. Yango (Éco)',
+      label: 'Moy. ROUGE (Éco)',
       sortable: true,
       align: 'right',
       render: (c) => {
@@ -393,7 +374,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center justify-end gap-2.5">
           <button
             onClick={() => {
-              onSelectCampaign(c.id);
+              onSelectCampaign(String(c.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F4F4A] hover:underline cursor-pointer"
@@ -402,7 +383,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ArrowRight className="w-3 h-3" />
           </button>
           <button
-            onClick={(e) => handleDeleteCampaign(c.id, e)}
+            onClick={(e) => handleDeleteCampaign(String(c.id), e)}
             title="Supprimer cette campagne"
             className="p-1 text-slate-400 hover:text-red-600 rounded transition cursor-pointer"
           >

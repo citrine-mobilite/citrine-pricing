@@ -1,13 +1,12 @@
 import { SystemSettings } from '../types.js';
 import { calculateDistanceKm } from './yangoService.js';
-import { pooledGet, pooledPostUrlEncoded } from '../utils/httpPool.js';
 
 export let tripMasterSettings: SystemSettings = {
   id: 'tripmaster',
   searchVehicleEndpoint: 'https://tripmastercameroon.com/search-vehicle',
   distanceEndpoint: 'https://tripmastercameroon.com/get-distance',
-  mode: 'real', // 100% requêtes HTTP réelles en direct
-  requestDelayMs: 0,
+  mode: 'real',
+  requestDelayMs: 250,
   enabled: true,
   updatedAt: new Date().toISOString()
 };
@@ -19,40 +18,34 @@ export function updateTripMasterSettings(newSettings: Partial<SystemSettings>) {
 let cachedTmCookie = '';
 let cachedTmToken = '';
 let cachedTmTimestamp = 0;
-let sessionPromise: Promise<{ cookie: string; token: string }> | null = null;
 
-export async function getTripMasterSession(): Promise<{ cookie: string; token: string }> {
+export async function getTripMasterSession(signal?: AbortSignal): Promise<{ cookie: string; token: string }> {
   const now = Date.now();
-  if (cachedTmToken && cachedTmCookie && (now - cachedTmTimestamp < 900000)) { // Valide 15 minutes
+  if (cachedTmToken && cachedTmCookie && (now - cachedTmTimestamp < 300000)) {
     return { cookie: cachedTmCookie, token: cachedTmToken };
   }
 
-  if (sessionPromise) {
-    return sessionPromise;
+  try {
+    const res = await fetch('https://tripmastercameroon.com/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      signal
+    });
+
+    const rawCookies = (res.headers as any).getSetCookie ? (res.headers as any).getSetCookie() : [res.headers.get('set-cookie')].filter(Boolean);
+    cachedTmCookie = rawCookies.map((c: string) => c.split(';')[0]).join('; ');
+    const html = await res.text();
+    const tokenMatch = html.match(/name=["']_token["']\s+value=["']([^"']+)["']/i) ||
+                      html.match(/content=["']([^"']+)["']\s+name=["']csrf-token["']/i);
+    cachedTmToken = tokenMatch ? tokenMatch[1] : '';
+    cachedTmTimestamp = now;
+    return { cookie: cachedTmCookie, token: cachedTmToken };
+  } catch (e: any) {
+    console.warn('[TripMaster] Erreur de session/CSRF:', e.message);
+    return { cookie: '', token: '' };
   }
-
-  sessionPromise = (async () => {
-    try {
-      const res = await pooledGet('https://tripmastercameroon.com/', {}, 10000);
-      const setCookies = res.headers['set-cookie'];
-      const rawCookies = Array.isArray(setCookies) ? setCookies : [setCookies].filter(Boolean);
-      cachedTmCookie = (rawCookies as string[]).map((c: string) => c.split(';')[0]).join('; ');
-      
-      const html = res.body;
-      const tokenMatch = html.match(/name=["']_token["']\s+value=["']([^"']+)["']/i) ||
-                        html.match(/content=["']([^"']+)["']\s+name=["']csrf-token["']/i);
-      cachedTmToken = tokenMatch ? tokenMatch[1] : '';
-      cachedTmTimestamp = Date.now();
-      return { cookie: cachedTmCookie, token: cachedTmToken };
-    } catch (e: any) {
-      console.warn('[TripMaster] Erreur de session/CSRF:', e.message);
-      return { cookie: '', token: '' };
-    } finally {
-      sessionPromise = null;
-    }
-  })();
-
-  return sessionPromise;
 }
 
 export function parseTripMasterNumber(val: any): number {
@@ -62,20 +55,6 @@ export function parseTripMasterNumber(val: any): number {
   const clean = str.replace(/[^\d.]/g, '');
   const num = parseFloat(clean);
   return isNaN(num) ? 0 : Math.round(num);
-}
-
-const tmCache = new Map<string, { priceEco: number; priceConfort: number; priceMoto: number; timestamp: number }>();
-
-export function computeTripMasterMathematicalPrices(distKm: number, durationMin: number) {
-  const km = Math.max(0.1, distKm);
-  const dur = Math.max(2, durationMin);
-
-  // Barème Trip Master Cameroun
-  const priceEco = Math.max(1000, Math.round(450 + 240 * km + 10 * dur));
-  const priceConfort = Math.max(1000, Math.round(550 + 280 * km + 15 * dur));
-  const priceMoto = Math.max(200, Math.round(150 + 110 * km + 8 * dur));
-
-  return { priceEco, priceConfort, priceMoto };
 }
 
 export async function callTripMasterStats(
@@ -116,39 +95,6 @@ export async function callTripMasterStats(
     };
   }
 
-  // Cache mémoire pour trajets identiques dans la même heure
-  const cacheKey = `${distKm.toFixed(1)}km_${originName}_${destName}`;
-  const cached = tmCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < 1800000)) {
-    return {
-      success: true,
-      source: 'tripmaster_cache',
-      distanceKm: distKm,
-      durationMinutes: durationMin,
-      priceEco: cached.priceEco,
-      priceConfort: cached.priceConfort,
-      priceMoto: cached.priceMoto,
-      latencyMs: Date.now() - startTime,
-      httpStatus: 200
-    };
-  }
-
-  // Si explicitement configuré en mode 'formula'
-  if (tripMasterSettings.mode === 'formula') {
-    const math = computeTripMasterMathematicalPrices(distKm, durationMin);
-    return {
-      success: true,
-      source: 'tripmaster_formula_calibrated',
-      distanceKm: distKm,
-      durationMinutes: durationMin,
-      priceEco: math.priceEco,
-      priceConfort: math.priceConfort,
-      priceMoto: math.priceMoto,
-      latencyMs: Date.now() - startTime,
-      httpStatus: 200
-    };
-  }
-
   let priceEco = 0;
   let priceConfort = 0;
   let priceMoto = 0;
@@ -156,10 +102,13 @@ export async function callTripMasterStats(
   let searchHtml = '';
 
   try {
-    const { cookie, token } = await getTripMasterSession();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+    const { cookie, token } = await getTripMasterSession(signal || controller.signal);
 
     if (token) {
-      const postData = {
+      const postData = new URLSearchParams({
         _token: token,
         pickup_location: originName || 'Départ',
         pickup_lat: String(startLat),
@@ -173,22 +122,24 @@ export async function callTripMasterStats(
         drop_location: destName || 'Arrivée',
         drop_lat: String(endLat),
         drop_long: String(endLng)
-      };
+      });
 
-      const res = await pooledPostUrlEncoded(
-        tripMasterSettings.searchVehicleEndpoint || 'https://tripmastercameroon.com/search-vehicle',
-        postData,
-        {
+      const searchRes = await fetch(tripMasterSettings.searchVehicleEndpoint || 'https://tripmastercameroon.com/search-vehicle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Referer': 'https://tripmastercameroon.com/'
         },
-        10000
-      );
+        body: postData,
+        signal: signal || controller.signal
+      });
 
-      httpStatus = res.status;
-      searchHtml = res.body;
+      httpStatus = searchRes.status;
+      searchHtml = await searchRes.text();
 
-      // Parsing du tarif réel Trip Master
+      // Décryptage officiel des tarifs réels Trip Master
       const officialCardRegex = /<p[^>]*class=["'][^"']*ride-car-name[^"']*["'][^>]*>([^<]+)<\/p>[\s\S]*?<span[^>]*class=["'][^"']*ride-price-cab[^"']*["'][^>]*>([^<]+)<\/span>/gi;
       let m;
       while ((m = officialCardRegex.exec(searchHtml)) !== null) {
@@ -204,32 +155,18 @@ export async function callTripMasterStats(
           }
         }
       }
-
-      // Deuxième passe si le HTML a une structure légèrement différente
-      if (priceEco === 0 && priceConfort === 0) {
-        const anyPriceMatches = searchHtml.match(/class=["'][^"']*ride-price-cab[^"']*["'][^>]*>([^<]+)<\/span>/gi) || [];
-        for (const tag of anyPriceMatches) {
-          const valMatch = tag.match(/>([^<]+)<\/span>/);
-          if (valMatch) {
-            const p = parseTripMasterNumber(valMatch[1]);
-            if (p > 0 && priceEco === 0) priceEco = p;
-            else if (p > 0 && priceConfort === 0) priceConfort = p;
-          }
-        }
-      }
     }
+
+    clearTimeout(timeoutId);
   } catch (err: any) {
-    // Erreur réseau ou timeout
+    // Timeout ou erreur réseau
   }
 
   const isSuccess = Boolean(priceEco || priceConfort || priceMoto);
-  if (isSuccess) {
-    tmCache.set(cacheKey, { priceEco, priceConfort, priceMoto, timestamp: Date.now() });
-  }
 
   return {
     success: isSuccess,
-    source: isSuccess ? 'tripmaster_live' : 'tripmaster_no_vehicles',
+    source: 'tripmaster_live',
     distanceKm: distKm,
     durationMinutes: durationMin,
     priceEco: priceEco || undefined,

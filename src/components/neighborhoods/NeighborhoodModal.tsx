@@ -309,7 +309,7 @@ export const NeighborhoodModal: React.FC<NeighborhoodModalProps> = ({
                 className="w-4 h-4 rounded border-slate-300 text-[#1F4F4A] focus:ring-[#3D8B85] cursor-pointer"
               />
               <label htmlFor="modal-active-checkbox" className="text-xs font-medium text-slate-700 cursor-pointer">
-                Inclure ce quartier dans les calculs de benchmarks et campagnes tarifaires
+                Inclure ce quartier dans les calculs de pricings et campagnes tarifaires
               </label>
             </div>
           </div>

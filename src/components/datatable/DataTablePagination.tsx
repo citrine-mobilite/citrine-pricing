@@ -54,7 +54,7 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
             className="bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-xs text-slate-700 focus:outline-none focus:border-[#3D8B85]"
           >
             {pageSizeOptions.map((opt) => (
-              <option key={opt} value={opt}>
+              <option key={`page-size-${opt}`} value={opt}>
                 {opt >= 999999 ? "Tous (Tout afficher)" : opt}
               </option>
             ))}

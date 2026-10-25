@@ -1,12 +1,11 @@
 import { SystemSettings } from '../types.js';
 import { calculateDistanceKm } from './yangoService.js';
-import { pooledPostUrlEncoded } from '../utils/httpPool.js';
 
 export let heroSettings: SystemSettings = {
   id: 'hero',
   apiEndpoint: 'https://demos.bbcsproducts.net/herocabpro/booking/cx-ajax_booking_details.php',
-  mode: 'real', // 100% requêtes HTTP réelles en direct
-  requestDelayMs: 0,
+  mode: 'real',
+  requestDelayMs: 250,
   enabled: true,
   updatedAt: new Date().toISOString()
 };
@@ -19,14 +18,17 @@ export function parseHeroPriceNumber(val: any): number {
   if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val);
   if (!val) return 0;
   let str = String(val).trim();
-  // Supprime devises et espaces
+  // Remove currency names/symbols and white spaces
   str = str.replace(/CFA|FCFA|XAF|\$/gi, '').replace(/\s+/g, '');
 
+  // Handle format like "1,184.00" or "12,500.00" (comma thousands separator + dot decimal)
   if (str.includes(',') && str.includes('.')) {
     str = str.replace(/,/g, '');
   } else if (/^\d{1,3}(,\d{3})+$/.test(str)) {
+    // Format like "1,184"
     str = str.replace(/,/g, '');
   } else if (/^\d+,\d{1,2}$/.test(str)) {
+    // Format like "1184,00"
     str = str.replace(',', '.');
   } else {
     str = str.replace(/,/g, '');
@@ -35,26 +37,6 @@ export function parseHeroPriceNumber(val: any): number {
   const clean = str.replace(/[^\d.]/g, '');
   const num = parseFloat(clean);
   return isNaN(num) ? 0 : Math.round(num);
-}
-
-/**
- * Calcul mathématique optionnel (uniquement si explicitement configuré en mode 'formula')
- */
-export function computeHeroMathematicalPrices(
-  distKm: number,
-  durationMinutes?: number
-): { standard: number; confort: number; suv: number } {
-  const km = Math.max(0.1, distKm);
-  const durSec = Math.max(120, Math.round((km / 25) * 3600));
-  const durMin = (durationMinutes !== undefined && durationMinutes > 0)
-    ? durationMinutes
-    : (durSec / 60);
-
-  const standard = Math.max(510, Math.round(250 + 150 * km + 10 * durMin));
-  const confort = Math.max(910, Math.round(350 + 180 * km + 12 * durMin));
-  const suv = Math.max(1200, Math.round(500 + 220 * km + 15 * durMin));
-
-  return { standard, confort, suv };
 }
 
 export async function callHeroStats(
@@ -86,8 +68,8 @@ export async function callHeroStats(
 }> {
   const startTime = Date.now();
   const distKm = calculateDistanceKm(startLat, startLng, endLat, endLng);
-  const durSec = Math.max(120, Math.round((distKm / 25) * 3600));
-  const durMin = durSec / 60;
+  const distMeters = Math.max(500, Math.round(distKm * 1000));
+  const durationSeconds = Math.max(120, Math.round((distKm / 25) * 3600));
 
   if (heroSettings.enabled === false) {
     return {
@@ -103,34 +85,11 @@ export async function callHeroStats(
     };
   }
 
-  // Si mode formule explicitement forcé dans les paramètres
-  if (heroSettings.mode === 'formula') {
-    const math = computeHeroMathematicalPrices(distKm, durMin);
-    const chosenPrice = (tariffClass === 'comfort' || tariffClass === 'confort' || tariffClass === 'business')
-      ? math.confort
-      : math.standard;
-
-    return {
-      success: true,
-      source: 'hero_formula_calibrated',
-      price: chosenPrice,
-      priceFormatted: `${chosenPrice.toLocaleString('fr-FR')} ${cityCurrency}`,
-      pricePerKm: distKm > 0 ? Math.round(chosenPrice / distKm) : 0,
-      priceStandard: math.standard,
-      priceConfort: math.confort,
-      priceSuv: math.suv,
-      availableDriversCount: 1,
-      waitingTimeMinutes: 3,
-      latencyMs: Date.now() - startTime,
-      httpStatus: 200,
-      rawResponse: { mode: 'formula_calibrated', ...math }
-    };
-  }
-
-  // Mode LIVE REQUÊTE RÉELLE (avec pool de connexions persistantes Keep-Alive)
   try {
-    const distMeters = Math.max(500, Math.round(distKm * 1000));
-    const payload = {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+    const payload = new URLSearchParams({
       type: 'getVehicles',
       eType: 'Ride',
       from_lat: String(startLat),
@@ -138,27 +97,45 @@ export async function callHeroStats(
       to_lat: String(endLat),
       to_long: String(endLng),
       distance: String(distMeters),
-      duration: String(durSec),
+      duration: String(durationSeconds),
       promoCode: '',
       iFromStationId: '0',
       iToStationId: '0',
       userType: 'Rider',
       iUserId: '31',
       booking_date: ''
-    };
+    });
 
-    const endpoint = heroSettings.apiEndpoint || 'https://demos.bbcsproducts.net/herocabpro/booking/cx-ajax_booking_details.php';
-    const res = await pooledPostUrlEncoded(
-      endpoint,
-      payload,
-      {
+    const res = await fetch(heroSettings.apiEndpoint || 'https://demos.bbcsproducts.net/herocabpro/booking/cx-ajax_booking_details.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://demos.bbcsproducts.net/herocabpro/booking/'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       },
-      10000 // Timeout 10 000 ms
-    );
+      body: payload,
+      signal: signal || controller.signal
+    });
 
-    const html = res.body;
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        source: 'hero_live',
+        price: 0,
+        priceFormatted: 'Non disponible',
+        pricePerKm: 0,
+        availableDriversCount: 0,
+        waitingTimeMinutes: 0,
+        latencyMs: Date.now() - startTime,
+        httpStatus: res.status,
+        errorMessage: `HTTP ${res.status}: ${res.statusText}`
+      };
+    }
+
+    const html = await res.text();
+
     let extractedStandardPrice = 0;
     let extractedConfortPrice = 0;
     let extractedSuvPrice = 0;
@@ -169,47 +146,40 @@ export async function callHeroStats(
     for (const tag of matches) {
       const vIdMatch = tag.match(/value\s*=\s*['"](\d+)['"]/i);
       const fareMatch = tag.match(/data-fare-with-currency-symbol\s*=\s*['"]([^'"]+)['"]/i) ||
-                        tag.match(/data-amount-with-currency-symbol\s*=\s*['"]([^'"]+)['"]/i) ||
                         tag.match(/data-amount\s*=\s*['"]([^'"]+)['"]/i);
 
       if (vIdMatch && fareMatch) {
         const vId = vIdMatch[1];
         const fare = parseHeroPriceNumber(fareMatch[1]);
-        if (fare > 0) {
-          if (vId === '1') extractedStandardPrice = fare;
-          else if (vId === '3') extractedConfortPrice = fare;
-          else if (vId === '654') extractedSuvPrice = fare;
-          else if (extractedStandardPrice === 0) extractedStandardPrice = fare;
-        }
+        if (vId === '1') extractedStandardPrice = fare;
+        else if (vId === '3') extractedConfortPrice = fare;
+        else if (vId === '654') extractedSuvPrice = fare;
       }
     }
 
-    if (extractedStandardPrice > 0 || extractedConfortPrice > 0 || extractedSuvPrice > 0) {
-      if (extractedStandardPrice === 0) extractedStandardPrice = extractedConfortPrice || extractedSuvPrice;
-      if (extractedConfortPrice === 0) extractedConfortPrice = extractedStandardPrice;
-      const chosenPrice = (tariffClass === 'comfort' || tariffClass === 'confort' || tariffClass === 'business')
-        ? (extractedConfortPrice || extractedStandardPrice)
-        : (extractedStandardPrice || extractedConfortPrice);
+    const isSuccess = Boolean(extractedStandardPrice || extractedConfortPrice || extractedSuvPrice);
+    const chosenPrice = (tariffClass === 'comfort' || tariffClass === 'business')
+      ? (extractedConfortPrice || extractedStandardPrice || 0)
+      : (extractedStandardPrice || 0);
 
-      return {
-        success: true,
-        source: 'hero_live',
-        price: chosenPrice,
-        priceFormatted: `${chosenPrice.toLocaleString('fr-FR')} ${cityCurrency}`,
-        pricePerKm: distKm > 0 ? Math.round(chosenPrice / distKm) : 0,
-        priceStandard: extractedStandardPrice || undefined,
-        priceConfort: extractedConfortPrice || undefined,
-        priceSuv: extractedSuvPrice || undefined,
-        availableDriversCount: 1,
-        waitingTimeMinutes: 3,
-        latencyMs: Date.now() - startTime,
-        httpStatus: res.status,
-        rawText: html,
-        rawResponse: html
-      };
-    }
-
-    // Si aucune voiture disponible dans la réponse HTML
+    return {
+      success: isSuccess,
+      source: 'hero_live',
+      price: chosenPrice,
+      priceFormatted: chosenPrice > 0 ? `${chosenPrice.toLocaleString('fr-FR')} ${cityCurrency}` : 'Non disponible',
+      pricePerKm: distKm > 0 && chosenPrice > 0 ? Math.round(chosenPrice / distKm) : 0,
+      priceStandard: extractedStandardPrice || undefined,
+      priceConfort: extractedConfortPrice || undefined,
+      priceSuv: extractedSuvPrice || undefined,
+      availableDriversCount: isSuccess ? 1 : 0,
+      waitingTimeMinutes: isSuccess ? 3 : 0,
+      latencyMs: Date.now() - startTime,
+      httpStatus: 200,
+      errorMessage: isSuccess ? undefined : 'Aucun tarif disponible via Hero Cab',
+      rawText: html,
+      rawResponse: html
+    };
+  } catch (err: any) {
     return {
       success: false,
       source: 'hero_live',
@@ -219,21 +189,8 @@ export async function callHeroStats(
       availableDriversCount: 0,
       waitingTimeMinutes: 0,
       latencyMs: Date.now() - startTime,
-      httpStatus: res.status,
-      errorMessage: 'Aucun véhicule Hero Cab disponible sur ce trajet',
-      rawText: html
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      source: 'hero_live_error',
-      price: 0,
-      priceFormatted: 'Erreur réseau',
-      pricePerKm: 0,
-      availableDriversCount: 0,
-      waitingTimeMinutes: 0,
-      latencyMs: Date.now() - startTime,
-      errorMessage: `Hero Cab live error: ${err.message}`
+      httpStatus: 500,
+      errorMessage: err.message
     };
   }
 }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { TripResult } from '../../types';
+import { PricingCampaign, TripResult } from '../../types';
 import { DataTable, Column } from '../DataTable';
-import { Code, LayoutGrid, Table, ArrowRight, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Code, LayoutGrid, Table, ArrowRight, TrendingDown, ChevronLeft, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import {
   cleanNeighborhoodName,
   renderCellPrice,
@@ -16,6 +16,7 @@ interface PricingResultsTableProps {
   isLoading: boolean;
   cityName: string;
   isPricingRunning: boolean;
+  campaign?: PricingCampaign;
   onInspectTrip: (trip: TripResult) => void;
 }
 
@@ -24,14 +25,25 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
   isLoading,
   cityName,
   isPricingRunning,
+  campaign,
   onInspectTrip
 }) => {
   const [mobileView, setMobileView] = useState<'cards' | 'table'>('cards');
   const [mobilePage, setMobilePage] = useState(1);
+  const [tableFilter, setTableFilter] = useState<'all' | 'shortage' | 'tension'>('all');
   const MOBILE_PAGE_SIZE = 15;
 
+  const shortageCount = useMemo(() => trips.filter(t => t.yangoUnavailable).length, [trips]);
+  const tensionCount = useMemo(() => trips.filter(t => getTripSurgeInfo(t).isSurge || t.jams).length, [trips]);
+
+  const filteredTrips = useMemo(() => {
+    if (tableFilter === 'shortage') return trips.filter(t => t.yangoUnavailable);
+    if (tableFilter === 'tension') return trips.filter(t => getTripSurgeInfo(t).isSurge || t.jams);
+    return trips;
+  }, [trips, tableFilter]);
+
   const normalizedTrips = useMemo(() => {
-    return trips.map((t) => {
+    return filteredTrips.map((t) => {
       const yEco = getYangoPrice(t, 'econom');
       const yConf = getYangoPrice(t, 'business');
       const yConfPlus = getYangoPrice(t, 'comfortplus');
@@ -61,7 +73,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
         tripmaster_moto: tmMoto ?? undefined
       };
     });
-  }, [trips]);
+  }, [filteredTrips]);
 
   const totalMobilePages = Math.ceil(normalizedTrips.length / MOBILE_PAGE_SIZE) || 1;
   const currentMobileTrips = useMemo(() => {
@@ -69,7 +81,30 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
     return normalizedTrips.slice(start, start + MOBILE_PAGE_SIZE);
   }, [normalizedTrips, mobilePage]);
 
+  const progressPercent = useMemo(() => {
+    if (!campaign || !campaign.totalPairs || campaign.totalPairs <= 0) return 0;
+    return Math.min(100, Math.round(((campaign.completedPairs || 0) / campaign.totalPairs) * 100));
+  }, [campaign]);
+
+  const batchProgressPercent = useMemo(() => {
+    if (!campaign || !campaign.totalBatches || campaign.totalBatches <= 0) return progressPercent;
+    return Math.min(100, Math.round(((campaign.completedBatches || 0) / campaign.totalBatches) * 100));
+  }, [campaign, progressPercent]);
+
   const columns: Column<TripResult>[] = useMemo(() => [
+    {
+      key: 'ref',
+      label: 'Réf.',
+      sortable: false,
+      align: 'center',
+      width: '50px',
+      render: (_t: TripResult, index: number) => (
+        <span className="font-mono text-[11px] text-slate-500 font-bold">
+          #{index + 1}
+        </span>
+      ),
+      exportValue: (_t: TripResult) => 'Réf'
+    },
     {
       key: 'origin',
       label: 'Départ',
@@ -105,9 +140,9 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
             {surge.isSurge && (
               <span
                 className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs inline-flex items-center gap-0.5"
-                title={`Forte demande / Majoration Yango constatée (+${surge.surgePct}% vs tarif de référence)`}
+                title={`Forte demande / Tarif ajusté ROUGE constatée (+${surge.surgePct}% vs tarif de référence)`}
               >
-                🔥 Majoré +{surge.surgePct}%
+                🔥 Ajusté +{surge.surgePct}%
               </span>
             )}
           </div>
@@ -115,12 +150,12 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       },
       exportValue: (t) => {
         const surge = getTripSurgeInfo(t);
-        return `${t.distanceKm} km${surge.isSurge ? ` (Majoré +${surge.surgePct}%)` : ''}`;
+        return `${t.distanceKm} km${surge.isSurge ? ` (Ajusté +${surge.surgePct}%)` : ''}`;
       }
     },
     {
       key: 'yango_eco',
-      label: 'Yango Éco',
+      label: 'ROUGE Éco',
       sortable: true,
       align: 'right',
       render: (t) => (
@@ -149,7 +184,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
     },
     {
       key: 'yango_confort',
-      label: 'Yango Conf.',
+      label: 'ROUGE Conf.',
       sortable: true,
       align: 'right',
       render: (t) => renderCellPrice(getYangoPrice(t, 'business'), 'yango'),
@@ -157,7 +192,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
     },
     {
       key: 'yango_confort_plus',
-      label: 'Yango C+',
+      label: 'ROUGE C+',
       sortable: true,
       align: 'right',
       render: (t) => renderCellPrice(getYangoPrice(t, 'comfortplus'), 'yango'),
@@ -165,7 +200,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
     },
     {
       key: 'yango_moto',
-      label: 'Yango Moto',
+      label: 'ROUGE Moto',
       sortable: true,
       align: 'right',
       render: (t) => renderCellPrice(getYangoPrice(t, 'moto'), 'yango'),
@@ -242,26 +277,63 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
     }
   ], [onInspectTrip]);
 
-  if (isPricingRunning) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-12 flex flex-col items-center justify-center space-y-4 shadow-sm min-h-[320px]">
-        <div className="relative flex items-center justify-center">
-          <div className="w-12 h-12 rounded-full border-3 border-slate-100 border-t-[#1F4F4A] animate-spin" />
-        </div>
-        <div className="text-center space-y-1.5 max-w-md">
-          <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-            Tarification en cours d'exécution...
-          </h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Traitement séquentiel des trajets par lots de 10. Le tableau complet s'affichera automatiquement dès la fin du relevé.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
+      {/* Filtres Rapides : Trajets en Pénurie & Trajets en Tension */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs font-bold text-slate-700 mr-1">Filtrer l'affichage :</span>
+
+          <button
+            type="button"
+            onClick={() => setTableFilter('all')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              tableFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Tous ({trips.length})
+          </button>
+
+          {/* Trajets en Pénurie - Gardé affiché */}
+          <button
+            type="button"
+            onClick={() => setTableFilter(prev => prev === 'shortage' ? 'all' : 'shortage')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+              tableFilter === 'shortage'
+                ? 'bg-purple-700 text-white border-purple-700 shadow-2xs'
+                : 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
+            }`}
+            title="Afficher uniquement les trajets en pénurie (aucun véhicule ROUGE)"
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>Trajets en pénurie ({shortageCount})</span>
+          </button>
+
+          {/* Trajets en Tension - Mentionné à partir de maintenant */}
+          <button
+            type="button"
+            onClick={() => setTableFilter(prev => prev === 'tension' ? 'all' : 'tension')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+              tableFilter === 'tension'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                : 'bg-amber-50 text-amber-950 border-amber-300 hover:bg-amber-100'
+            }`}
+            title="Afficher uniquement les trajets en tension (forte demande & tarif ajusté ROUGE)"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-600" />
+            <span>Trajets en tension ({tensionCount})</span>
+          </button>
+        </div>
+
+        {tableFilter !== 'all' && (
+          <span className="text-xs font-semibold text-slate-500">
+            {filteredTrips.length} trajet(s) filtré(s)
+          </span>
+        )}
+      </div>
+
       {/* Mobile View Toggle Switch (Cards vs Table) */}
       <div className="md:hidden flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
         <span className="text-xs font-semibold text-slate-600">
@@ -296,9 +368,10 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       {/* Mobile Cards View */}
       {mobileView === 'cards' && (
         <div className="md:hidden space-y-2.5">
-          {isLoading ? (
-            <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-xl border border-slate-200">
-              Chargement des trajets...
+          {isLoading || isPricingRunning ? (
+            <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center gap-2.5">
+              <div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-[#1F4F4A] animate-spin" />
+              <span>Tarification en cours... Le tableau sera rempli à la fin du pricing ou lorsque vous arrêterez la campagne.</span>
             </div>
           ) : currentMobileTrips.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-xl border border-slate-200">
@@ -334,6 +407,9 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                          <span className="font-mono text-[10px] font-bold text-[#1F4F4A] bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shrink-0">
+                            #{t.id}
+                          </span>
                           <span className="truncate">{orig}</span>
                           <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="truncate">{dest}</span>
@@ -348,7 +424,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                           )}
                           {surge.isSurge && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-950 border border-amber-400">
-                              🔥 Majoré +{surge.surgePct}%
+                              🔥 Ajusté +{surge.surgePct}%
                             </span>
                           )}
                           {t.yangoUnavailable && (
@@ -378,7 +454,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                           ? 'bg-amber-50/60 border-amber-200'
                           : 'bg-slate-50/60 border-slate-100'
                       }`}>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Yango</div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">ROUGE</div>
                         {t.yangoUnavailable ? (
                           <div className="text-xs font-bold text-purple-900 mt-0.5">
                             ⚠️ Pénurie
@@ -420,7 +496,7 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
                           isHeroCheaper ? 'text-emerald-700' : 'text-amber-700'
                         }`}>
                           <TrendingDown className="w-3 h-3" />
-                          {isHeroCheaper ? 'Hero Cab ' : 'Yango '} moins cher de {Math.abs(yEco - hEco).toLocaleString('fr-FR')} FCFA
+                          {isHeroCheaper ? 'Hero Cab ' : 'ROUGE '} moins cher de {Math.abs(yEco - hEco).toLocaleString('fr-FR')} FCFA
                         </span>
                       </div>
                     )}
@@ -459,8 +535,8 @@ export const PricingResultsTable: React.FC<PricingResultsTableProps> = ({
       <div className={mobileView === 'cards' ? 'hidden md:block' : 'block'}>
         <DataTable
           columns={columns}
-          data={normalizedTrips}
-          isLoading={isLoading}
+          data={isPricingRunning ? [] : normalizedTrips}
+          isLoading={isPricingRunning || isLoading}
           hasGroupedHeaders
           rowClassName={(t) => {
             if (t.yangoUnavailable) {

@@ -1,0 +1,239 @@
+[
+  {
+    "step": "cities",
+    "data": {
+      "status": 200,
+      "body": [
+        {
+          "id": 3,
+          "uuid": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
+          "name": "Douala",
+          "country": "Cameroun",
+          "currency": "XAF",
+          "currencySymbol": "FCFA",
+          "center": {
+            "lat": 4.0525,
+            "lng": 9.6963
+          },
+          "airport": {
+            "lat": 4.0134386,
+            "lng": 9.714432417,
+            "name": "Aeroport international de douala",
+            "active": true
+          },
+          "active": true,
+          "autoSchedule": {
+            "slots": [],
+            "enabled": false
+          },
+          "neighborhoodsCount": 183,
+          "activeNeighborhoodsCount": 183
+        }
+      ]
+    }
+  },
+  {
+    "step": "start",
+    "data": {
+      "status": 200,
+      "body": {
+        "message": "Campagne initialisée (1 trajets).",
+        "campaign": {
+          "id": 29,
+          "uuid": "37f4108b-3e6f-4a79-9c90-1b57695a1ddd",
+          "cityId": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
+          "cityName": "Douala",
+          "currency": "XAF",
+          "triggerType": "manual",
+          "triggeredByUserId": "validation",
+          "triggeredByUserName": "Validation User",
+          "triggeredByUserRole": "admin",
+          "status": "in_progress",
+          "totalPairs": 1,
+          "completedPairs": 0,
+          "failedPairs": 0,
+          "startedAt": "2026-10-11T07:33:10.924Z",
+          "isTestSample": true,
+          "sampleLimit": 1,
+          "totalPossiblePairs": 1094,
+          "scopeMode": "global",
+          "hasJamsCount": 0,
+          "logs": [
+            {
+              "timestamp": "2026-10-11T07:33:10.924Z",
+              "level": "info",
+              "message": "Démarrage de la campagne (1 trajets) par Validation User (admin) pour Douala."
+            }
+          ],
+          "totalBatches": 1,
+          "workersCount": 1
+        },
+        "totalChunks": 1,
+        "totalPairs": 1
+      }
+    }
+  },
+  {
+    "step": "afterStart",
+    "data": {
+      "status": 200,
+      "body": [
+        {
+          "id": 29,
+          "uuid": "37f4108b-3e6f-4a79-9c90-1b57695a1ddd",
+          "cityId": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
+          "cityName": "Douala",
+          "currency": "XAF",
+          "triggerType": "manual",
+          "triggeredByUserId": "validation",
+          "triggeredByUserName": "Validation User",
+          "triggeredByUserRole": "admin",
+          "status": "in_progress",
+          "totalPairs": 1,
+          "completedPairs": 0,
+          "failedPairs": 0,
+          "startedAt": "2026-10-11T07:33:10.924Z",
+          "isTestSample": true,
+          "sampleLimit": 1,
+          "totalPossiblePairs": 1094,
+          "scopeMode": "global",
+          "hasJamsCount": 0,
+          "logs": [
+            {
+              "timestamp": "2026-10-11T07:33:10.924Z",
+              "level": "info",
+              "message": "Démarrage de la campagne (1 trajets) par Validation User (admin) pour Douala."
+            }
+          ],
+          "totalBatches": 1,
+          "workersCount": 1
+        },
+        {
+          "id": 29,
+          "uuid": "37f4108b-3e6f-4a79-9c90-1b57695a1ddd",
+          "cityId": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
+          "cityName": "Douala",
+          "currency": "XAF",
+          "triggerType": "manual",
+          "triggeredByUserId": "validation",
+          "triggeredByUserName": "Validation User",
+          "triggeredByUserRole": "admin",
+          "status": "in_progress",
+          "totalPairs": 1,
+          "completedPairs": 0,
+          "failedPairs": 0,
+          "startedAt": "2026-10-11T07:33:10.924Z",
+          "isTestSample": true,
+          "sampleLimit": 1,
+          "totalPossiblePairs": 1094,
+          "scopeMode": "global",
+          "hasJamsCount": 0,
+          "logs": [
+            {
+              "timestamp": "2026-10-11T07:33:10.924Z",
+              "level": "info",
+              "message": "Démarrage de la campagne (1 trajets) par Validation User (admin) pour Douala."
+            }
+          ],
+          "totalBatches": 1,
+          "workersCount": 1
+        }
+      ]
+    }
+  },
+  {
+    "step": "cancel",
+    "data": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Arrêt immédiat de la campagne effectué en mémoire."
+      }
+    }
+  },
+  {
+    "step": "afterCancel",
+    "data": {
+      "status": 200,
+      "body": [
+        {
+          "id": 29,
+          "uuid": "37f4108b-3e6f-4a79-9c90-1b57695a1ddd",
+          "cityId": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
+          "cityName": "Douala",
+          "currency": "XAF",
+          "triggerType": "manual",
+          "triggeredByUserId": "validation",
+          "triggeredByUserName": "Validation User",
+          "triggeredByUserRole": "admin",
+          "status": "in_progress",
+          "totalPairs": 1,
+          "completedPairs": 0,
+          "failedPairs": 0,
+          "startedAt": "2026-10-11T07:33:10.924Z",
+          "isTestSample": true,
+          "sampleLimit": 1,
+          "totalPossiblePairs": 1094,
+          "scopeMode": "global",
+          "hasJamsCount": 0,
+          "logs": [
+            {
+              "timestamp": "2026-10-11T07:33:10.924Z",
+              "level": "info",
+              "message": "Démarrage de la campagne (1 trajets) par Validation User (admin) pour Douala."
+            }
+          ],
+          "totalBatches": 1,
+          "workersCount": 1
+        },
+        {
+          "id": 29,
+          "uuid": "37f4108b-3e6f-4a79-9c90-1b57695a1ddd",
+          "cityId": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
+          "cityName": "Douala",
+          "currency": "XAF",
+          "triggerType": "manual",
+          "triggeredByUserId": "validation",
+          "triggeredByUserName": "Validation User",
+          "triggeredByUserRole": "admin",
+          "status": "in_progress",
+          "totalPairs": 1,
+          "completedPairs": 0,
+          "failedPairs": 0,
+          "startedAt": "2026-10-11T07:33:10.924Z",
+          "isTestSample": true,
+          "sampleLimit": 1,
+          "totalPossiblePairs": 1094,
+          "scopeMode": "global",
+          "hasJamsCount": 0,
+          "logs": [
+            {
+              "timestamp": "2026-10-11T07:33:10.924Z",
+              "level": "info",
+              "message": "Démarrage de la campagne (1 trajets) par Validation User (admin) pour Douala."
+            }
+          ],
+          "totalBatches": 1,
+          "workersCount": 1
+        }
+      ]
+    }
+  },
+  {
+    "step": "delete",
+    "data": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Campagne, résultats et historiques associés supprimés avec succès."
+      }
+    }
+  },
+  {
+    "step": "afterDelete",
+    "data": {
+      "status": 200,
+      "body": []
+    }
+  }
+]

@@ -6,7 +6,7 @@ interface ResetPasswordModalProps {
   isOpen: boolean;
   user: User | null;
   onClose: () => void;
-  onConfirm: (userId: string, newPassword: string) => Promise<void>;
+  onConfirm: (userId: string | number, newPassword: string) => Promise<void>;
   isSubmitting?: boolean;
 }
 

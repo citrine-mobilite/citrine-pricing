@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PricingCampaign, City, Neighborhood } from '../types';
 import { SearchableSelect, SearchableOption } from './SearchableSelect';
-import { detectArrondissement } from '../utils/routeMatrix';
+import { detectArrondissement, getCampaignType } from '../utils/routeMatrix';
 import {
   getCampaignPeakHourInfo,
   matchesTimeSlotFilter,
@@ -66,7 +66,7 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
 
   // Filtres analytiques de l'historique d'évolution
   const [cityFilter, setCityFilter] = useState<string>('all');
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'city_wide' | 'arrondissement' | 'test_sample'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all_city'>('all');
   const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
   const [jamsFilter, setJamsFilter] = useState<TimeSlotFilter>('all');
 
@@ -110,17 +110,14 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
       // 1. Filtre Ville
       if (cityFilter !== 'all' && c.cityId !== cityFilter) return false;
 
-      const isSample = Boolean(c.isTestSample || (c.sampleLimit && c.sampleLimit <= 50) || (c.totalPairs && c.totalPairs <= 50));
-      const isIntra = Boolean(c.scopeMode === 'intra' || c.arrondissement);
-      const isInter = Boolean(c.scopeMode === 'inter' || (c.originArrondissement && c.destArrondissement));
-
-      // 2. Filtre Périmètre / Type de relevé
-      if (scopeFilter === 'test_sample' && !isSample) return false;
-      if (scopeFilter === 'city_wide' && (isSample || isIntra || isInter)) return false;
-      if (scopeFilter === 'arrondissement' && !isIntra && !isInter && arrondissementFilter === 'all') {
-        // Si l'utilisateur clique sur "Relevés par arrondissement" sans choisir un arrondissement précis,
-        // on ne garde que les relevés ciblant spécifiquement un arrondissement
-        return false;
+      // 2. Filtre Type de campagne (les 5 types officiels)
+      if (scopeFilter !== 'all') {
+        const cType = getCampaignType(c);
+        if (scopeFilter === 'all_city') {
+          if (cType !== 'all') return false;
+        } else if (cType !== scopeFilter) {
+          return false;
+        }
       }
 
       // 3. Filtre par Arrondissement sélectionné (infaillible et intelligent)
@@ -166,16 +163,16 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
   }, [filteredCampaigns]);
 
   // Initial selection for pairwise mode: most recent (B) vs previous (A)
-  const [campaignAId, setCampaignAId] = useState<string>(sorted[1]?.id || sorted[0]?.id || '');
-  const [campaignBId, setCampaignBId] = useState<string>(sorted[0]?.id || '');
+  const [campaignAId, setCampaignAId] = useState<string>(String(sorted[1]?.id || sorted[0]?.id || ''));
+  const [campaignBId, setCampaignBId] = useState<string>(String(sorted[0]?.id || ''));
 
   useEffect(() => {
     if (sorted.length > 0) {
-      if (!sorted.some(c => c.id === campaignBId)) {
-        setCampaignBId(sorted[0]?.id || '');
+      if (!sorted.some(c => String(c.id) === String(campaignBId))) {
+        setCampaignBId(String(sorted[0]?.id || ''));
       }
-      if (!sorted.some(c => c.id === campaignAId)) {
-        setCampaignAId(sorted[1]?.id || sorted[0]?.id || '');
+      if (!sorted.some(c => String(c.id) === String(campaignAId))) {
+        setCampaignAId(String(sorted[1]?.id || sorted[0]?.id || ''));
       }
     }
   }, [sorted]);
@@ -820,21 +817,27 @@ export const TemporalComparisonView: React.FC<TemporalComparisonViewProps> = ({
             </select>
           </div>
 
-          {/* 3. Périmètre / Type de relevé */}
+          {/* 3. Type de campagne */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tight flex items-center gap-1">
               <Filter className="w-3 h-3 text-[#1F4F4A]" />
-              <span>Périmètre</span>
+              <span>Type de campagne</span>
             </label>
             <select
               value={scopeFilter}
               onChange={(e) => setScopeFilter(e.target.value as any)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none"
+              className={`w-full rounded-lg px-2.5 py-1.5 font-medium text-xs focus:ring-1 focus:ring-[#1F4F4A] focus:outline-none ${
+                scopeFilter !== 'all'
+                  ? 'bg-emerald-50 border border-emerald-300 text-emerald-900 font-semibold'
+                  : 'bg-slate-50 border border-slate-200 text-slate-700'
+              }`}
             >
-              <option value="all">Tous les périmètres</option>
-              <option value="city_wide">Relevés complets (Ville entière)</option>
-              <option value="arrondissement">Relevés ciblés par arrondissement</option>
-              <option value="test_sample">Échantillons tests (&le; 50 trajets)</option>
+              <option value="all">Tous les types (5 types)</option>
+              <option value="arrondissement">1 Arrondissement</option>
+              <option value="mt_arrondissement">MT Arrondissement</option>
+              <option value="aeroport">Pricing Aéroport</option>
+              <option value="test_25">Test 25</option>
+              <option value="all_city">Tout (Complet)</option>
             </select>
           </div>
 

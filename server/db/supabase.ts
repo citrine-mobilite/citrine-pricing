@@ -1,1013 +1,700 @@
+import 'dotenv/config';
+import { randomUUID } from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-import { City, Neighborhood, User, PricingCampaign, CanonicalTrip } from '../types.js';
-import {
-  cities,
-  neighborhoods,
-  setNeighborhoods,
-  users,
-  memoryCampaigns,
-  saveCitiesDiskBackup,
-  saveNeighborhoodsDiskBackup,
-  saveUsersDiskBackup,
-  saveLocalCampaignsDiskBackup
-} from './memoryStore.js';
+import pg from 'pg';
+import { City, Neighborhood, PricingCampaign, CanonicalTrip, User, TripResult } from '../types.js';
+import type { CampaignShortageRecord } from './shortageStore.js';
 
-dotenv.config();
+const { Pool } = pg;
 
-const DATA_DIR = path.resolve(process.cwd(), 'server/data');
-const CONFIG_FILE = path.resolve(DATA_DIR, 'supabase_config.json');
-const TRIPS_DIR = path.resolve(DATA_DIR, 'trips');
-
-export interface SupabaseConfig {
-  url: string;
-  anonKey: string;
-  serviceRoleKey?: string;
-  connected?: boolean;
-}
-
-let cachedConfig: SupabaseConfig = {
-  url: process.env.SUPABASE_URL || '',
-  anonKey: process.env.SUPABASE_ANON_KEY || '',
-  serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-};
-
-// Charger la config sauvegardée sur disque si présente
-try {
-  if (fs.existsSync(CONFIG_FILE)) {
-    const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (parsed.url && parsed.anonKey) {
-      cachedConfig = { ...cachedConfig, ...parsed };
-    }
+function assertSupabaseResult<T>(result: { data: T | null; error: any }, context: string): T | null {
+  if (result.error) {
+    const message = result.error?.message || JSON.stringify(result.error);
+    const rlsHint = /new row violates row-level security policy/i.test(message)
+      ? ' RLS policy violation: the request is likely using the anon key instead of the service-role key. Set SUPABASE_SERVICE_ROLE_KEY in the server environment and restart the app.'
+      : '';
+    throw new Error(`[Supabase] ${context}: ${message}${rlsHint}`);
   }
-} catch (e: any) {
-  console.warn('[Supabase] Warning reading config file:', e.message);
+  return result.data ?? null;
 }
 
-let supabaseClient: SupabaseClient | null = null;
+export const SUPABASE_URL = process.env.SUPABASE_URL || '';
+export const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+export const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+export const DATABASE_URL = process.env.DATABASE_URL || '';
 
-export function getSupabaseClient(): SupabaseClient | null {
-  if (supabaseClient) return supabaseClient;
-  const url = cachedConfig.url;
-  const key = cachedConfig.serviceRoleKey || cachedConfig.anonKey;
-  if (!url || !key) return null;
+const HAS_SERVICE_ROLE_KEY = Boolean(SUPABASE_SERVICE_ROLE_KEY);
+const SUPABASE_SERVER_KEY = HAS_SERVICE_ROLE_KEY ? SUPABASE_SERVICE_ROLE_KEY : SUPABASE_ANON_KEY;
 
-  try {
-    supabaseClient = createClient(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    });
-    return supabaseClient;
-  } catch (err: any) {
-    console.warn('[Supabase] Client init failed:', err.message);
-    return null;
-  }
+if (!HAS_SERVICE_ROLE_KEY && SUPABASE_URL) {
+  console.warn('[Supabase] SUPABASE_SERVICE_ROLE_KEY is not configured. Writes will use the anon key.');
 }
 
-export function saveSupabaseConfig(config: Partial<SupabaseConfig>): SupabaseConfig {
-  cachedConfig = {
-    ...cachedConfig,
-    ...config
-  };
-  supabaseClient = null; // Re-create on next get
+export const supabase: SupabaseClient = (SUPABASE_URL && SUPABASE_SERVER_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, {
+      auth: { persistSession: false }
+    })
+  : createClient('https://placeholder.supabase.co', 'placeholder', { auth: { persistSession: false } });
 
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cachedConfig, null, 2), 'utf8');
-  } catch (e: any) {
-    console.warn('[Supabase] Warning writing config file:', e.message);
-  }
+export const pgPool = DATABASE_URL
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    })
+  : ({
+      query: async () => ({ rows: [] }),
+      on: () => {}
+    } as unknown as InstanceType<typeof Pool>);
 
-  return cachedConfig;
-}
-
-export function getSupabaseConfig(): SupabaseConfig {
-  return { ...cachedConfig };
-}
-
-export async function testSupabaseConnection(): Promise<{ success: boolean; message: string; details?: any }> {
-  const client = getSupabaseClient();
-  if (!client) {
-    return { success: false, message: 'URL ou Clé API Supabase non configurée.' };
-  }
-
-  try {
-    const { data, error } = await client.from('cities').select('id, name').limit(5);
-    if (error) {
-      if (error.code === '42P01') {
-        return {
-          success: true,
-          message: 'Connexion à Supabase établie ! (Note: La table "cities" n’a pas encore été créée, veuillez appliquer le script SQL fourni).'
-        };
-      }
-      return { success: false, message: `Erreur Supabase: ${error.message} (${error.code})` };
-    }
-    return {
-      success: true,
-      message: `Connexion Supabase réussie avec succès ! (${data?.length || 0} ville(s) trouvée(s) en base)`
-    };
-  } catch (err: any) {
-    return { success: false, message: `Connexion impossible: ${err.message}` };
-  }
-}
-
-/**
- * Exécute un upsert résilient dans Supabase :
- * Si une colonne spécifique n'existe pas en base (code 42703), retombe automatiquement
- * sur un upsert simplifié basé sur les clés primaires et la colonne JSONB `data`.
- */
-async function resilientUpsert(
-  table: string,
-  fullRecord: Record<string, any>,
-  fallbackRecord?: Record<string, any>
-): Promise<boolean> {
-  const client = getSupabaseClient();
-  if (!client) return false;
-
-  try {
-    const { error } = await client.from(table).upsert(fullRecord, { onConflict: 'id' });
-    if (!error) return true;
-
-    // Colonne manquante dans le schéma PostgreSQL existant (42703 ou PGRST204)
-    if ((error.code === '42703' || error.code === 'PGRST204') && fallbackRecord) {
-      const { error: fallbackErr } = await client.from(table).upsert(fallbackRecord, { onConflict: 'id' });
-      if (!fallbackErr) return true;
-      console.warn(`[Supabase] Fallback upsert failed for ${table}:`, fallbackErr.message);
-      return false;
-    }
-
-    if (error.code !== '42P01') {
-      console.warn(`[Supabase] Upsert warning on ${table}:`, error.message);
-    }
-    return false;
-  } catch (e: any) {
-    console.warn(`[Supabase] Exception upserting to ${table}:`, e.message);
-    return false;
-  }
-}
-
-// ==========================================
-// 1. CITIES (Villes)
-// ==========================================
-
-export function mapCityToSupabase(c: City) {
-  const strId = String(c.id);
-  return {
-    id: strId,
-    uuid: c.uuid || strId,
-    name: c.name,
-    country: c.country,
-    currency: c.currency,
-    currency_symbol: c.currencySymbol || c.currency,
-    active: c.active !== undefined ? Boolean(c.active) : true,
-    center: c.center || null,
-    airport: c.airport || null,
-    auto_schedule: c.autoSchedule || null,
-    updated_at: new Date().toISOString(),
-    data: c
-  };
-}
-
-export async function upsertCityToSupabase(city: City): Promise<void> {
-  const record = mapCityToSupabase(city);
-  await resilientUpsert('cities', record, {
-    id: record.id,
-    uuid: record.uuid,
-    name: record.name,
-    country: record.country,
-    currency: record.currency,
-    active: record.active,
-    data: city
+if (DATABASE_URL && pgPool && typeof pgPool.on === 'function') {
+  pgPool.on('error', (err) => {
+    console.warn('[PostgreSQL Pool Warning]:', err.message);
   });
 }
 
-export async function deleteCityFromSupabase(cityId: string | number): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
-  try {
-    const strId = String(cityId).trim();
-    const isNum = /^\d+$/.test(strId);
-    if (isNum) {
-      await client.from('cities').delete().eq('id', parseInt(strId, 10));
-      await client.from('neighborhoods').delete().eq('city_id', parseInt(strId, 10));
-    }
-    await client.from('cities').delete().eq('uuid', strId);
-    await client.from('neighborhoods').delete().eq('city_id', strId);
-  } catch (e: any) {
-    console.warn('[Supabase] Warning deleting city:', e.message);
-  }
+if (SUPABASE_URL) {
+  console.log('[Supabase] Initialisé avec succès sur:', SUPABASE_URL);
 }
 
-export async function fetchCitiesFromSupabase(): Promise<City[] | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
-  try {
-    const { data, error } = await client.from('cities').select('*');
-    if (error || !data || data.length === 0) return null;
+// ----------------- VILLES ----------------- //
 
-    return data.map((row: any) => {
-      if (row.data && typeof row.data === 'object' && row.data.name) {
-        return {
-          ...row.data,
-          id: String(row.id),
-          uuid: row.uuid || row.data.uuid || String(row.id)
-        };
-      }
-      return {
-        id: String(row.id),
-        uuid: row.uuid || String(row.id),
+export async function fetchCitiesFromSupabase(): Promise<City[]> {
+  try {
+    const { data, error } = await supabase
+      .from('cities')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (error) throw error;
+    if (data && data.length > 0) {
+      return data.map((row: any) => ({
+        id: row.id,
+        uuid: row.uuid,
         name: row.name,
-        country: row.country || 'Cameroun',
-        currency: row.currency || 'XAF',
-        currencySymbol: row.currency_symbol || row.currency || 'FCFA',
-        active: row.active !== undefined ? Boolean(row.active) : true,
+        country: row.country,
+        currency: row.currency,
+        currencySymbol: row.currency_symbol || 'FCFA',
         center: row.center || { lat: 4.0511, lng: 9.7679 },
         airport: row.airport || undefined,
+        active: Boolean(row.active),
         autoSchedule: row.auto_schedule || { enabled: false, slots: [] }
-      };
-    });
-  } catch {
-    return null;
-  }
-}
-
-// ==========================================
-// 2. NEIGHBORHOODS (Quartiers)
-// ==========================================
-
-export function mapNeighborhoodToSupabase(n: Neighborhood) {
-  const strId = String(n.id);
-  return {
-    id: strId,
-    uuid: n.uuid || strId,
-    city_id: String(n.cityId),
-    name: n.name,
-    ville: n.ville || null,
-    departement: n.departement || null,
-    arrondissement: n.arrondissement || null,
-    full_address: n.fullAddress || null,
-    lat: Number(n.lat),
-    lng: Number(n.lng),
-    active: n.active !== undefined ? Boolean(n.active) : true,
-    status: n.status || (n.active === false ? 'inactif' : 'actif'),
-    zone: n.zone || null,
-    zone_type: n.zoneType || null,
-    district: n.district || null,
-    updated_at: new Date().toISOString(),
-    data: n
-  };
-}
-
-export async function upsertNeighborhoodToSupabase(nb: Neighborhood): Promise<void> {
-  const record = mapNeighborhoodToSupabase(nb);
-  await resilientUpsert('neighborhoods', record, {
-    id: record.id,
-    uuid: record.uuid,
-    city_id: record.city_id,
-    name: record.name,
-    lat: record.lat,
-    lng: record.lng,
-    active: record.active,
-    data: nb
-  });
-}
-
-export async function batchUpsertNeighborhoodsToSupabase(nbs: Neighborhood[]): Promise<number> {
-  const client = getSupabaseClient();
-  if (!client || !Array.isArray(nbs) || nbs.length === 0) return 0;
-
-  try {
-    const records = nbs.map(mapNeighborhoodToSupabase);
-    // Insertion par blocs de 100 pour respecter les limites HTTP
-    const chunkSize = 100;
-    let saved = 0;
-    for (let i = 0; i < records.length; i += chunkSize) {
-      const slice = records.slice(i, i + chunkSize);
-      const { error } = await client.from('neighborhoods').upsert(slice, { onConflict: 'id' });
-      if (!error) {
-        saved += slice.length;
-      } else if (error.code === '42703') {
-        const fallbacks = slice.map(r => ({
-          id: r.id,
-          uuid: r.uuid,
-          city_id: r.city_id,
-          name: r.name,
-          lat: r.lat,
-          lng: r.lng,
-          active: r.active,
-          data: r.data
-        }));
-        await client.from('neighborhoods').upsert(fallbacks, { onConflict: 'id' });
-        saved += slice.length;
-      }
+      }));
     }
-    return saved;
-  } catch (e: any) {
-    console.warn('[Supabase] Batch upsert neighborhoods notice:', e.message);
-    return 0;
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur lecture villes:', err.message);
+  }
+  return [];
+}
+
+export async function upsertCityInSupabase(city: City): Promise<void> {
+  try {
+    const payload = {
+      id: typeof city.id === 'number' ? city.id : undefined,
+      uuid: city.uuid || `city_${city.id}`,
+      name: city.name,
+      country: city.country || 'Cameroun',
+      currency: city.currency || 'XAF',
+      currency_symbol: city.currencySymbol || 'FCFA',
+      center: city.center,
+      airport: city.airport || null,
+      active: city.active ?? true,
+      auto_schedule: city.autoSchedule || { enabled: false, slots: [] }
+    };
+    const { data, error } = await supabase.from('cities').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('[Supabase] Erreur écriture ville (non bloquant):', error.message);
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur réseau écriture ville (mode résilient local):', err?.message || err);
   }
 }
 
-export async function deleteNeighborhoodFromSupabase(nbId: string | number): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
+export async function deleteCityFromSupabase(cityIdOrUuid: string | number): Promise<void> {
   try {
-    const strId = String(nbId).trim();
-    const isNum = /^\d+$/.test(strId);
+    const isNum = typeof cityIdOrUuid === 'number' || /^\d+$/.test(String(cityIdOrUuid));
     if (isNum) {
-      await client.from('neighborhoods').delete().eq('id', parseInt(strId, 10));
+      await pgPool.query('DELETE FROM public.neighborhoods WHERE city_id = $1', [String(cityIdOrUuid)]);
+      await pgPool.query('DELETE FROM public.cities WHERE id = $1', [Number(cityIdOrUuid)]);
+    } else {
+      await pgPool.query('DELETE FROM public.neighborhoods WHERE city_id = $1', [String(cityIdOrUuid)]);
+      await pgPool.query('DELETE FROM public.cities WHERE uuid = $1', [String(cityIdOrUuid)]);
     }
-    await client.from('neighborhoods').delete().eq('uuid', strId);
-  } catch (e: any) {
-    console.warn('[Supabase] Warning deleting neighborhood:', e.message);
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur suppression ville:', err.message);
   }
 }
 
-export async function clearCityNeighborhoodsInSupabase(cityId: string): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
-  try {
-    const strId = String(cityId);
-    await client.from('neighborhoods').delete().eq('city_id', strId);
-  } catch (e: any) {
-    console.warn('[Supabase] Warning clearing city neighborhoods:', e.message);
-  }
-}
+// ----------------- QUARTIERS ----------------- //
 
-export async function fetchNeighborhoodsFromSupabase(): Promise<Neighborhood[] | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
+export async function fetchNeighborhoodsFromSupabase(cityId?: string): Promise<Neighborhood[]> {
   try {
-    const { data, error } = await client.from('neighborhoods').select('*').limit(3000);
-    if (error || !data || data.length === 0) return null;
-
-    return data.map((row: any) => {
-      if (row.data && typeof row.data === 'object' && row.data.name) {
-        return {
-          ...row.data,
-          id: String(row.id),
-          uuid: row.uuid || row.data.uuid || String(row.id),
-          cityId: String(row.city_id || row.data.cityId)
-        };
-      }
-      return {
-        id: String(row.id),
-        uuid: row.uuid || String(row.id),
+    let query = supabase.from('neighborhoods').select('*').order('name', { ascending: true });
+    if (cityId) {
+      query = query.eq('city_id', String(cityId));
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    if (data && data.length > 0) {
+      return data.map((row: any) => ({
+        id: row.id,
+        uuid: row.uuid,
         cityId: String(row.city_id),
         name: row.name,
-        ville: row.ville || undefined,
-        departement: row.departement || undefined,
-        arrondissement: row.arrondissement || undefined,
-        fullAddress: row.full_address || undefined,
+        ville: row.ville,
+        departement: row.departement,
+        arrondissement: row.arrondissement,
+        fullAddress: row.full_address,
         lat: Number(row.lat),
         lng: Number(row.lng),
-        active: row.active !== undefined ? Boolean(row.active) : true,
-        status: row.status || (row.active === false ? 'inactif' : 'actif'),
-        zone: row.zone || undefined,
-        zoneType: row.zone_type || undefined,
-        district: row.district || undefined
-      };
-    });
-  } catch {
-    return null;
+        active: Boolean(row.active),
+        status: row.status,
+        zone: row.zone,
+        zoneType: row.zone_type || 'residential',
+        district: row.district,
+        orderIndex: row.order_index || 0,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur lecture quartiers:', err.message);
   }
+  return [];
 }
 
-// ==========================================
-// 3. USERS (Utilisateurs & Rôles)
-// ==========================================
-
-export function mapUserToSupabase(u: User) {
-  const strId = String(u.id);
-  return {
-    id: strId,
-    uuid: u.uuid || strId,
-    name: u.name,
-    email: u.email.toLowerCase().trim(),
-    role: u.role || 'employe',
-    active: u.active !== undefined ? Boolean(u.active) : true,
-    password_hash: u.passwordHash || null,
-    last_login_at: u.lastLoginAt || null,
-    created_at: u.createdAt || new Date().toISOString(),
-    data: { ...u }
-  };
-}
-
-export async function upsertUserToSupabase(user: User): Promise<void> {
-  const record = mapUserToSupabase(user);
-  await resilientUpsert('users', record, {
-    id: record.id,
-    uuid: record.uuid,
-    name: record.name,
-    email: record.email,
-    role: record.role,
-    active: record.active,
-    password_hash: record.password_hash,
-    data: record.data
-  });
-}
-
-export async function deleteUserFromSupabase(userId: string): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
-  try {
-    const strId = String(userId);
-    await client.from('users').delete().or(`id.eq.${strId},uuid.eq.${strId}`);
-  } catch (e: any) {
-    console.warn('[Supabase] Warning deleting user:', e.message);
+function getStableNeighborhoodId(nb: Neighborhood): number {
+  const rawSeed = String(nb.uuid || nb.id || `${nb.cityId}:${nb.name}:${nb.lat}:${nb.lng}`);
+  let hash = 0;
+  for (let i = 0; i < rawSeed.length; i++) {
+    hash = (hash * 31 + rawSeed.charCodeAt(i)) >>> 0;
   }
+  return (hash % 2147483647) + 1;
 }
 
-export async function fetchUsersFromSupabase(): Promise<User[] | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
+export async function upsertNeighborhoodsInSupabase(nbs: Neighborhood[]): Promise<void> {
+  if (!nbs || nbs.length === 0) return;
   try {
-    const { data, error } = await client.from('users').select('*');
-    if (error || !data || data.length === 0) return null;
+    const rows = nbs.map((nb) => {
+      const stableId = typeof nb.id === 'number' && Number.isFinite(nb.id) ? nb.id : getStableNeighborhoodId(nb);
+      const uuid = nb.uuid && nb.uuid.trim() ? nb.uuid.replace(/^nb_(?:[a-z0-9]+_)?/i, '') : randomUUID();
 
-    return data.map((row: any) => {
-      if (row.data && typeof row.data === 'object' && row.data.email) {
-        return {
-          ...row.data,
-          id: String(row.id),
-          uuid: row.uuid || row.data.uuid || String(row.id),
-          passwordHash: row.password_hash || row.data.passwordHash
-        };
-      }
       return {
-        id: String(row.id),
-        uuid: row.uuid || String(row.id),
-        name: row.name,
-        email: row.email,
-        role: row.role || 'employe',
-        active: row.active !== undefined ? Boolean(row.active) : true,
-        passwordHash: row.password_hash || undefined,
-        createdAt: row.created_at || new Date().toISOString(),
-        lastLoginAt: row.last_login_at || undefined
+        id: stableId,
+        uuid,
+        city_id: String(nb.cityId),
+        name: nb.name,
+        ville: nb.ville || null,
+        departement: nb.departement || null,
+        arrondissement: nb.arrondissement || null,
+        full_address: nb.fullAddress || null,
+        lat: nb.lat,
+        lng: nb.lng,
+        active: nb.active ?? true,
+        status: nb.status ? String(nb.status) : null,
+        zone: nb.zone || null,
+        zone_type: nb.zoneType || 'residential',
+        district: nb.district || null,
+        order_index: nb.orderIndex || 0,
+        updated_at: new Date().toISOString()
       };
     });
-  } catch {
-    return null;
-  }
-}
-
-// ==========================================
-// 4. CAMPAIGNS & TRIPS
-// ==========================================
-
-export function mapCampaignToSupabase(c: PricingCampaign | any) {
-  const strId = String(c.id || '');
-  const isNum = /^\d+$/.test(strId);
-  const rec: Record<string, any> = {
-    uuid: c.uuid || strId,
-    city_id: String(c.cityId || ''),
-    city_name: c.cityName || 'Douala',
-    currency: c.currency || 'XAF',
-    status: c.status || 'completed',
-    total_pairs: c.totalPairs || 0,
-    completed_pairs: c.completedPairs || 0,
-    failed_pairs: c.failedPairs || 0,
-    duration_seconds: c.durationSeconds || 0,
-    avg_price: c.avgPrice || null,
-    started_at: c.startedAt || null,
-    finished_at: c.finishedAt || c.completedAt || null,
-    trigger_type: c.triggerType || 'manual',
-    triggered_by_user_id: c.triggeredByUserId ? String(c.triggeredByUserId) : null,
-    triggered_by_user_name: c.triggeredByUserName || null,
-    hero_stats: c.heroStats || null,
-    trip_master_stats: c.tripMasterStats || null,
-    arrondissement_stats: c.arrondissementStats || null
-  };
-  if (isNum) {
-    rec.id = parseInt(strId, 10);
-  }
-  return rec;
-}
-
-export async function saveCampaignToSupabase(campaign: any): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
-
-  const record = mapCampaignToSupabase(campaign);
-  try {
-    const { error } = await client.from('campaigns').upsert(record, { onConflict: 'uuid' });
+    const { data, error } = await supabase.from('neighborhoods').upsert(rows, { onConflict: 'uuid' });
     if (error) {
-      console.warn('[Supabase] Warning saving campaign:', error.message);
-    } else {
-      console.log(`[Supabase] Campagne uuid=${record.uuid} persistée avec succès.`);
+      console.warn('[Supabase] Erreur écriture quartiers (non bloquant):', error.message);
     }
-  } catch (e: any) {
-    console.warn('[Supabase] Error saving campaign:', e.message);
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur réseau écriture quartiers (mode résilient local):', err?.message || err);
   }
 }
 
-export async function deleteCampaignFromSupabase(campaignId: string | number): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
+export async function deleteNeighborhoodFromSupabase(nbIdOrUuid: string | number): Promise<void> {
   try {
-    const strId = String(campaignId).trim();
-    const isNum = /^\d+$/.test(strId);
-
+    const isNum = typeof nbIdOrUuid === 'number' || /^\d+$/.test(String(nbIdOrUuid));
     if (isNum) {
-      await client.from('campaigns').delete().eq('id', parseInt(strId, 10));
-      await client.from('campaign_trips').delete().eq('campaign_id', parseInt(strId, 10));
-      await client.from('shortages').delete().eq('campaign_id', parseInt(strId, 10));
+      await pgPool.query('DELETE FROM public.neighborhoods WHERE id = $1', [Number(nbIdOrUuid)]);
+    } else {
+      await pgPool.query('DELETE FROM public.neighborhoods WHERE uuid = $1', [String(nbIdOrUuid)]);
     }
-    await client.from('campaigns').delete().eq('uuid', strId);
-    await client.from('campaign_trips').delete().eq('campaign_id', strId);
-    await client.from('shortages').delete().eq('campaign_id', strId);
-  } catch (e: any) {
-    console.warn('[Supabase] Warning deleting campaign:', e.message);
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur suppression quartier:', err.message);
   }
 }
 
-export async function deleteCanonicalCampaign(campaignId: string | number): Promise<void> {
-  const strId = String(campaignId);
+export async function deleteNeighborhoodsByCityFromSupabase(cityId: string | number): Promise<void> {
   try {
-    const filePath = path.resolve(TRIPS_DIR, `canonical_${strId}.json`);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch {}
-  await deleteCampaignFromSupabase(campaignId).catch(() => {});
-}
-
-export async function deleteAllCampaignsFromSupabase(): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
-  try {
-    await client.from('campaign_trips').delete().neq('id', '');
-    await client.from('shortages').delete().neq('id', '');
-    await client.from('campaigns').delete().neq('id', '');
-  } catch (e: any) {
-    console.warn('[Supabase] Warning deleting all campaigns:', e.message);
+    await pgPool.query('DELETE FROM public.neighborhoods WHERE city_id = $1', [String(cityId)]);
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur suppression quartiers de la ville:', err.message);
   }
 }
 
-export async function fetchCampaignsFromSupabase(): Promise<any[] | null> {
-  const client = getSupabaseClient();
-  if (!client) return null;
+// ----------------- UTILISATEURS ----------------- //
+
+export async function fetchUsersFromSupabase(): Promise<User[]> {
   try {
-    const { data, error } = await client
+    const { data, error } = await supabase.from('users').select('*').order('id', { ascending: true });
+    if (error) throw error;
+    if (data && data.length > 0) {
+      return data.map((u: any) => ({
+        id: u.id,
+        uuid: u.uuid,
+        name: u.name,
+        email: u.email,
+        role: u.role || 'employe',
+        active: Boolean(u.active),
+        createdAt: u.created_at,
+        lastLoginAt: u.last_login_at,
+        passwordHash: u.password_hash
+      }));
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur lecture utilisateurs:', err.message);
+  }
+  return [];
+}
+
+export async function upsertUserInSupabase(user: User): Promise<void> {
+  try {
+    const payload = {
+      id: typeof user.id === 'number' ? user.id : undefined,
+      uuid: user.uuid || `usr_${user.id}`,
+      name: user.name,
+      email: user.email,
+      role: user.role || 'employe',
+      active: user.active ?? true,
+      password_hash: user.passwordHash || null,
+      last_login_at: user.lastLoginAt || new Date().toISOString()
+    };
+    const { data, error } = await supabase.from('users').upsert(payload, { onConflict: 'email' });
+    if (error) {
+      console.warn('[Supabase] Erreur écriture utilisateur (non bloquant):', error.message);
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur réseau écriture utilisateur (mode résilient local):', err?.message || err);
+  }
+}
+
+export async function deleteUserFromSupabase(userIdOrUuid: string | number): Promise<void> {
+  try {
+    const isNum = typeof userIdOrUuid === 'number' || /^\d+$/.test(String(userIdOrUuid));
+    if (isNum) {
+      await pgPool.query('DELETE FROM public.users WHERE id = $1', [Number(userIdOrUuid)]);
+    } else {
+      await pgPool.query('DELETE FROM public.users WHERE uuid = $1', [String(userIdOrUuid)]);
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur suppression utilisateur:', err.message);
+  }
+}
+
+// ----------------- CAMPAGNES ----------------- //
+
+function isMissingColumnError(error: any): boolean {
+  const message = error?.message || error?.details || '';
+  return /Could not find the '.*' column|column .* does not exist|does not exist in the schema cache/i.test(message);
+}
+
+function isSchemaCompatibilityError(error: any): boolean {
+  const message = error?.message || error?.details || '';
+  return isMissingColumnError(error) || /no unique or exclusion constraint matching the ON CONFLICT specification/i.test(message);
+}
+
+function toLegacyCompatibleRow(row: Record<string, any>, omitKeys: string[] = []): Record<string, any> {
+  return Object.fromEntries(Object.entries(row).filter(([key, value]) => {
+    if (omitKeys.includes(key)) return false;
+    return value !== undefined;
+  }));
+}
+
+function removeUnsupportedColumns(row: Record<string, any>, unsupportedKeys: string[]): Record<string, any> {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !unsupportedKeys.includes(key) && row[key] !== undefined));
+}
+
+function getNumericCampaignId(campaignId: string | number): number | undefined {
+  if (typeof campaignId === 'number' && Number.isFinite(campaignId)) return campaignId;
+  const trimmed = String(campaignId).trim();
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
+}
+
+function getCheapestShortageProvider(record: CampaignShortageRecord): string | null {
+  const prices = [
+    { provider: 'yango', price: record.priceYangoEco },
+    { provider: 'heroCab', price: record.priceHeroEco }
+  ].filter((entry): entry is { provider: string; price: number } =>
+    typeof entry.price === 'number' && Number.isFinite(entry.price) && entry.price > 0
+  );
+
+  prices.sort((a, b) => a.price - b.price);
+  return prices[0]?.provider || null;
+}
+
+export async function fetchCampaignsFromSupabase(): Promise<PricingCampaign[]> {
+  try {
+    const { data, error } = await supabase
       .from('campaigns')
       .select('*')
-      .order('started_at', { ascending: false })
-      .limit(50);
+      .order('started_at', { ascending: false });
 
-    if (error || !data || data.length === 0) return null;
-
-    return data.map((row: any) => {
-      if (row.data && typeof row.data === 'object' && row.data.cityName) {
-        return {
-          ...row.data,
-          id: String(row.id),
-          uuid: row.uuid || row.data.uuid || String(row.id)
-        };
-      }
-      return {
-        id: String(row.id),
-        uuid: row.uuid || String(row.id),
+    if (error) throw error;
+    if (data && data.length > 0) {
+      return data.map((row: any) => ({
+        id: row.id,
+        uuid: row.uuid,
         cityId: row.city_id,
         cityName: row.city_name,
         currency: row.currency || 'XAF',
+        triggerType: row.trigger_type || 'manual',
+        triggeredByUserId: row.triggered_by_user_id,
+        triggeredByUserName: row.triggered_by_user_name,
         status: row.status,
         totalPairs: row.total_pairs || 0,
         completedPairs: row.completed_pairs || 0,
         failedPairs: row.failed_pairs || 0,
         durationSeconds: row.duration_seconds || 0,
         avgPrice: row.avg_price || 0,
-        startedAt: row.started_at,
-        completedAt: row.completed_at,
-        triggerType: row.trigger_type || 'manual',
-        deltaStats: row.delta_stats || undefined,
+        avgDistanceKm: Number(row.avg_distance_km) || 0,
+        avgPricePerKm: row.avg_price_per_km || 0,
         heroStats: row.hero_stats || undefined,
         tripMasterStats: row.trip_master_stats || undefined,
-        arrondissementStats: row.arrondissement_stats || undefined
-      };
-    });
-  } catch {
-    return null;
-  }
-}
-
-export async function initCanonicalCampaignResults(_campaignId: string, _cityName: string): Promise<void> {}
-
-export async function saveCanonicalCampaignBatch(
-  campaignId: string | number,
-  chunkIndex: number,
-  chunkTrips: any[],
-  cityName?: string
-): Promise<void> {
-  const strId = String(campaignId);
-  try {
-    if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
-    const filePath = path.resolve(TRIPS_DIR, `canonical_${strId}_batch_${chunkIndex}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(chunkTrips, null, 2), 'utf8');
-  } catch (e: any) {
-    console.warn(`[Supabase/Disk] Warning saving batch ${chunkIndex}:`, e.message);
-  }
-
-  // Synchronisation en base Supabase en arrière-plan non bloquant
-  const client = getSupabaseClient();
-  if (client && Array.isArray(chunkTrips) && chunkTrips.length > 0) {
-    try {
-      const records = chunkTrips.map((t: any) => ({
-        id: String(t.id || `${strId}_${t.origin}_${t.destination}`),
-        campaign_id: strId,
-        origin: t.origin,
-        destination: t.destination,
-        distance_km: t.distanceKm || t.distance_km || 0,
-        duration_min: t.durationMin || t.duration_min || 0,
-        jams: Boolean(t.jams),
-        yango_unavailable: Boolean(t.yangoUnavailable || t.yango_unavailable),
-        prices: t.prices || {},
-        cheapest: t.cheapest || {},
-        created_at: t.createdAt || new Date().toISOString(),
-        data: t
+        arrondissementStats: row.arrondissement_stats || undefined,
+        hasJamsCount: row.has_jams_count || 0,
+        yangoShortageCount: row.yango_shortage_count || 0,
+        canonicalTripsCount: row.canonical_trips_count || 0,
+        logs: Array.isArray(row.logs) ? row.logs : [],
+        comment: row.comment,
+        timeSlotOverride: row.time_slot_override,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at
       }));
-      await client.from('campaign_trips').upsert(records, { onConflict: 'id' });
-    } catch {}
-  }
-}
-
-export async function saveCanonicalCampaignResults(
-  campaignId: string | number,
-  canonicalTrips: any[],
-  _cityName: string
-): Promise<void> {
-  const strId = String(campaignId);
-  try {
-    if (!fs.existsSync(TRIPS_DIR)) fs.mkdirSync(TRIPS_DIR, { recursive: true });
-    const filePath = path.resolve(TRIPS_DIR, `canonical_${strId}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(canonicalTrips, null, 2), 'utf8');
-  } catch (e: any) {
-    console.warn(`[Supabase/Disk] Warning saving canonical results for ${strId}:`, e.message);
-  }
-}
-
-export async function loadCanonicalCampaignResults(campaignId: string | number): Promise<any[]> {
-  const strId = String(campaignId);
-  try {
-    const filePath = path.resolve(TRIPS_DIR, `canonical_${strId}.json`);
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) return data;
     }
-  } catch (e: any) {
-    console.warn(`[Supabase/Disk] Warning loading canonical results for ${strId}:`, e.message);
-  }
-
-  // Tenter de charger depuis Supabase si le fichier disque est absent
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const { data } = await client
-        .from('campaign_trips')
-        .select('*')
-        .eq('campaign_id', strId)
-        .limit(3000);
-      if (data && data.length > 0) {
-        return data.map((r: any) => (r.data && r.data.prices ? r.data : {
-          id: r.id,
-          origin: r.origin,
-          destination: r.destination,
-          distanceKm: r.distance_km,
-          durationMin: r.duration_min,
-          jams: r.jams,
-          yangoUnavailable: r.yango_unavailable,
-          prices: r.prices,
-          cheapest: r.cheapest
-        }));
-      }
-    } catch {}
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur lecture campagnes:', err.message);
   }
   return [];
 }
 
-// ==========================================
-// 5. SHORTAGES (Pénuries & Ruptures)
-// ==========================================
-
-export async function upsertShortageToSupabase(shortage: any): Promise<void> {
-  const strId = String(shortage.id);
-  const record = {
-    id: strId,
-    campaign_id: String(shortage.campaignId || shortage.campaign_id),
-    city_name: shortage.cityName || shortage.city_name || 'Douala',
-    origin: shortage.origin,
-    destination: shortage.destination,
-    arrondissement_origin: shortage.arrondissementOrigin || shortage.arrondissement_origin || null,
-    arrondissement_dest: shortage.arrondissementDest || shortage.arrondissement_dest || null,
-    class_name: shortage.className || shortage.class_name || 'econom',
-    reason: shortage.reason || 'no_free_cars_nearby',
-    timestamp: shortage.timestamp || new Date().toISOString(),
-    distance_km: shortage.distanceKm || shortage.distance_km || null,
-    waiting_minutes: shortage.waitingMinutes || shortage.waiting_minutes || null,
-    data: shortage
-  };
-
-  await resilientUpsert('shortages', record, {
-    id: record.id,
-    campaign_id: record.campaign_id,
-    city_name: record.city_name,
-    origin: record.origin,
-    destination: record.destination,
-    reason: record.reason,
-    timestamp: record.timestamp,
-    data: shortage
-  });
-}
-
-export async function deleteShortageFromSupabase(shortageId: string): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) return;
+export async function upsertCampaignInSupabase(camp: PricingCampaign): Promise<void> {
   try {
-    const strId = String(shortageId);
-    await client.from('shortages').delete().eq('id', strId);
-  } catch (e: any) {
-    console.warn('[Supabase] Warning deleting shortage:', e.message);
+    const totalPairs = Math.max(0, Number(camp.totalPairs) || 0);
+    const completedPairs = Math.max(0, Number(camp.completedPairs) || 0);
+    const normalizedCamp: PricingCampaign = {
+      ...camp,
+      totalPairs,
+      completedPairs,
+      failedPairs: Math.max(0, Number(camp.failedPairs) || 0)
+    };
+
+    const campaignUuid = (normalizedCamp.uuid || randomUUID()).replace(/^campaign_[a-z0-9-]+$/i, '').trim() || randomUUID();
+    const payload = {
+      id: typeof normalizedCamp.id === 'number' ? normalizedCamp.id : undefined,
+      uuid: campaignUuid,
+      city_id: String(normalizedCamp.cityId),
+      city_name: normalizedCamp.cityName,
+      currency: normalizedCamp.currency || 'XAF',
+      trigger_type: normalizedCamp.triggerType || 'manual',
+      triggered_by_user_id: normalizedCamp.triggeredByUserId ? String(normalizedCamp.triggeredByUserId) : null,
+      triggered_by_user_name: normalizedCamp.triggeredByUserName || null,
+      status: normalizedCamp.status,
+      total_pairs: normalizedCamp.totalPairs || 0,
+      completed_pairs: normalizedCamp.completedPairs || 0,
+      failed_pairs: normalizedCamp.failedPairs || 0,
+      duration_seconds: normalizedCamp.durationSeconds || 0,
+      avg_price: normalizedCamp.avgPrice || 0,
+      avg_distance_km: normalizedCamp.avgDistanceKm || 0,
+      avg_price_per_km: normalizedCamp.avgPricePerKm || 0,
+      hero_stats: normalizedCamp.heroStats || null,
+      trip_master_stats: normalizedCamp.tripMasterStats || null,
+      arrondissement_stats: normalizedCamp.arrondissementStats || null,
+      has_jams_count: normalizedCamp.hasJamsCount || 0,
+      yango_shortage_count: normalizedCamp.yangoShortageCount || 0,
+      canonical_trips_count: normalizedCamp.canonicalTripsCount || 0,
+      logs: normalizedCamp.logs || [],
+      comment: normalizedCamp.comment || null,
+      time_slot_override: normalizedCamp.timeSlotOverride || null,
+      started_at: normalizedCamp.startedAt ? new Date(normalizedCamp.startedAt).toISOString() : new Date().toISOString(),
+      finished_at: normalizedCamp.finishedAt ? new Date(normalizedCamp.finishedAt).toISOString() : null
+    };
+
+    const { data, error } = await supabase.from('campaigns').upsert(payload, { onConflict: 'uuid' });
+    if (error) {
+      console.warn('[Supabase] Erreur écriture campagne (non bloquant):', error.message);
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur réseau écriture campagne (mode résilient local):', err?.message || err);
   }
 }
 
-// ==========================================
-// 6. SYNCHRONISATION BIDIRECTIONNELLE
-// ==========================================
+// ----------------- TRAJETS ET RÉSULTATS ----------------- //
 
-export async function syncAllDataWithSupabase(direction: 'push' | 'pull' = 'push'): Promise<{
-  success: boolean;
-  message: string;
-  counts: { cities: number; neighborhoods: number; users: number; campaigns: number };
-}> {
-  const client = getSupabaseClient();
-  if (!client) {
-    return {
-      success: false,
-      message: 'Supabase n’est pas configuré. Veuillez entrer votre URL et clé Anon.',
-      counts: { cities: 0, neighborhoods: 0, users: 0, campaigns: 0 }
-    };
-  }
+/**
+ * Insertion en masse (requête unique haute performance) de l'ensemble des trajets
+ * exécutée UNIQUEMENT à la finalisation de la campagne pour garantir une rapidité maximale.
+ */
+export async function bulkInsertTripsInPostgres(
+  campaignId: string | number,
+  cityName: string,
+  canonicalTrips: CanonicalTrip[],
+  _campaignUuid?: string
+): Promise<number> {
+  if (!Array.isArray(canonicalTrips) || canonicalTrips.length === 0) return 0;
 
-  if (direction === 'pull') {
-    // Supabase -> Local
-    const fetchedCities = await fetchCitiesFromSupabase();
-    let citiesCount = 0;
-    if (fetchedCities && fetchedCities.length > 0) {
-      cities.splice(0, cities.length, ...fetchedCities);
-      saveCitiesDiskBackup();
-      citiesCount = fetchedCities.length;
-    }
+  const campIdStr = String(campaignId);
+  const rows = canonicalTrips.map((t) => ({
+    uuid: t.uuid || randomUUID(),
+    campaign_id: campIdStr,
+    city_name: cityName,
+    origin: t.origin,
+    destination: t.destination,
+    distance_km: t.distanceKm || 0,
+    duration_minutes: t.durationMin || 0,
+    jams: Boolean(t.jams),
+    yango_unavailable: Boolean(t.yangoUnavailable),
+    yango_waiting_minutes: t.yangoWaitingMinutes || null,
+    yango_unavailable_classes: Array.isArray(t.yangoUnavailableClasses) ? t.yangoUnavailableClasses : null,
+    prices: t.prices || {},
+    cheapest: t.cheapest || {},
+    status: t.status || 'success',
+    created_at: t.createdAt || new Date().toISOString()
+  }));
 
-    const fetchedNbs = await fetchNeighborhoodsFromSupabase();
-    let nbsCount = 0;
-    if (fetchedNbs && fetchedNbs.length > 0) {
-      setNeighborhoods(fetchedNbs);
-      saveNeighborhoodsDiskBackup();
-      nbsCount = fetchedNbs.length;
-    }
+  const startTime = Date.now();
 
-    const fetchedUsers = await fetchUsersFromSupabase();
-    let usersCount = 0;
-    if (fetchedUsers && fetchedUsers.length > 0) {
-      users.splice(0, users.length, ...fetchedUsers);
-      saveUsersDiskBackup();
-      usersCount = fetchedUsers.length;
-    }
-
-    const fetchedCamps = await fetchCampaignsFromSupabase();
-    let campsCount = 0;
-    if (fetchedCamps && fetchedCamps.length > 0) {
-      memoryCampaigns.splice(0, memoryCampaigns.length, ...fetchedCamps);
-      saveLocalCampaignsDiskBackup();
-      campsCount = fetchedCamps.length;
-    }
-
-    return {
-      success: true,
-      message: `Données importées depuis Supabase : ${citiesCount} ville(s), ${nbsCount} quartier(s), ${usersCount} utilisateur(s), ${campsCount} campagne(s).`,
-      counts: { cities: citiesCount, neighborhoods: nbsCount, users: usersCount, campaigns: campsCount }
-    };
-  } else {
-    // Local -> Supabase (Push)
-    let citiesCount = 0;
-    for (const c of cities) {
-      await upsertCityToSupabase(c);
-      citiesCount++;
-    }
-
-    const nbsCount = await batchUpsertNeighborhoodsToSupabase(neighborhoods);
-
-    let usersCount = 0;
-    for (const u of users) {
-      await upsertUserToSupabase(u);
-      usersCount++;
-    }
-
-    let campsCount = 0;
-    for (const camp of memoryCampaigns) {
-      await saveCampaignToSupabase(camp);
-      campsCount++;
-    }
-
-    return {
-      success: true,
-      message: `Synchronisation vers Supabase réussie : ${citiesCount} ville(s), ${nbsCount} quartier(s), ${usersCount} utilisateur(s), ${campsCount} campagne(s).`,
-      counts: { cities: citiesCount, neighborhoods: nbsCount, users: usersCount, campaigns: campsCount }
-    };
-  }
-}
-
-// Initialisation au démarrage du serveur : amorçage automatique si Supabase est actif
-export async function bootstrapSupabaseData() {
-  const client = getSupabaseClient();
-  if (!client) return;
-
+  // 1. Priorité absolue : requête SQL unique d'insertion en masse ultra-rapide via PostgreSQL direct (json_to_recordset)
   try {
-    // Vérifier si des villes existent en base Supabase
-    const { data: dbCities, error } = await client.from('cities').select('id').limit(1);
-    if (!error && dbCities && dbCities.length > 0) {
-      console.log('[Supabase Sync] Données distantes détectées dans Supabase, hydratation...');
-      const freshCities = await fetchCitiesFromSupabase();
-      if (freshCities && freshCities.length > 0) {
-        cities.splice(0, cities.length, ...freshCities);
-        saveCitiesDiskBackup();
+    const massInsertSql = `
+      INSERT INTO public.trips (
+        uuid, campaign_id, city_name, origin, destination,
+        distance_km, duration_minutes, jams, yango_unavailable,
+        yango_waiting_minutes, yango_unavailable_classes, prices,
+        cheapest, status, created_at
+      )
+      SELECT
+        coalesce(uuid, gen_random_uuid()::text),
+        campaign_id,
+        city_name,
+        origin,
+        destination,
+        coalesce(distance_km, 0),
+        coalesce(duration_minutes, 0),
+        coalesce(jams, false),
+        coalesce(yango_unavailable, false),
+        yango_waiting_minutes,
+        yango_unavailable_classes,
+        coalesce(prices, '{}'::jsonb),
+        coalesce(cheapest, '{}'::jsonb),
+        coalesce(status, 'success'),
+        coalesce(created_at, now())
+      FROM json_to_recordset($1::json) AS x(
+        uuid text,
+        campaign_id text,
+        city_name text,
+        origin text,
+        destination text,
+        distance_km numeric,
+        duration_minutes integer,
+        jams boolean,
+        yango_unavailable boolean,
+        yango_waiting_minutes integer,
+        yango_unavailable_classes text[],
+        prices jsonb,
+        cheapest jsonb,
+        status text,
+        created_at timestamptz
+      )
+      ON CONFLICT (uuid) DO NOTHING
+    `;
+
+    const res = await pgPool.query(massInsertSql, [JSON.stringify(rows)]);
+    console.log(`[PostgreSQL Bulk] ${res.rowCount ?? rows.length} trajets insérés en masse en ${Date.now() - startTime}ms (campagne ${campIdStr}).`);
+    return res.rowCount ?? rows.length;
+  } catch (directErr: any) {
+    console.warn(`[PostgreSQL Bulk] Avertissement requête directe pgPool (${directErr.message}), bascule vers API Supabase...`);
+  }
+
+  // 2. Repli robuste : insertion par lot via client Supabase
+  try {
+    const { data, error } = await supabase.from('trips').upsert(rows, { onConflict: 'uuid' });
+    if (error) {
+      if (isSchemaCompatibilityError(error)) {
+        const strippedRows = rows.map((r) => removeUnsupportedColumns(r, ['uuid']));
+        await supabase.from('trips').insert(strippedRows);
+      } else {
+        throw error;
       }
-      const freshNbs = await fetchNeighborhoodsFromSupabase();
-      if (freshNbs && freshNbs.length > 0) {
-        setNeighborhoods(freshNbs);
-        saveNeighborhoodsDiskBackup();
-      }
-    } else if (!error && (!dbCities || dbCities.length === 0) && cities.length > 0) {
-      console.log('[Supabase Sync] Base Supabase vide, amorçage initial avec les données locales...');
-      await syncAllDataWithSupabase('push');
     }
-  } catch (e: any) {
-    console.warn('[Supabase Sync] Notice during initial bootstrap:', e.message);
+    console.log(`[Supabase Bulk] ${rows.length} trajets insérés via API en ${Date.now() - startTime}ms (campagne ${campIdStr}).`);
+    return rows.length;
+  } catch (fallbackErr: any) {
+    console.warn(`[Supabase Bulk] Erreur insertion de secours trips ${campIdStr}:`, fallbackErr.message);
+    return 0;
   }
 }
 
-// Lancement automatique au démarrage si configuré
-bootstrapSupabaseData().catch(() => {});
+// Rétro-compatibilité : alias vers l'insertion optimisée
+export const saveCampaignTripChunkInSupabase = bulkInsertTripsInPostgres;
 
-// ==========================================
-// 7. SCRIPT DDL SQL SUPABASE (Copier-Coller)
-// ==========================================
+export async function saveCampaignResultsInSupabase(
+  campaignId: string | number,
+  cityName: string,
+  canonicalTrips: CanonicalTrip[],
+  campaignUuid?: string
+): Promise<void> {
+  const campIdStr = String(campaignId);
+  const startMs = Date.now();
+  try {
+    const resultUuid = (campaignUuid || randomUUID()).replace(/^campaign[_:-]?/i, '').trim() || randomUUID();
+    const payload = {
+      uuid: resultUuid,
+      campaign_id: campIdStr,
+      city_name: cityName,
+      total_trips: canonicalTrips.length,
+      canonical_trips: canonicalTrips,
+      saved_at: new Date().toISOString()
+    };
 
-export function getSupabaseSqlSchema(): string {
-  return `-- ============================================================
--- SCRIPT DDL SUPABASE POSTGRESQL - CITRINE PRICING VTC CAMEROUN
--- À exécuter dans l'éditeur SQL de votre Dashboard Supabase
--- ============================================================
+    // 1. Enregistrement unique de campaign_results (rapide, direct SQL prioritaire)
+    let savedResults = false;
+    try {
+      const sqlResults = `
+        INSERT INTO public.campaign_results (
+          uuid, campaign_id, city_name, total_trips, canonical_trips, saved_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (campaign_id) DO UPDATE SET
+          uuid = EXCLUDED.uuid,
+          city_name = EXCLUDED.city_name,
+          total_trips = EXCLUDED.total_trips,
+          canonical_trips = EXCLUDED.canonical_trips,
+          saved_at = EXCLUDED.saved_at
+      `;
+      await pgPool.query(sqlResults, [
+        payload.uuid,
+        payload.campaign_id,
+        payload.city_name,
+        payload.total_trips,
+        JSON.stringify(payload.canonical_trips),
+        payload.saved_at
+      ]);
+      savedResults = true;
+    } catch (pgErr: any) {
+      console.warn(`[PostgreSQL] Note campaign_results via pgPool (${pgErr.message}), bascule vers API Supabase...`);
+    }
 
--- 1. Table des Villes (cities)
-CREATE TABLE IF NOT EXISTS public.cities (
-  id TEXT PRIMARY KEY,
-  uuid TEXT UNIQUE,
-  name TEXT NOT NULL,
-  country TEXT NOT NULL DEFAULT 'Cameroun',
-  currency TEXT NOT NULL DEFAULT 'XAF',
-  currency_symbol TEXT DEFAULT 'FCFA',
-  active BOOLEAN DEFAULT true,
-  center JSONB,
-  airport JSONB,
-  auto_schedule JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  data JSONB
-);
+    if (!savedResults) {
+      const { data, error } = await supabase
+        .from('campaign_results')
+        .upsert(payload, { onConflict: 'campaign_id' });
+      assertSupabaseResult({ data, error }, `ecriture campaign_results ${campIdStr}`);
+    }
 
--- 2. Table des Quartiers (neighborhoods)
-CREATE TABLE IF NOT EXISTS public.neighborhoods (
-  id TEXT PRIMARY KEY,
-  uuid TEXT UNIQUE,
-  city_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  ville TEXT,
-  departement TEXT,
-  arrondissement TEXT,
-  full_address TEXT,
-  lat NUMERIC NOT NULL,
-  lng NUMERIC NOT NULL,
-  active BOOLEAN DEFAULT true,
-  status TEXT DEFAULT 'actif',
-  zone TEXT,
-  zone_type TEXT,
-  district TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  data JSONB
-);
+    // 2. Enregistrement en masse de tous les trajets individuels en 1 seule requête SQL
+    await bulkInsertTripsInPostgres(campaignId, cityName, canonicalTrips, resultUuid);
+    console.log(`[Supabase/Postgres] Résultats et ${canonicalTrips.length} trajets finalisés en masse avec succès en ${Date.now() - startMs}ms pour la campagne ${campIdStr}.`);
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur enregistrement trajets:', err.message);
+    throw err;
+  }
+}
 
-CREATE INDEX IF NOT EXISTS idx_neighborhoods_city ON public.neighborhoods(city_id);
-CREATE INDEX IF NOT EXISTS idx_neighborhoods_active ON public.neighborhoods(active);
+export async function fetchCampaignResultsFromSupabase(campaignId: string | number): Promise<CanonicalTrip[]> {
+  const campIdStr = String(campaignId);
+  try {
+    const queries = [
+      () => supabase.from('campaign_results').select('canonical_trips').eq('campaign_id', campIdStr).limit(1),
+      () => supabase.from('campaign_results').select('canonical_trips').eq('uuid', campIdStr).limit(1)
+    ];
 
--- 3. Table des Utilisateurs (users)
-CREATE TABLE IF NOT EXISTS public.users (
-  id TEXT PRIMARY KEY,
-  uuid TEXT UNIQUE,
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  role TEXT NOT NULL DEFAULT 'employe',
-  active BOOLEAN DEFAULT true,
-  password_hash TEXT,
-  last_login_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  data JSONB
-);
+    for (const query of queries) {
+      const { data, error } = await query();
+      if (error && error.code !== 'PGRST116') {
+        if (!isMissingColumnError(error)) throw error;
+        continue;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row && Array.isArray(row.canonical_trips) && row.canonical_trips.length > 0) {
+        return row.canonical_trips as CanonicalTrip[];
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur lecture trajets campagne:', err.message);
+  }
+  return [];
+}
 
--- 4. Table des Campagnes de Pricing (campaigns)
-CREATE TABLE IF NOT EXISTS public.campaigns (
-  id TEXT PRIMARY KEY,
-  uuid TEXT UNIQUE,
-  city_id TEXT NOT NULL,
-  city_name TEXT NOT NULL,
-  currency TEXT DEFAULT 'XAF',
-  status TEXT NOT NULL DEFAULT 'completed',
-  total_pairs INTEGER DEFAULT 0,
-  completed_pairs INTEGER DEFAULT 0,
-  failed_pairs INTEGER DEFAULT 0,
-  duration_seconds INTEGER DEFAULT 0,
-  avg_price NUMERIC,
-  started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ,
-  trigger_type TEXT DEFAULT 'manual',
-  triggered_by_user_id TEXT,
-  triggered_by_user_name TEXT,
-  triggered_by_user_role TEXT,
-  delta_stats JSONB,
-  hero_stats JSONB,
-  trip_master_stats JSONB,
-  arrondissement_stats JSONB,
-  data JSONB
-);
+export async function saveCampaignShortagesInSupabase(
+  campaignId: string | number,
+  _campaignUuid: string | undefined,
+  cityName: string,
+  shortageRecords: CampaignShortageRecord[]
+): Promise<void> {
+  if (!Array.isArray(shortageRecords) || shortageRecords.length === 0) return;
 
-CREATE INDEX IF NOT EXISTS idx_campaigns_started ON public.campaigns(started_at DESC);
+  const campIdStr = String(campaignId);
+  const rows = shortageRecords.map((record) => ({
+    uuid: record.uuid || randomUUID(),
+    source_record_id: record.id != null ? String(record.id) : null,
+    campaign_id: campIdStr,
+    city_id: record.cityId != null ? String(record.cityId) : null,
+    city_name: record.cityName || cityName,
+    origin: record.origin || null,
+    destination: record.destination || null,
+    start_neighborhood_id: record.startNeighborhoodId != null ? String(record.startNeighborhoodId) : null,
+    end_neighborhood_id: record.endNeighborhoodId != null ? String(record.endNeighborhoodId) : null,
+    arrondissement_origin: record.arrondissementOrigin || null,
+    arrondissement_dest: record.arrondissementDest || null,
+    time_slot: record.timeSlot || null,
+    distance_km: Number(record.distanceKm || 0),
+    duration_minutes: Number(record.durationMinutes || 0),
+    waiting_time_minutes: Number(record.waitingMinutes ?? 0),
+    unavailable_classes: Array.isArray(record.unavailableClasses) ? record.unavailableClasses : [],
+    cheapest_available_provider: getCheapestShortageProvider(record),
+    jams: Boolean(record.jams),
+    price_yango_eco: record.priceYangoEco ?? null,
+    price_hero_eco: record.priceHeroEco ?? null,
+    prices: {
+      yango: { eco: record.priceYangoEco ?? null },
+      heroCab: { eco: record.priceHeroEco ?? null },
+      jams: Boolean(record.jams),
+      timeSlot: record.timeSlot || null,
+      arrondissementOrigin: record.arrondissementOrigin || null,
+      arrondissementDest: record.arrondissementDest || null
+    },
+    raw_payload: record,
+    created_at: record.timestamp || new Date().toISOString()
+  }));
 
--- 5. Table des Trajets et Résultats (campaign_trips)
-CREATE TABLE IF NOT EXISTS public.campaign_trips (
-  id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL,
-  origin TEXT NOT NULL,
-  destination TEXT NOT NULL,
-  distance_km NUMERIC,
-  duration_min NUMERIC,
-  jams BOOLEAN DEFAULT false,
-  yango_unavailable BOOLEAN DEFAULT false,
-  prices JSONB,
-  cheapest JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  data JSONB
-);
+  const cleanup = await supabase.from('shortages').delete().eq('campaign_id', campIdStr);
+  if (cleanup.error && !isMissingColumnError(cleanup.error)) {
+    console.warn(`[Supabase] Warning nettoyage shortages ${campIdStr}:`, cleanup.error.message);
+  }
 
-CREATE INDEX IF NOT EXISTS idx_trips_campaign ON public.campaign_trips(campaign_id);
+  const { data, error } = await supabase.from('shortages').insert(rows);
+  assertSupabaseResult({ data, error }, `écriture shortages ${campIdStr}`);
+  console.log(`[Supabase] ${rows.length} trajets en pénurie enregistrés pour la campagne ${campIdStr}.`);
+}
 
--- 6. Table des Pénuries Détectées (shortages)
-CREATE TABLE IF NOT EXISTS public.shortages (
-  id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL,
-  city_name TEXT NOT NULL,
-  origin TEXT NOT NULL,
-  destination TEXT NOT NULL,
-  arrondissement_origin TEXT,
-  arrondissement_dest TEXT,
-  class_name TEXT DEFAULT 'econom',
-  reason TEXT,
-  timestamp TIMESTAMPTZ DEFAULT NOW(),
-  distance_km NUMERIC,
-  waiting_minutes NUMERIC,
-  data JSONB
-);
+export async function deleteCampaignInSupabase(campaignId: string | number): Promise<void> {
+  const campIdStr = String(campaignId);
+  try {
+    const numericCampaignId = getNumericCampaignId(campaignId);
+    const deleteCampaignById = numericCampaignId !== undefined ? supabase.from('campaigns').delete().eq('id', numericCampaignId) : null;
+    const deleteCampaignByUuid = supabase.from('campaigns').delete().eq('uuid', campIdStr);
+    const deleteCampaignResultsByCampaignId = supabase.from('campaign_results').delete().eq('campaign_id', campIdStr);
+    const deleteCampaignResultsByUuid = supabase.from('campaign_results').delete().eq('uuid', campIdStr);
 
-CREATE INDEX IF NOT EXISTS idx_shortages_campaign ON public.shortages(campaign_id);
-CREATE INDEX IF NOT EXISTS idx_shortages_time ON public.shortages(timestamp DESC);
-
--- 7. Politiques de Sécurité (RLS activé pour protection avec accès Anon)
-ALTER TABLE public.cities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.neighborhoods ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.campaigns ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.campaign_trips ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shortages ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow public read access" ON public.cities FOR SELECT USING (true);
-CREATE POLICY "Allow public write access" ON public.cities FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access" ON public.neighborhoods FOR SELECT USING (true);
-CREATE POLICY "Allow public write access" ON public.neighborhoods FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Allow public write access" ON public.users FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access" ON public.campaigns FOR SELECT USING (true);
-CREATE POLICY "Allow public write access" ON public.campaigns FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access" ON public.campaign_trips FOR SELECT USING (true);
-CREATE POLICY "Allow public write access" ON public.campaign_trips FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access" ON public.shortages FOR SELECT USING (true);
-CREATE POLICY "Allow public write access" ON public.shortages FOR ALL USING (true);
-`;
+    await Promise.allSettled([
+      supabase.from('trips').delete().eq('campaign_id', campIdStr),
+      deleteCampaignResultsByCampaignId,
+      deleteCampaignResultsByUuid,
+      supabase.from('shortages').delete().eq('campaign_id', campIdStr),
+      deleteCampaignById,
+      deleteCampaignByUuid
+    ]);
+    console.log(`[Supabase] Campagne ${campIdStr} supprimée.`);
+  } catch (err: any) {
+    console.warn('[Supabase] Erreur suppression campagne:', err.message);
+  }
 }

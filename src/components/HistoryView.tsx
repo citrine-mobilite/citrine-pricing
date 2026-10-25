@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { City, PricingCampaign, HistoryRecord } from '../types';
-import { api } from '../services/api';
+import { City, PricingCampaign } from '../types';
 import { HistoryTabsHeader } from './history/HistoryTabsHeader';
 import { HistoryCampaignsTab } from './history/HistoryCampaignsTab';
 import { HistoryConsolidationTab } from './history/HistoryConsolidationTab';
-import { HistoryAuditTab } from './history/HistoryAuditTab';
 
 interface HistoryViewProps {
   campaigns: PricingCampaign[];
@@ -21,7 +19,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onNavigate,
   onRefresh
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'campaigns' | 'consolidation' | 'audit'>('campaigns');
+  const [activeSubTab, setActiveSubTab] = useState<'campaigns' | 'consolidation'>('campaigns');
   const [cityFilter, setCityFilter] = useState<string>('');
 
   // Consolidation State
@@ -29,28 +27,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
 
-  // Audit Logs State
-  const [auditLogs, setAuditLogs] = useState<HistoryRecord[]>([]);
-  const [loadingAudit, setLoadingAudit] = useState<boolean>(false);
-  const [auditTypeFilter, setAuditTypeFilter] = useState<string>('');
-
-  const loadAuditLogs = async () => {
-    setLoadingAudit(true);
-    try {
-      const logs = await api.getHistory();
-      setAuditLogs(logs);
-    } catch (e) {
-      console.error('Erreur chargement audit logs:', e);
-    } finally {
-      setLoadingAudit(false);
-    }
-  };
-
   useEffect(() => {
-    if (activeSubTab === 'audit') {
-      loadAuditLogs();
+    const completed = campaigns.filter((c) => c.status === 'completed').map((c) => String(c.id));
+    if (completed.length > 0 && selectedCampaignIds.length === 0) {
+      setSelectedCampaignIds(completed);
     }
-  }, [activeSubTab]);
+  }, [campaigns]);
 
   const handleToggleCampaignSelection = (id: string) => {
     setSelectedCampaignIds((prev) =>
@@ -60,7 +42,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   const handleToggleAllCampaigns = (checked: boolean) => {
     if (checked) {
-      setSelectedCampaignIds(campaigns.filter((c) => c.status === 'completed').map((c) => c.id));
+      setSelectedCampaignIds(campaigns.filter((c) => c.status === 'completed').map((c) => String(c.id)));
     } else {
       setSelectedCampaignIds([]);
     }
@@ -72,7 +54,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         activeSubTab={activeSubTab}
         onTabChange={setActiveSubTab}
         campaignsCount={campaigns.length}
-        auditCount={auditLogs.length}
       />
 
       {activeSubTab === 'campaigns' && (
@@ -100,16 +81,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           selectedCampaignIds={selectedCampaignIds}
           onToggleCampaignSelection={handleToggleCampaignSelection}
           onToggleAllCampaigns={handleToggleAllCampaigns}
-        />
-      )}
-
-      {activeSubTab === 'audit' && (
-        <HistoryAuditTab
-          auditLogs={auditLogs}
-          loadingAudit={loadingAudit}
-          onReload={loadAuditLogs}
-          auditTypeFilter={auditTypeFilter}
-          onAuditTypeFilterChange={setAuditTypeFilter}
         />
       )}
     </div>

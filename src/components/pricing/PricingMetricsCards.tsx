@@ -1,6 +1,6 @@
 import React from 'react';
 import { PricingStatsSummary } from './pricingUtils';
-import { Layers, Award, Sparkles, Filter, RotateCcw } from 'lucide-react';
+import { Layers, Award, Sparkles, Filter, RotateCcw, AlertTriangle, Zap } from 'lucide-react';
 import { HeroLogo } from '../HeroLogo';
 
 interface PricingMetricsCardsProps {
@@ -20,8 +20,8 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
 }) => {
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2 flex-wrap">
           <Filter className={`w-3.5 h-3.5 ${isFiltered ? 'text-amber-600' : 'text-[#1F4F4A]'}`} />
           <span className="text-xs font-bold text-slate-700">
             {isFiltered
@@ -33,7 +33,44 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
               Filtre actif
             </span>
           )}
+
+          {/* Badges Trajets en Tension & Trajets en Pénurie */}
+          {stats.tensionCount > 0 ? (
+            <span
+              className="inline-flex items-center gap-1 bg-amber-50 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-2xs"
+              title={`${stats.tensionCount} trajets sous forte demande / tarif ajusté ROUGE`}
+            >
+              <Zap className="w-3 h-3 text-amber-600" />
+              <span>{stats.tensionCount} en tension</span>
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 bg-slate-50 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-medium"
+              title="Aucune tension tarifaire majeure"
+            >
+              <Zap className="w-3 h-3 text-slate-400" />
+              <span>0 en tension</span>
+            </span>
+          )}
+
+          {stats.shortagesCount > 0 ? (
+            <span
+              className="inline-flex items-center gap-1 bg-purple-50 text-purple-950 border border-purple-300 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-2xs"
+              title={`${stats.shortagesCount} trajets en rupture (aucun véhicule ROUGE disponible)`}
+            >
+              <AlertTriangle className="w-3 h-3 text-purple-600" />
+              <span>{stats.shortagesCount} en pénurie</span>
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 bg-slate-50 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-medium"
+              title="Aucun trajet en rupture de véhicule"
+            >
+              <span>0 pénurie</span>
+            </span>
+          )}
         </div>
+
         {isFiltered && onResetFilters && (
           <button
             onClick={onResetFilters}
@@ -46,13 +83,13 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-      {/* Card 1 : Yango Benchmark */}
+      {/* Card 1 : ROUGE Pricing */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Yango
+              ROUGE
             </span>
           </div>
           <span className="text-[10px] font-medium text-slate-400">
@@ -82,7 +119,7 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
         </div>
       </div>
 
-      {/* Card 2 : Hero Cab Benchmark */}
+      {/* Card 2 : Hero Cab Pricing */}
       <div className="bg-white rounded-xl border border-teal-200/80 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] bg-gradient-to-b from-teal-50/20 to-white">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
@@ -118,7 +155,7 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
         </div>
       </div>
 
-      {/* Card 3 : Trip Master Benchmark */}
+      {/* Card 3 : Trip Master Pricing */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
@@ -176,7 +213,7 @@ export const PricingMetricsCards: React.FC<PricingMetricsCardsProps> = ({
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-slate-500">Yango - cher :</span>
+            <span className="text-slate-500">ROUGE - cher :</span>
             <span className="font-bold text-slate-700 font-mono">
               {stats.yangoWins} ({stats.totalTrips > 0 ? Math.round((stats.yangoWins / stats.totalTrips) * 100) : 0}%)
             </span>

@@ -1,12 +1,11 @@
 [
   {
-    "id": "3",
+    "id": 3,
     "uuid": "01a1299f-33a1-74ef-9ca6-86701f1258a5",
     "name": "Douala",
     "country": "Cameroun",
     "currency": "XAF",
     "currencySymbol": "FCFA",
-    "active": true,
     "center": {
       "lat": 4.0525,
       "lng": 9.6963
@@ -17,6 +16,7 @@
       "name": "Aeroport international de douala",
       "active": true
     },
+    "active": true,
     "autoSchedule": {
       "slots": [],
       "enabled": false

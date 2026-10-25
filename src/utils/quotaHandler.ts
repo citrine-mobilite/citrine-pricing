@@ -1,10 +1,10 @@
 /**
- * Gestionnaire global passif pour la détection de quota API dépassé.
+ * Gestionnaire global passif pour la détection de quota Firestore/API dépassé.
  * Aucune requête serveur inutile n'est effectuée.
  */
 
 let quotaExceededState = false;
-const QUOTA_EVENT_NAME = 'api_quota_exceeded';
+const QUOTA_EVENT_NAME = 'firestore_quota_exceeded';
 
 export function isQuotaExhausted(): boolean {
   return quotaExceededState;

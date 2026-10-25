@@ -7,21 +7,25 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PWAInstallButton } from './PWAInstallButton';
+import { PricingCampaign } from '../types';
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onToggleMobileMenu?: () => void;
+  activeCampaigns?: PricingCampaign[];
 }
 
 const TAB_TITLES: Record<string, string> = {
   dashboard: 'Accueil',
+  statistics: 'Tableau des Statistiques & Pricing',
+  shortages: 'Analyse des Pénuries & Ruptures de Trajets',
   pricing: 'Pricing & Itinéraires',
   campaigns: 'Suivi des Campagnes',
   temporal: 'Comparateur Temporel (Évolution des Prix)',
   cities: 'Villes & Régions',
   neighborhoods: 'Quartiers Urbains',
-  history: 'Historique des Relevés',
+  history: 'Exportation & Rapports',
   profile: 'Mon Profil',
   users: 'Gestion des Utilisateurs',
   settings: 'Paramètres Passerelles'
@@ -30,10 +34,15 @@ const TAB_TITLES: Record<string, string> = {
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
-  onToggleMobileMenu
+  onToggleMobileMenu,
+  activeCampaigns = []
 }) => {
   const { user, logout } = useAuth();
   const currentTitle = TAB_TITLES[activeTab] || 'Citrine Pricing';
+  const runningCamp = activeCampaigns[0];
+  const progressPct = runningCamp && runningCamp.totalPairs > 0
+    ? Math.min(100, Math.round(((runningCamp.completedPairs || 0) / runningCamp.totalPairs) * 100))
+    : 0;
 
   return (
     <header className="h-16 bg-white/95 backdrop-blur-xs border-b border-slate-200/80 px-3 sm:px-6 flex items-center justify-between z-20 sticky top-0">
@@ -76,6 +85,34 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Center / Right: Live Progressive Pricing Indicator */}
+      {runningCamp && (
+        <div 
+          onClick={() => setActiveTab('pricing')}
+          className="hidden md:flex items-center gap-2.5 bg-gradient-to-r from-amber-50 via-emerald-50 to-sky-50 border border-amber-300/60 px-3 py-1.5 rounded-xl cursor-pointer hover:shadow-xs transition group"
+          title="Cliquez pour voir le pricing en cours"
+        >
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+          </span>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+              <span className="text-[#1F4F4A]">Pricing {runningCamp.cityName} en cours</span>
+              <span className="text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded-md text-[10px]">
+                {runningCamp.completedPairs || 0}/{runningCamp.totalPairs || 0} ({progressPct}%)
+              </span>
+            </div>
+            <div className="w-32 h-1.5 bg-slate-200/80 rounded-full overflow-hidden mt-0.5">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300 rounded-full"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Right Controls: PWA Install Button + Logout */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">

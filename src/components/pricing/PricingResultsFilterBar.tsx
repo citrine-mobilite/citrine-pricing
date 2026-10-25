@@ -162,7 +162,7 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
           />
         </div>
 
-        {/* 3. Trafic / Heure de pointe */}
+        {/* 3. Trafic / Heure de pointe / Tension */}
         <div>
           <select
             value={jamsFilter}
@@ -173,8 +173,8 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
                 : 'bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
-            <option value="all">Trafic / Majoration : Tous</option>
-            <option value="with_jams">🔥 Trajets majorés ({hasJamsInCampaign ? 'Détectés' : '+25% et +'})</option>
+            <option value="all">Tension & Trafic : Tous</option>
+            <option value="with_jams">🔥 Trajets en tension ({hasJamsInCampaign ? 'Détectés' : 'Forte demande'})</option>
             <option value="without_jams">🟢 Tarif normal (Fluide)</option>
           </select>
         </div>
@@ -194,12 +194,12 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
           >
             <option value="all">Compétitivité : Tous</option>
             <option value="hero">🏆 Avantage Hero Cab</option>
-            <option value="yango">⚡ Avantage Yango</option>
+            <option value="yango">⚡ Avantage ROUGE</option>
             <option value="equal">🤝 Tarifs équivalents</option>
           </select>
         </div>
 
-        {/* 5. Tension / Disponibilité Chauffeurs Yango */}
+        {/* 5. Tension / Disponibilité Chauffeurs ROUGE */}
         <div>
           <select
             value={shortageFilter}
@@ -210,9 +210,9 @@ export const PricingResultsFilterBar: React.FC<PricingResultsFilterBarProps> = (
                 : 'bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
-            <option value="all">Véhicules : Tous les trajets</option>
-            <option value="shortage">⚠️ Pénurie de véhicules ({hasShortageInCampaign ? 'Détecté' : 'Actif'})</option>
-            <option value="available">🟢 Véhicules disponibles</option>
+            <option value="all">Disponibilité : Tous les trajets</option>
+            <option value="shortage">⚠️ Trajets en pénurie ({hasShortageInCampaign ? 'Détectés' : 'Actif'})</option>
+            <option value="available">🟢 Véhicules ROUGE disponibles</option>
           </select>
         </div>
 

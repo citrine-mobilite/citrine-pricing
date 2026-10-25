@@ -4,6 +4,11 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Ensure __dirname leaked by tsx does not break vite-plugin-pwa
+if (typeof (globalThis as any).__dirname !== 'undefined') {
+  delete (globalThis as any).__dirname;
+}
+
 export default defineConfig(() => {
   return {
     plugins: [
@@ -17,7 +22,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'Citrine Pricing - Plateforme VTC',
           short_name: 'Citrine',
-          description: 'Benchmark et tarification VTC temps réel multi-opérateurs (Yango, Hero Cab, Trip Master) au Cameroun.',
+          description: 'Pricing et tarification VTC temps réel multi-opérateurs (Yango, Hero Cab, Trip Master) au Cameroun.',
           theme_color: '#1F4F4A',
           background_color: '#FFFFFF',
           display: 'standalone',

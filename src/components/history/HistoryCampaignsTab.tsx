@@ -9,6 +9,7 @@ import {
   matchesTimeSlotFilter,
   TimeSlotFilter
 } from '../../utils/durationUtils';
+import { getCampaignType, getCampaignTypeLabel } from '../../utils/routeMatrix';
 import { SearchableSelect } from '../SearchableSelect';
 import {
   ArrowRight,
@@ -20,8 +21,11 @@ import {
   MessageSquare,
   MapPin,
   Zap,
-  Filter
+  Filter,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
+import { exportConsolidatedExcel, exportConsolidatedPdf, ConsolidatedCampaignData, formatCampaignFileName } from '../../utils/exportUtils';
 
 interface HistoryCampaignsTabProps {
   campaigns: PricingCampaign[];
@@ -43,7 +47,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
   onRefresh
 }) => {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'city_wide' | 'arrondissement' | 'test_sample'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all_city'>('all');
   const [arrondissementFilter, setArrondissementFilter] = useState<string>('all');
   const [timeSlotFilter, setTimeSlotFilter] = useState<TimeSlotFilter>('all');
 
@@ -58,31 +62,17 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
 
   const handleEditComment = async (campaign: PricingCampaign, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const peak = getCampaignPeakHourInfo(campaign);
-    const currentSlot = campaign.timeSlotOverride || 'auto';
     const currentComment = (campaign.comment || campaign.comments || '').replace(/"/g, '&quot;');
 
-    const { value: formValues, isConfirmed } = await Swal.fire({
-      title: 'Créneau & Commentaire du relevé',
+    const { value: commentText, isConfirmed } = await Swal.fire({
+      title: 'Commentaire du relevé',
       html: `
         <div style="text-align: left; font-size: 12px; color: #334155;">
           <p style="margin-bottom: 10px; font-weight: 600; color: #0f172a;">
             ${campaign.cityName} — Relevé du ${new Date(campaign.startedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
           <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
-            1. Créneau horaire / Heure de pointe :
-          </label>
-          <select id="swal-hist-slot" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 12px; font-size: 12px; background: #f8fafc;">
-            <option value="auto" ${currentSlot === 'auto' ? 'selected' : ''}>⏱️ Automatique selon l'heure (${peak.exactTimeStr})</option>
-            <option value="morning_peak" ${currentSlot === 'morning_peak' ? 'selected' : ''}>🌅 Pointe Matin (06h00 – 10h00)</option>
-            <option value="off_peak_morning" ${currentSlot === 'off_peak_morning' ? 'selected' : ''}>🟢 Creuse Matinée (10h00 – 12h00)</option>
-            <option value="midday_peak" ${currentSlot === 'midday_peak' ? 'selected' : ''}>☀️ Pointe Midi (12h00 – 14h30)</option>
-            <option value="off_peak_afternoon" ${currentSlot === 'off_peak_afternoon' ? 'selected' : ''}>🌤️ Creuse Après-midi (14h30 – 16h30)</option>
-            <option value="evening_peak" ${currentSlot === 'evening_peak' ? 'selected' : ''}>🌆 Pointe Soir (16h30 – 20h30)</option>
-            <option value="night" ${currentSlot === 'night' ? 'selected' : ''}>🌙 Creuse Soir / Nuit (20h30 – 06h00)</option>
-          </select>
-          <label style="display: block; font-weight: 700; margin-bottom: 4px; color: #475569;">
-            2. Commentaire / Observation (météo, trafic, événement) :
+            Commentaire / Observation (météo, trafic, événement) :
           </label>
           <textarea id="swal-hist-comment" rows="3" placeholder="Ex: Forte pluie, embouteillages, jour férié..." style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">${currentComment}</textarea>
         </div>
@@ -93,21 +83,16 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
       confirmButtonText: 'Enregistrer',
       cancelButtonText: 'Annuler',
       preConfirm: () => {
-        const slotEl = document.getElementById('swal-hist-slot') as HTMLSelectElement | null;
         const commentEl = document.getElementById('swal-hist-comment') as HTMLTextAreaElement | null;
-        return {
-          timeSlotOverride: slotEl ? slotEl.value : 'auto',
-          comment: commentEl ? commentEl.value.trim() : ''
-        };
+        return commentEl ? commentEl.value.trim() : '';
       }
     });
 
-    if (isConfirmed && formValues) {
+    if (isConfirmed && commentText !== undefined) {
       try {
-        await api.updateCampaignComment(campaign.id, formValues.comment, formValues.timeSlotOverride);
-        campaign.comment = formValues.comment;
-        campaign.comments = formValues.comment;
-        campaign.timeSlotOverride = formValues.timeSlotOverride === 'auto' ? undefined : formValues.timeSlotOverride;
+        await api.updateCampaignComment(campaign.id, commentText, campaign.timeSlotOverride);
+        campaign.comment = commentText;
+        campaign.comments = commentText;
         onRefresh();
         Swal.fire({
           icon: 'success',
@@ -121,7 +106,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
     }
   };
 
-  const handleDeleteCampaign = async (id: string, e?: React.MouseEvent) => {
+  const handleDeleteCampaign = async (id: string | number, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const res = await Swal.fire({
       title: 'Supprimer cette campagne ?',
@@ -184,16 +169,56 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
     }
   };
 
+  const handleExportSingle = async (c: PricingCampaign, format: 'excel' | 'pdf', e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      const trips = await api.getCampaignResults(c.id);
+      if (!trips || trips.length === 0) {
+        Swal.fire('Information', 'Aucun trajet trouvé pour cette campagne.', 'info');
+        return;
+      }
+      const data: ConsolidatedCampaignData[] = [{
+        campaignName: c.isTestSample ? `Test Rapide (${c.totalPairs} trajets)` : `Campagne Globale (${c.totalPairs} trajets)`,
+        cityName: c.cityName || 'Ville',
+        dateStr: new Date(c.startedAt).toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        trips
+      }];
+      const fileName = formatCampaignFileName(c.cityName, c.startedAt);
+      if (format === 'excel') {
+        exportConsolidatedExcel(data, fileName);
+      } else {
+        exportConsolidatedPdf(data, `Rapport de Pricing — ${c.cityName}`, fileName);
+      }
+      Swal.fire({
+        icon: 'success',
+        title: 'Export réussi !',
+        text: `Le rapport a été généré avec succès.`,
+        timer: 1500,
+        showConfirmButton: false
+      });
+    } catch (err: any) {
+      Swal.fire('Erreur', err?.message || 'Erreur lors de l’exportation.', 'error');
+    }
+  };
+
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter((c) => {
       if (cityFilter && c.cityId !== cityFilter) return false;
 
-      const isSample = Boolean(c.isTestSample || (c.sampleLimit && c.sampleLimit <= 50) || (c.totalPairs && c.totalPairs <= 50));
-      const isIntra = Boolean(c.scopeMode === 'intra' || c.arrondissement);
-
-      if (scopeFilter === 'test_sample' && !isSample) return false;
-      if (scopeFilter === 'city_wide' && (isSample || isIntra)) return false;
-      if (scopeFilter === 'arrondissement' && !isIntra) return false;
+      if (scopeFilter !== 'all') {
+        const cType = getCampaignType(c);
+        if (scopeFilter === 'all_city') {
+          if (cType !== 'all') return false;
+        } else if (cType !== scopeFilter) {
+          return false;
+        }
+      }
 
       if (arrondissementFilter !== 'all') {
         if ((c.arrondissement || '').trim() !== arrondissementFilter) return false;
@@ -416,19 +441,33 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
       label: 'Actions',
       align: 'right',
       render: (c) => (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            onClick={(e) => handleExportSingle(c, 'excel', e)}
+            title="Exporter en Excel"
+            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => handleExportSingle(c, 'pdf', e)}
+            title="Exporter en PDF"
+            className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => {
-              onSelectCampaign(c.id);
+              onSelectCampaign(String(c.id));
               onNavigate('pricing');
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#1F4F4A] hover:bg-[#1F4F4A]/10 rounded-lg transition cursor-pointer"
           >
-            <span>Voir tableau</span>
+            <span>Voir</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={(e) => handleDeleteCampaign(c.id, e)}
+            onClick={(e) => handleDeleteCampaign(String(c.id), e)}
             title="Supprimer cette campagne"
             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
           >
@@ -512,18 +551,24 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
             </select>
           </div>
 
-          {/* Périmètre */}
+          {/* Type de campagne */}
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-slate-500 font-medium">Périmètre :</label>
+            <label className="text-xs text-slate-500 font-medium">Type :</label>
             <select
               value={scopeFilter}
               onChange={(e) => setScopeFilter(e.target.value as any)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none"
+              className={`rounded-lg px-2 py-1 text-xs font-medium border focus:outline-none ${
+                scopeFilter !== 'all'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
+                  : 'bg-slate-50 border border-slate-200 text-slate-700'
+              }`}
             >
-              <option value="all">Tous périmètres</option>
-              <option value="city_wide">Ville entière</option>
-              <option value="arrondissement">Arrondissement (Intra)</option>
-              <option value="test_sample">Tests (&le; 50)</option>
+              <option value="all">Tous types (5)</option>
+              <option value="arrondissement">1 Arrondissement</option>
+              <option value="mt_arrondissement">MT Arrondissement</option>
+              <option value="aeroport">Pricing Aéroport</option>
+              <option value="test_25">Test 25</option>
+              <option value="all_city">Tout (Complet)</option>
             </select>
           </div>
 
@@ -751,7 +796,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
-                              onSelectCampaign(c.id);
+                              onSelectCampaign(String(c.id));
                               onNavigate('pricing');
                             }}
                             className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#1F4F4A] bg-[#1F4F4A]/10 hover:bg-[#1F4F4A] hover:text-white rounded-lg transition cursor-pointer"
@@ -760,7 +805,7 @@ export const HistoryCampaignsTab: React.FC<HistoryCampaignsTabProps> = ({
                             <ArrowRight className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={(e) => handleDeleteCampaign(c.id, e)}
+                            onClick={(e) => handleDeleteCampaign(String(c.id), e)}
                             title="Supprimer cette campagne"
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 rounded-lg transition cursor-pointer"
                           >

@@ -17,32 +17,33 @@ export function usePricingCampaign(
   );
 
   const [internalCampaignId, setInternalCampaignId] = useState<string>(() => {
-    if (propSelectedCampaignId && campaigns.some((c) => c.id === propSelectedCampaignId)) {
-      return propSelectedCampaignId;
+    if (propSelectedCampaignId && campaigns.some((c) => String(c.id) === String(propSelectedCampaignId) || c.uuid === propSelectedCampaignId)) {
+      return String(propSelectedCampaignId);
     }
-    return cityCampaigns[0]?.id || campaigns[0]?.id || '';
+    return String(cityCampaigns[0]?.id || campaigns[0]?.id || '');
   });
 
   useEffect(() => {
     if (propSelectedCampaignId) {
-      setInternalCampaignId(propSelectedCampaignId);
+      setInternalCampaignId(String(propSelectedCampaignId));
     } else if (!internalCampaignId) {
-      const activeForCity = campaigns.filter((c) => c.cityId === selectedCityId);
+      const activeForCity = campaigns.filter((c) => c.cityId === selectedCityId || String(c.cityId) === String(selectedCityId));
       if (activeForCity.length > 0) {
-        setInternalCampaignId(activeForCity[0].id);
+        setInternalCampaignId(String(activeForCity[0].id));
       }
     }
   }, [propSelectedCampaignId, campaigns, selectedCityId, internalCampaignId]);
 
   const activeCampaignId = internalCampaignId;
-  const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
+  const activeCampaign = campaigns.find((c) => String(c.id) === String(activeCampaignId) || c.uuid === activeCampaignId);
 
-  const handleCampaignChange = (newCampaignId: string) => {
-    setInternalCampaignId(newCampaignId);
-    if (onSelectCampaignId) onSelectCampaignId(newCampaignId);
-    const targetCamp = campaigns.find((c) => c.id === newCampaignId);
+  const handleCampaignChange = (newCampaignId: string | number) => {
+    const idStr = String(newCampaignId);
+    setInternalCampaignId(idStr);
+    if (onSelectCampaignId) onSelectCampaignId(idStr);
+    const targetCamp = campaigns.find((c) => String(c.id) === idStr || c.uuid === idStr);
     if (targetCamp && targetCamp.cityId !== selectedCityId && onSelectCityId) {
-      onSelectCityId(targetCamp.cityId);
+      onSelectCityId(String(targetCamp.cityId));
     }
   };
 
@@ -62,10 +63,15 @@ export function usePricingCampaign(
       try {
         await api.deleteCampaign(activeCampaignId);
         const otherCampaigns = campaigns.filter(
-          (c) => c.id !== activeCampaignId && c.cityId === selectedCityId
+          (c) => String(c.id) !== String(activeCampaignId) && c.uuid !== activeCampaignId && (c.cityId === selectedCityId || String(c.cityId) === String(selectedCityId))
         );
-        const nextId = otherCampaigns[0]?.id || campaigns.filter((c) => c.id !== activeCampaignId)[0]?.id || '';
-        handleCampaignChange(nextId);
+        const nextId = String(otherCampaigns[0]?.id || campaigns.filter((c) => String(c.id) !== String(activeCampaignId) && c.uuid !== activeCampaignId)[0]?.id || '');
+        if (nextId) {
+          handleCampaignChange(nextId);
+        } else {
+          setInternalCampaignId('');
+          if (onSelectCampaignId) onSelectCampaignId('');
+        }
         if (onRefresh) await onRefresh();
         Swal.fire({ title: 'Supprimée !', text: 'Campagne supprimée.', icon: 'success', timer: 1500, showConfirmButton: false });
       } catch (err: any) {

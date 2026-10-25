@@ -7,13 +7,11 @@ import { LauncherCitySelectorCard } from './launcher/LauncherCitySelectorCard';
 import { LauncherTariffClassSelector } from './launcher/LauncherTariffClassSelector';
 import { LauncherSingleRouteTester } from './launcher/LauncherSingleRouteTester';
 
-import { findCityInList, isNeighborhoodInCity } from '../utils/cityMatching';
-
 interface PricingLauncherViewProps {
   cities: City[];
   neighborhoods: Neighborhood[];
-  selectedCityId: string | number;
-  onSelectCityId: (cityId: string | number) => void;
+  selectedCityId: string;
+  onSelectCityId: (cityId: string) => void;
   onCampaignStarted: (campaignId: string) => void;
 }
 
@@ -25,9 +23,14 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
   onCampaignStarted
 }) => {
   const { user } = useAuth();
-  const currentCity = findCityInList(cities, selectedCityId) || cities[0];
+  const currentCity = cities.find(c => String(c.id) === String(selectedCityId)) || cities[0];
 
-  const cityNeighborhoods = neighborhoods.filter(n => isNeighborhoodInCity(n, currentCity));
+  const cityNeighborhoods = neighborhoods.filter((n) => {
+    const nbCityId = String(n.cityId ?? '');
+    const cityId = String(currentCity?.id ?? '');
+    const cityUuid = String(currentCity?.uuid ?? '');
+    return nbCityId === cityId || nbCityId === cityUuid;
+  });
   const activeNeighborhoods = cityNeighborhoods.filter(n => n.active);
   const activeCount = activeNeighborhoods.length;
   const totalPairs = activeCount > 1 ? activeCount * (activeCount - 1) : 0;
@@ -76,41 +79,43 @@ export const PricingLauncherView: React.FC<PricingLauncherViewProps> = ({
       const campaignId = res.campaign.id;
       const totalChunks = res.totalChunks || 1;
 
-      // Exécution accélérée par pool de workers concurrents (Client-Driven Chunking)
       (async () => {
         const collectedTrips: any[] = [];
         const collectedCanonical: any[] = [];
         const meta = {
-          cityId: String(currentCity.id),
+          cityId: currentCity.id,
           cityName: currentCity.name,
           currency: currentCity.currency
         };
 
-        const CONCURRENCY = 2;
-        const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i + 1);
-        let nextIdx = 0;
+        const MAX_CONCURRENT_CHUNKS = Math.min(20, totalChunks || 1);
+        let nextChunkIndex = 1;
 
-        const runWorker = async () => {
-          while (nextIdx < chunkIndices.length) {
-            const chunkIdx = chunkIndices[nextIdx++];
-            for (let attempt = 1; attempt <= 2; attempt++) {
+        const worker = async () => {
+          while (nextChunkIndex <= totalChunks) {
+            const chunkIdx = nextChunkIndex++;
+            for (let attempt = 1; attempt <= 3; attempt++) {
               try {
                 const cRes = await api.processCampaignChunk(campaignId, chunkIdx, undefined, meta);
                 if (cRes?.chunkTrips) collectedTrips.push(...cRes.chunkTrips);
                 if (cRes?.chunkCanonicalTrips) collectedCanonical.push(...cRes.chunkCanonicalTrips);
                 break;
               } catch (e) {
-                console.warn(`Lot ${chunkIdx} tentative ${attempt}/2:`, e);
-                if (attempt < 2) await new Promise(r => setTimeout(r, 300));
+                console.warn(`Lot ${chunkIdx} tentative ${attempt}/3 échouée:`, e);
+                if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
               }
             }
           }
         };
 
-        const workers = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, () => runWorker());
-        await Promise.all(workers);
+        await Promise.all(Array.from({ length: MAX_CONCURRENT_CHUNKS }, () => worker()));
         await api.finalizeCampaign(campaignId, collectedCanonical, collectedTrips);
-      })();
+        setIsLaunching(false);
+      })().catch((err) => {
+        console.error('Erreur lors du traitement parallèle des lots:', err);
+        setError(err?.message || 'Erreur lors du traitement de la campagne.');
+        setIsLaunching(false);
+      });
     } catch (err: any) {
       setError(err.message || 'Erreur lors du lancement de la campagne.');
       setIsLaunching(false);

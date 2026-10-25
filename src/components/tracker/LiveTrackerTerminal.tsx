@@ -21,7 +21,7 @@ export const LiveTrackerTerminal: React.FC<LiveTrackerTerminalProps> = ({ logs }
           <p className="text-slate-500 text-center py-6">En attente des premiers retours des serveurs...</p>
         ) : (
           logs.slice(-25).map((log, i) => (
-            <div key={i} className="flex items-start gap-2 leading-relaxed">
+            <div key={`log-${i}`} className="flex items-start gap-2 leading-relaxed">
               <span className="text-slate-500 text-[11px] shrink-0">
                 {new Date(log.timestamp).toLocaleTimeString('fr-FR')}
               </span>

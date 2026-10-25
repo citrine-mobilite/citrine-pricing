@@ -1,7 +1,8 @@
-export type UserRole = 'admin' | 'responsable' | 'employe';
+export type UserRole = 'super_admin' | 'admin' | 'responsable' | 'employe';
 
 export interface User {
-  id: string;
+  id: number | string;
+  uuid?: string;
   email: string;
   name: string;
   role: UserRole;
@@ -11,8 +12,17 @@ export interface User {
   passwordHash?: string;
 }
 
+export interface AirportConfig {
+  name: string;
+  lat: number;
+  lng: number;
+  code?: string;
+  active?: boolean;
+}
+
 export interface City {
-  id: string;
+  id: number | string;
+  uuid?: string;
   name: string;
   country: string;
   currency: string;
@@ -22,6 +32,7 @@ export interface City {
     lat: number;
     lng: number;
   };
+  airport?: AirportConfig;
   autoSchedule: {
     enabled: boolean;
     slots: string[];
@@ -32,7 +43,8 @@ export interface City {
 }
 
 export interface Neighborhood {
-  id: string;
+  id: number | string;
+  uuid?: string;
   cityId: string;
   cityName?: string;
   ville?: string;
@@ -111,8 +123,11 @@ export interface HeroQuote {
   errorMessage?: string;
 }
 
+export type CampaignType = 'arrondissement' | 'mt_arrondissement' | 'aeroport' | 'test_25' | 'all';
+
 export interface PricingCampaign {
-  id: string;
+  id: number | string;
+  uuid?: string;
   cityId: string;
   cityName: string;
   currency: string;
@@ -121,7 +136,9 @@ export interface PricingCampaign {
   triggeredByUserName: string;
   triggeredByUserRole?: string;
   status: CampaignStatus;
-  providerMode?: 'benchmark' | 'yango' | 'hero';
+  campaignType?: CampaignType;
+  finalizing?: boolean;
+  providerMode?: 'pricing' | 'yango' | 'hero';
   selectedClasses?: string[]; // ['econom', 'business', 'comfortplus', 'moto']
   totalPairs: number;
   completedPairs: number;
@@ -146,7 +163,7 @@ export interface PricingCampaign {
   comment?: string; // Commentaire sur la campagne (météo, trafic, etc.)
   comments?: string;
   timeSlotOverride?: 'auto' | 'morning_peak' | 'midday_peak' | 'evening_peak' | 'off_peak' | 'night' | string;
-  scopeMode?: 'city' | 'intra' | 'inter' | 'global';
+  scopeMode?: 'city' | 'intra' | 'inter' | 'global' | 'airport';
   arrondissement?: string;
   originArrondissement?: string;
   destArrondissement?: string;
@@ -174,7 +191,7 @@ export interface PricingCampaign {
     count: number;
   }>;
   classesStats?: Record<string, any>;
-  // Hero Statistics & Benchmark Comparison
+  // Hero Statistics & Pricing Comparison
   heroStats?: {
     avgPrice: number;
     minPrice: number;
@@ -201,6 +218,9 @@ export interface CanonicalTripPrices {
     confort: number | null;
     confortPlus: number | null;
     moto: number | null;
+    jams: boolean;
+    yangoUnavailable: boolean;
+    rawResponse?: any;
   };
   heroCab?: {
     eco: number | null;
@@ -216,8 +236,9 @@ export interface CanonicalTripPrices {
 }
 
 export interface TripResult {
-  id: string;
-  campaignId: string;
+  id: number | string;
+  uuid?: string;
+  campaignId: number | string;
   cityId?: string;
   cityName?: string;
   origin: string;
@@ -333,7 +354,8 @@ export interface AuthState {
 }
 
 export interface HistoryRecord {
-  id: string;
+  id: number | string;
+  uuid?: string;
   action: string;
   eventType: 'campaign' | 'system' | 'settings' | 'users' | 'neighborhoods' | 'cities';
   title: string;
@@ -343,4 +365,148 @@ export interface HistoryRecord {
   timestamp: string;
   status?: 'success' | 'failed' | 'in_progress' | 'cancelled';
   metadata?: Record<string, any>;
+}
+
+export interface StoredStatsSnapshot {
+  id: number | string;
+  uuid: string;
+  title: string;
+  cityName?: string;
+  timestamp: string;
+  notes?: string;
+  data: {
+    totalCampaigns: number;
+    totalTrips: number;
+    avgYangoPrice: number;
+    avgHeroPrice: number;
+    avgTripMasterPrice: number;
+    yangoShortageRate: number;
+    heroCheaperRate: number;
+    arrondissementStats?: Record<string, any>;
+    metricsSummary?: Record<string, any>;
+  };
+}
+
+export interface StatisticsData {
+  current: {
+    totalCampaigns: number;
+    completedCampaigns: number;
+    totalTrips: number;
+    avgYangoPrice: number;
+    avgHeroPrice: number;
+    avgTripMasterPrice: number;
+    avgHeroEconomyPct: number;
+    yangoShortageTrips: number;
+    yangoShortageRate: number;
+    heroCheaperRate: number;
+    arrondissementSummary: Record<string, any>;
+    distanceBrackets?: Array<{
+      bracket: string;
+      label: string;
+      minKm: number;
+      maxKm: number;
+      avgDistanceKm: number;
+      avgYango: number;
+      avgHero: number;
+      avgTripMaster: number;
+      yangoPerKm: number;
+      heroPerKm: number;
+      heroEconomyPct: number;
+      shortageRate: number;
+      tripsCount: number;
+    }>;
+    timeSlotStats?: Array<{
+      slot: string;
+      label: string;
+      avgYango: number;
+      avgHero: number;
+      shortageRate: number;
+      surgeRate: number;
+      tripsCount: number;
+      heroEconomyPct: number;
+    }>;
+    classesBreakdown?: {
+      eco: { yango: number; hero: number; tripMaster: number; count: number };
+      confort: { yango: number; hero: number; tripMaster: number; count: number };
+      moto: { yango: number; hero: number; tripMaster: number; count: number };
+      suv: { yango: number; hero: number; count: number };
+    };
+    strategicCorridors?: Array<{
+      corridor: string;
+      origin: string;
+      destination: string;
+      distanceKm: number;
+      avgYango: number;
+      avgHero: number;
+      economyFcfa: number;
+      economyPct: number;
+      shortageRate: number;
+      tripsCount: number;
+    }>;
+    economicImpact?: {
+      totalSavingsFcfa: number;
+      avgSavingsPerTrip: number;
+      businessMonthlySavings500Trips: number;
+      businessMonthlySavings1000Trips: number;
+    };
+    airportStats?: {
+      tripsCount: number;
+      avgYangoPrice: number;
+      avgHeroPrice: number;
+      avgTripMasterPrice: number;
+      heroEconomyPct: number;
+      heroEconomyFcfa: number;
+      shortageRate: number;
+      avgDistanceKm: number;
+      avgDurationMin: number;
+      pricePerKmYango: number;
+      pricePerKmHero: number;
+      arrondissements: Array<{ name: string; avgY: number; avgH: number; count: number }>;
+      hasRealCampaignData: boolean;
+      campaignsCount?: number;
+    };
+    citiesCount: number;
+    neighborhoodsCount: number;
+  };
+  snapshots: StoredStatsSnapshot[];
+}
+
+export interface CampaignShortageRecord {
+  id: string | number;
+  uuid: string;
+  campaignId: string | number;
+  cityName: string;
+  cityId?: string | number;
+  origin: string;
+  destination: string;
+  startNeighborhoodId?: string | number;
+  endNeighborhoodId?: string | number;
+  arrondissementOrigin?: string;
+  arrondissementDest?: string;
+  timestamp: string;
+  timeSlot: string;
+  distanceKm: number;
+  durationMinutes: number;
+  waitingMinutes?: number;
+  unavailableClasses?: string[];
+  jams?: boolean;
+  priceYangoEco?: number | null;
+  priceHeroEco?: number | null;
+}
+
+export interface ShortagesAnalyticsSummary {
+  totalShortages: number;
+  topOrigins: Array<{ name: string; count: number; pct: number }>;
+  topDestinations: Array<{ name: string; count: number; pct: number }>;
+  topCorridors: Array<{ origin: string; destination: string; count: number; avgDistanceKm: number; pct: number }>;
+  byTimeSlot: Array<{ slot: string; label: string; count: number; pct: number }>;
+  byArrondissement: Array<{ name: string; count: number; pct: number }>;
+}
+
+export interface ShortagesResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  shortages: CampaignShortageRecord[];
+  analytics: ShortagesAnalyticsSummary;
 }

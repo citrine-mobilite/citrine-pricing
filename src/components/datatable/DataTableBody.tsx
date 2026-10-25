@@ -32,6 +32,7 @@ export function DataTableBody<T extends Record<string, any>>({
           {hasGroupedHeaders ? (
             <>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                <th rowSpan={2} className="py-3 px-3 text-center border-r border-slate-200/60 font-bold w-[50px]">Réf.</th>
                 <th rowSpan={2} className="py-3 px-4 text-left border-r border-slate-200/60 font-bold">Départ</th>
                 <th rowSpan={2} className="py-3 px-4 text-left border-r border-slate-200/60 font-bold">Destination</th>
                 <th rowSpan={2} className="py-3 px-4 text-right border-r border-slate-200/60 font-bold w-[60px]">Dist.</th>
@@ -123,7 +124,7 @@ export function DataTableBody<T extends Record<string, any>>({
           ) : (
             paginatedData.map((item, index) => (
               <tr
-                key={item.id || index}
+                key={item.uuid ? `dt-${item.uuid}` : item.id !== undefined && item.id !== null ? `dt-${item.id}-${index}` : `dt-idx-${index}`}
                 className={`${rowClassName ? rowClassName(item, index) : 'hover:bg-slate-50/60'} transition-colors`}
               >
                 {columns.map((col) => (

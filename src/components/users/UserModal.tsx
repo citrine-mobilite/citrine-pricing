@@ -9,8 +9,8 @@ interface UserModalProps {
   onNameChange: (val: string) => void;
   email: string;
   onEmailChange: (val: string) => void;
-  role: 'admin' | 'responsable' | 'employe';
-  onRoleChange: (val: 'admin' | 'responsable' | 'employe') => void;
+  role: 'super_admin' | 'admin' | 'responsable' | 'employe';
+  onRoleChange: (val: 'super_admin' | 'admin' | 'responsable' | 'employe') => void;
   password?: string;
   onPasswordChange?: (val: string) => void;
   active?: boolean;

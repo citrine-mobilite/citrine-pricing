@@ -15,7 +15,7 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
   trip,
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'4prices' | 'yango_json' | 'hero_json' | 'tripmaster_json' | 'request'>('4prices');
+  const [activeTab, setActiveTab] = useState<'4prices' | 'yango_json' | 'yango_raw' | 'hero_json' | 'tripmaster_json' | 'request'>('4prices');
   const [copied, setCopied] = useState(false);
 
   if (!trip) return null;
@@ -24,6 +24,11 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
   const yangoJsonString = yangoRawData
     ? JSON.stringify(yangoRawData, null, 2)
     : 'Aucune réponse brute Yango enregistrée.';
+
+  const yangoRawResponse = (trip as any)?.prices?.yango?.rawResponse || 'Aucune réponse brute Yango (raw) enregistrée.';
+  const yangoRawString = typeof yangoRawResponse === 'string' 
+      ? yangoRawResponse 
+      : JSON.stringify(yangoRawResponse, null, 2);
 
   const heroRawData = (trip as any)?.heroCab?.rawText || (trip as any)?.heroCab?.rawResponse || (trip as any)?.heroCab || trip.heroQuote?.rawResponse || trip.prices?.heroCab;
   const heroJsonString = heroRawData
@@ -114,6 +119,14 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
             JSON Yango
           </button>
           <button
+            onClick={() => setActiveTab('yango_raw')}
+            className={`px-3.5 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer ${
+              activeTab === 'yango_raw' ? 'border-[#1F4F4A] text-[#1F4F4A]' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            JSON Yango Complet
+          </button>
+          <button
             onClick={() => setActiveTab('hero_json')}
             className={`px-3.5 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer ${
               activeTab === 'hero_json' ? 'border-[#1F4F4A] text-[#1F4F4A]' : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -159,6 +172,10 @@ export const YangoResponseInspectorModal: React.FC<YangoResponseInspectorModalPr
 
           {activeTab === 'yango_json' && (
             <InspectorJsonTab jsonString={yangoJsonString} onCopy={handleCopy} copied={copied} />
+          )}
+
+          {activeTab === 'yango_raw' && (
+            <InspectorJsonTab jsonString={yangoRawString} onCopy={handleCopy} copied={copied} />
           )}
 
           {activeTab === 'hero_json' && (
