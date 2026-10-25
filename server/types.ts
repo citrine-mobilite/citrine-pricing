@@ -58,6 +58,7 @@ export interface CanonicalTripPrices {
     moto: number | null;
     jams?: boolean;
     yangoUnavailable?: boolean;
+    rawResponse?: any;
   };
   heroCab: {
     eco: number | null;

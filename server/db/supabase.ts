@@ -84,7 +84,9 @@ export async function fetchCitiesFromSupabase(): Promise<City[]> {
       }));
     }
   } catch (err: any) {
-    console.warn('[Supabase] Erreur lecture villes:', err.message);
+    if (!err.message?.includes('fetch failed')) {
+      console.warn('[Supabase] Erreur lecture villes:', err.message);
+    }
   }
   return [];
 }
@@ -160,7 +162,9 @@ export async function fetchNeighborhoodsFromSupabase(cityId?: string): Promise<N
       }));
     }
   } catch (err: any) {
-    console.warn('[Supabase] Erreur lecture quartiers:', err.message);
+    if (!err.message?.includes('fetch failed')) {
+      console.warn('[Supabase] Erreur lecture quartiers:', err.message);
+    }
   }
   return [];
 }
@@ -251,7 +255,9 @@ export async function fetchUsersFromSupabase(): Promise<User[]> {
       }));
     }
   } catch (err: any) {
-    console.warn('[Supabase] Erreur lecture utilisateurs:', err.message);
+    if (!err.message?.includes('fetch failed')) {
+      console.warn('[Supabase] Erreur lecture utilisateurs:', err.message);
+    }
   }
   return [];
 }
@@ -269,11 +275,13 @@ export async function upsertUserInSupabase(user: User): Promise<void> {
       last_login_at: user.lastLoginAt || new Date().toISOString()
     };
     const { data, error } = await supabase.from('users').upsert(payload, { onConflict: 'email' });
-    if (error) {
+    if (error && !error.message?.includes('fetch failed')) {
       console.warn('[Supabase] Erreur écriture utilisateur (non bloquant):', error.message);
     }
   } catch (err: any) {
-    console.warn('[Supabase] Erreur réseau écriture utilisateur (mode résilient local):', err?.message || err);
+    if (!err.message?.includes('fetch failed')) {
+      console.warn('[Supabase] Erreur réseau écriture utilisateur (mode résilient local):', err?.message || err);
+    }
   }
 }
 
@@ -371,7 +379,9 @@ export async function fetchCampaignsFromSupabase(): Promise<PricingCampaign[]> {
       }));
     }
   } catch (err: any) {
-    console.warn('[Supabase] Erreur lecture campagnes:', err.message);
+    if (!err.message?.includes('fetch failed')) {
+      console.warn('[Supabase] Erreur lecture campagnes:', err.message);
+    }
   }
   return [];
 }

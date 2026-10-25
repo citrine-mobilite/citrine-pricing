@@ -23,7 +23,8 @@ import {
   saveCampaignShortagesInSupabase,
   bulkInsertTripsInPostgres,
   saveCampaignTripChunkInSupabase,
-  upsertCampaignInSupabase
+  upsertCampaignInSupabase,
+  deleteCampaignInSupabase
 } from '../db/supabase.js';
 import { extractAndSaveCampaignShortages } from '../db/shortageStore.js';
 import { callYangoRoutestats, calculateDistanceKm } from './yangoService.js';
@@ -59,17 +60,17 @@ export interface CampaignSessionState {
 // Map local des sessions actives
 export const campaignSessions = new Map<string | number, CampaignSessionState>();
 
-function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, fallback: T): Promise<T> {
+function fetchWithTimeout<T>(promise: Promise<T>, ms = 5000, defaultValue: T): Promise<T> {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((resolve) => {
-    timeoutId = setTimeout(() => resolve(fallback), ms);
+    timeoutId = setTimeout(() => resolve(defaultValue), ms);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-function getTrustedCompletedPairs(campaign: PricingCampaign, fallback: number): number {
+function getTrustedCompletedPairs(campaign: PricingCampaign, defaultValue: number): number {
   const expectedTotal = Math.max(0, Number(campaign.totalPairs) || 0);
-  const currentValue = Math.max(0, Number(fallback) || 0);
+  const currentValue = Math.max(0, Number(defaultValue) || 0);
 
   if (expectedTotal > 0) {
     return Math.min(Math.max(currentValue, 0), expectedTotal);
@@ -99,6 +100,60 @@ export function cancelChunkCampaignSession(campaignId: string | number): boolean
   }
 
   return true;
+}
+
+/**
+ * Règle Watchdog Automatique :
+ * Si après 1 minute (60 secondes) 0 trajet n'a été traité sur une campagne lancée,
+ * la campagne est automatiquement supprimée de la mémoire et du disque.
+ */
+export function registerCampaignWatchdog(campaignId: string | number) {
+  setTimeout(async () => {
+    try {
+      const targetId = String(campaignId);
+      const session = campaignSessions.get(campaignId) || campaignSessions.get(Number(campaignId)) || Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, campaignId));
+      const camp = session?.campaign || memoryCampaigns.find(c => campaignMatchesId(c, campaignId));
+      
+      const isStillPendingOrActive = camp && (camp.status === 'in_progress' || !camp.status);
+      const hasZeroCompleted = !camp?.completedPairs || camp.completedPairs === 0;
+
+      if (isStillPendingOrActive && hasZeroCompleted) {
+        console.warn(`[Watchdog 1 min] Campagne #${targetId} toujours à 0 trajet après 60s -> Suppression automatique.`);
+        
+        // 1. Annuler la session
+        cancelChunkCampaignSession(campaignId);
+        
+        // 2. Nettoyer les sessions actives
+        campaignSessions.delete(campaignId);
+        campaignSessions.delete(Number(campaignId));
+        campaignSessions.delete(targetId);
+        
+        // 3. Supprimer de memoryCampaigns
+        const idx = memoryCampaigns.findIndex(c => campaignMatchesId(c, targetId));
+        if (idx >= 0) {
+          memoryCampaigns.splice(idx, 1);
+        }
+        
+        // 4. Mettre à jour le disque local immédiatement
+        saveLocalCampaignsDiskBackup();
+        
+        // 5. Supprimer de Supabase
+        deleteCampaignInSupabase(targetId).catch(() => {});
+        
+        // 6. Historique d'audit
+        recordHistory({
+          action: 'delete_campaign',
+          eventType: 'campaign',
+          title: `Suppression automatique (0 trajet après 1 min): Campagne #${targetId}`,
+          description: `La campagne #${targetId} a été purgée automatiquement car 0 trajet n'a été traité après 60 secondes.`,
+          performedBy: 'system_watchdog',
+          performedByName: 'Système Watchdog (1 min)'
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('[Watchdog Warning]:', err.message);
+    }
+  }, 60000);
 }
 
 /**
@@ -138,6 +193,8 @@ export async function initializeCampaignSession(
   };
 
   campaignSessions.set(campaign.id, sessionState);
+  campaignSessions.set(Number(campaign.id), sessionState);
+  campaignSessions.set(String(campaign.id), sessionState);
 
   // Sauvegarde initiale dans Supabase PostgreSQL
   upsertCampaignInSupabase(campaign).catch(() => {});
@@ -147,6 +204,9 @@ export async function initializeCampaignSession(
   memoryCampaigns.splice(0, memoryCampaigns.length, ...dedupedInitial);
   memoryCampaignTrips[campaign.id] = sessionState.trips;
   memoryCampaignCanonicalTrips[campaign.id] = sessionState.canonicalTrips;
+
+  // Activer la surveillance automatique Watchdog 1 min (suppression automatique si 0 trajet après 60s)
+  registerCampaignWatchdog(campaign.id);
 
   return { totalChunks: chunks.length, totalPairs: pairs.length };
 }
@@ -315,7 +375,7 @@ export async function processCampaignChunk(
   const emptyStats = { price: null, priceEconom: null, priceConfort: null, priceStandard: null, priceEco: null };
 
   // Traitement concurrent optimisé par sous-groupes de 3 paires simultanées (accélération x3 sans surcharge réseau)
-  const PAIR_CONCURRENCY = 3;
+  const PAIR_CONCURRENCY = 25;
   for (let pIdx = 0; pIdx < targetChunk.pairs.length; pIdx += PAIR_CONCURRENCY) {
     const activeSessionCancelled = session && session.campaign.status === 'cancelled';
     const staleCacheCancelled = !session && Boolean(memCamp && memCamp.status === 'cancelled');
@@ -333,6 +393,9 @@ export async function processCampaignChunk(
           fetchWithTimeout(callHeroStats(origin.lat, origin.lng, dest.lat, dest.lng, 'econom', session.city.currency, origin.name, dest.name), 7000, emptyStats as any),
           fetchWithTimeout(callTripMasterStats(origin.lat, origin.lng, dest.lat, dest.lng, session.city.currency, origin.name, dest.name), 7000, emptyStats as any)
         ]);
+
+        let tripDistanceKm = (yangoStats.distanceKm && yangoStats.distanceKm > 0) ? yangoStats.distanceKm : 0;
+        if (tripDistanceKm === 0) tripDistanceKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
 
         const yEco = yangoStats.priceEconom || (yangoStats.classes?.econom?.price) || yangoStats.price || null;
         const yConf = yangoStats.priceConfort || yangoStats.classes?.business?.price || yangoStats.classes?.comfort?.price || null;
@@ -369,10 +432,6 @@ export async function processCampaignChunk(
         const tripUuid = randomUUID();
         const cleanOrigin = cleanNeighborhoodName(origin.name);
         const cleanDest = cleanNeighborhoodName(dest.name);
-
-        // Priorité absolue à Yango. Fallback seulement si Yango ne renvoie rien.
-        let tripDistanceKm = (yangoStats.distanceKm && yangoStats.distanceKm > 0) ? yangoStats.distanceKm : 0;
-        if (tripDistanceKm === 0) tripDistanceKm = calculateDistanceKm(origin.lat, origin.lng, dest.lat, dest.lng);
 
         const fallbackDuration = Math.max(2, Math.round((tripDistanceKm / 25) * 60));
         const tripDurationMin = (yangoStats.durationMinutes && yangoStats.durationMinutes > 0) 
@@ -523,6 +582,11 @@ export async function processCampaignChunk(
   // L'enregistrement en base de données et sur disque se fera en masse à la toute fin de la campagne.
   memoryCampaignTrips[campaignId] = session.trips;
   memoryCampaignCanonicalTrips[campaignId] = session.canonicalTrips;
+
+  // Persistance périodique sur disque pour que les actualisations et redémarrages affichent la progression réelle
+  if (chunkIndex % 10 === 0 || session.completedPairs >= session.campaign.totalPairs) {
+    saveLocalCampaignsDiskBackup();
+  }
 
   return {
     success: true,
@@ -898,21 +962,32 @@ export async function runAutomatedServerCampaign(
     performedBy: 'cron_supabase'
   });
 
-  // Exécution asynchrone lot par lot sans bloquer la requête HTTP
+  // Exécution asynchrone haute performance et résiliente en arrière-plan
   (async () => {
     try {
       console.log(`[Cron Pricing 8h-13h-18h] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
-      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-        const session = campaignSessions.get(campaignSeqId);
+      const BATCH_PARALLEL = 3;
+      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx += BATCH_PARALLEL) {
+        const session = campaignSessions.get(campaignSeqId) || campaignSessions.get(Number(campaignSeqId));
         if (!session || session.campaign.status === 'cancelled') {
           console.log(`[Cron Pricing 8h-13h-18h] Campagne #${campaignSeqId} interrompue.`);
           break;
         }
-        await processCampaignChunk(String(campaignSeqId), chunkIdx);
+        const batchGroup: number[] = [];
+        for (let b = 0; b < BATCH_PARALLEL && (chunkIdx + b) <= totalChunks; b++) {
+          batchGroup.push(chunkIdx + b);
+        }
+        try {
+          await Promise.allSettled(batchGroup.map(idx => processCampaignChunk(String(campaignSeqId), idx)));
+          saveLocalCampaignsDiskBackup();
+          await new Promise(r => setTimeout(r, 150));
+        } catch (batchErr: any) {
+          console.warn(`[Cron Pricing 8h-13h-18h] Erreur sur le lot ${chunkIdx}:`, batchErr.message);
+        }
       }
 
       await finalizeCampaignExecution(String(campaignSeqId));
-      console.log(`[Cron Pricing 8h-13h-18h] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
+      console.log(`[Cron Pricing 8h-13h-18h] Campagne #${campaignSeqId} terminée et enregistrée avec succès.`);
     } catch (err: any) {
       console.error(`[Cron Pricing 8h-13h-18h] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
     }
@@ -1019,21 +1094,32 @@ export async function runAutomatedAirportCampaign(
     performedBy: 'cron_airport'
   });
 
-  // Exécution asynchrone lot par lot sans bloquer la requête HTTP
+  // Exécution asynchrone haute performance et résiliente en arrière-plan
   (async () => {
     try {
       console.log(`[Cron Airport 20h-23h-2h] Démarrage de la campagne #${campaignSeqId} (${pairs.length} trajets, ${totalChunks} lots)`);
-      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx++) {
-        const session = campaignSessions.get(campaignSeqId);
+      const BATCH_PARALLEL = 3;
+      for (let chunkIdx = 1; chunkIdx <= totalChunks; chunkIdx += BATCH_PARALLEL) {
+        const session = campaignSessions.get(campaignSeqId) || campaignSessions.get(Number(campaignSeqId));
         if (!session || session.campaign.status === 'cancelled') {
           console.log(`[Cron Airport 20h-23h-2h] Campagne #${campaignSeqId} interrompue.`);
           break;
         }
-        await processCampaignChunk(String(campaignSeqId), chunkIdx);
+        const batchGroup: number[] = [];
+        for (let b = 0; b < BATCH_PARALLEL && (chunkIdx + b) <= totalChunks; b++) {
+          batchGroup.push(chunkIdx + b);
+        }
+        try {
+          await Promise.allSettled(batchGroup.map(idx => processCampaignChunk(String(campaignSeqId), idx)));
+          saveLocalCampaignsDiskBackup();
+          await new Promise(r => setTimeout(r, 150));
+        } catch (batchErr: any) {
+          console.warn(`[Cron Airport 20h-23h-2h] Erreur sur le lot ${chunkIdx}:`, batchErr.message);
+        }
       }
 
       await finalizeCampaignExecution(String(campaignSeqId));
-      console.log(`[Cron Airport 20h-23h-2h] Campagne #${campaignSeqId} terminée et enregistrée avec succès dans Supabase.`);
+      console.log(`[Cron Airport 20h-23h-2h] Campagne #${campaignSeqId} terminée et enregistrée avec succès.`);
     } catch (err: any) {
       console.error(`[Cron Airport 20h-23h-2h] Erreur lors de l'exécution automatique #${campaignSeqId}:`, err.message);
     }

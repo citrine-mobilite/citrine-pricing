@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { randomUUID } from 'crypto';
 import {
   cities,
@@ -12,6 +14,7 @@ import {
   deleteHistoryForCampaign,
   ensureSynced,
   saveLocalCampaignsDiskBackup,
+  loadLocalCampaignsDiskBackup,
   saveCampaignTripsDiskBackup,
   loadCampaignTripsDiskBackup,
   loadCanonicalTripsDiskBackup,
@@ -59,22 +62,34 @@ function matchesCityId(value: string | number | undefined | null, target: string
 // Helper pour trouver une campagne par son id numérique ou son uuid
 function findCampaign(idOrUuid: string | number): PricingCampaign | undefined {
   const target = String(idOrUuid);
-  return memoryCampaigns.find(c => campaignMatchesId(c, target) || campaignMatchesId(c, Number(target)) || String(c.id) === target || c.uuid === target);
+  const session = campaignSessions.get(idOrUuid) || campaignSessions.get(Number(idOrUuid)) || Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, idOrUuid));
+  if (session) return session.campaign;
+
+  const inMemory = memoryCampaigns.find(c => campaignMatchesId(c, target) || campaignMatchesId(c, Number(target)) || String(c.id) === target || c.uuid === target);
+  if (inMemory) return inMemory;
+
+  // Vérification sur le disque si elle n'est pas encore synchronisée en RAM
+  try {
+    const campsFile = path.resolve(process.cwd(), 'server/data/campaigns.json');
+    if (fs.existsSync(campsFile)) {
+      const raw = fs.readFileSync(campsFile, 'utf8');
+      const diskCamps = JSON.parse(raw);
+      if (Array.isArray(diskCamps)) {
+        const found = diskCamps.find(c => campaignMatchesId(c, target) || String(c.id) === target || c.uuid === target);
+        if (found) {
+          memoryCampaigns.unshift(found);
+          return found;
+        }
+      }
+    }
+  } catch {}
+  return undefined;
 }
 
 // 1. Liste des campagnes (100% Mémoire Vive Serveur & Disque local - 0 lecture Firestore)
-// Conformément à la consigne : les campagnes écrites sur Firestore n'ont pas besoin d'être lues,
-// car l'écriture enregistre aussi en mémoire vive / disque local. 0 requête de lecture Firestore consommée !
 router.get('/api/campaigns', async (_req: Request, res: Response) => {
-  await ensureSynced().catch(() => {});
   if (memoryCampaigns.length === 0) {
-    try {
-      const sbCampaigns = await fetchCampaignsFromSupabase();
-      if (sbCampaigns && sbCampaigns.length > 0) {
-        const deduped = dedupeCampaigns([...sbCampaigns, ...memoryCampaigns]);
-        memoryCampaigns.splice(0, memoryCampaigns.length, ...deduped);
-      }
-    } catch {}
+    loadLocalCampaignsDiskBackup();
   }
   let list: PricingCampaign[] = [...memoryCampaigns];
 
@@ -137,7 +152,7 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   // 1. Session active en cours
-  const chunkSession = campaignSessions.get(id) || Array.from(campaignSessions.values()).find(s => String(s.campaign.id) === id || s.campaign.uuid === id);
+  const chunkSession = campaignSessions.get(id) || campaignSessions.get(Number(id)) || Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, id));
   if (chunkSession) {
     return res.json(chunkSession.campaign);
   }

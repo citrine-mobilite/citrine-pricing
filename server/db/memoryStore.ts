@@ -189,9 +189,9 @@ export async function saveNeighborhoodsDiskBackup(cityId?: string) {
 export async function saveLocalCampaignsDiskBackup() {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    memoryCampaigns = dedupeCampaigns(memoryCampaigns);
+    const deduped = dedupeCampaigns(memoryCampaigns);
+    memoryCampaigns.splice(0, memoryCampaigns.length, ...deduped);
     fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(memoryCampaigns, null, 2), 'utf8');
-    await Promise.all(memoryCampaigns.map(c => upsertCampaignInSupabase(c))).catch(() => {});
   } catch (e: any) {
     console.warn('[Disk Backup] Warning writing campaigns to disk:', e.message);
   }
@@ -363,7 +363,8 @@ export function loadLocalCampaignsDiskBackup() {
       const raw = fs.readFileSync(CAMPAIGNS_FILE, 'utf8');
       const data = JSON.parse(raw);
       if (Array.isArray(data) && data.length > 0) {
-        memoryCampaigns = data;
+        const deduped = dedupeCampaigns([...data, ...memoryCampaigns]);
+        memoryCampaigns.splice(0, memoryCampaigns.length, ...deduped);
         console.log(`[Disk Backup] ${data.length} campagnes restaurées depuis le stockage local persistant.`);
         
         // Trier par date décroissante pour identifier les plus récentes
@@ -729,29 +730,41 @@ export async function syncFromSupabase(force = false) {
       fetchCampaignsFromSupabase()
     ]);
 
-    const remoteUsers = sbUsers.status === 'fulfilled' ? sbUsers.value : users;
-    const remoteCities = sbCities.status === 'fulfilled' ? sbCities.value : cities;
-    const remoteNeighborhoods = sbNbs.status === 'fulfilled' ? sbNbs.value : neighborhoods;
-    const remoteCampaigns = sbCampaigns.status === 'fulfilled' ? sbCampaigns.value : memoryCampaigns;
+    const remoteUsers = sbUsers.status === 'fulfilled' ? sbUsers.value : [];
+    const remoteCities = sbCities.status === 'fulfilled' ? sbCities.value : [];
+    const remoteNeighborhoods = sbNbs.status === 'fulfilled' ? sbNbs.value : [];
+    const remoteCampaigns = sbCampaigns.status === 'fulfilled' ? sbCampaigns.value : [];
 
-    const hasRemoteData = remoteUsers.length > 0 || remoteCities.length > 0 || remoteNeighborhoods.length > 0 || remoteCampaigns.length > 0;
-
-    if (!hasRemoteData) {
-      clearLocalState();
-      return;
+    if (remoteUsers.length > 0) {
+      users = remoteUsers;
+    } else {
+      loadUsersDiskBackup();
     }
 
-    users = remoteUsers;
-    cities = remoteCities;
-    neighborhoods = remoteNeighborhoods;
-    memoryCampaigns = remoteCampaigns;
+    if (remoteCities.length > 0) {
+      cities = remoteCities;
+    } else {
+      const diskCities = loadCitiesDiskBackup();
+      if (diskCities.length > 0) cities = diskCities;
+    }
 
-    saveUsersDiskBackup();
-    saveCitiesDiskBackup();
-    saveNeighborhoodsDiskBackup();
-    saveLocalCampaignsDiskBackup();
+    if (remoteNeighborhoods.length > 0) {
+      neighborhoods = remoteNeighborhoods;
+    } else {
+      const diskNbs = loadNeighborhoodsDiskBackup();
+      if (diskNbs.length > 0) neighborhoods = diskNbs;
+    }
+
+    if (remoteCampaigns.length > 0) {
+      const deduped = dedupeCampaigns([...remoteCampaigns, ...memoryCampaigns]);
+      memoryCampaigns.splice(0, memoryCampaigns.length, ...deduped);
+    } else {
+      loadLocalCampaignsDiskBackup();
+    }
   } catch (err: any) {
-    console.warn('[Supabase Sync Warning]:', err.message);
+    if (!err.message?.includes('fetch failed')) {
+      console.warn('[Supabase Sync Warning]:', err.message);
+    }
   }
 }
 
