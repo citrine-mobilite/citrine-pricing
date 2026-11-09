@@ -7,7 +7,8 @@ import campaignRoutes from './routes/campaignRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import statisticsRoutes from './routes/statisticsRoutes.js';
 import shortageRoutes from './routes/shortageRoutes.js';
-import { syncFromSupabase } from './db/memoryStore.js';
+import { initMySQLSchema } from './db/mysql.js';
+import { syncFromDatabase } from './db/memoryStore.js';
 import { startCronScheduler } from './services/cronScheduler.js';
 
 export const app = express();
@@ -34,13 +35,19 @@ app.use(shortageRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    databaseEngine: 'MySQL',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Synchronisation au démarrage: la base Supabase devient la source de vérité si elle est disponible.
-syncFromSupabase(true).catch((e: any) => console.warn('[Supabase] Startup sync warning:', e.message));
+// Initialisation MySQL au démarrage
+initMySQLSchema()
+  .then(() => syncFromDatabase())
+  .catch((e: any) => console.warn('[Database] Startup warning:', e.message));
 
-// Démarrer le planificateur de tâches cron (8h, 13h, 18h & 20h, 23h, 2h)
+// Tous les cron jobs sont désactivés
 startCronScheduler();
 
 export default app;

@@ -109,37 +109,21 @@ export const api = {
     }
   },
 
-  // Cities (avec cache 30 jours et réinitialisation immédiate à la modification)
-  async getCities(forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
+  // Cities (Requête directe en base de données - 0 cache)
+  async getCities(_forceRefresh: boolean = false): Promise<(City & { neighborhoodsCount: number; activeNeighborhoodsCount: number; possiblePairs: number })[]> {
     try {
-      const url = forceRefresh ? `${BASE_URL}/cities?forceRefresh=true` : `${BASE_URL}/cities`;
-      const res = await fetch(url);
+      const res = await fetch(`${BASE_URL}/cities?_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          if (data.length === 0) {
-            invalidateCitiesCache();
-            return [];
-          }
-          setCachedCities(data);
-          return data;
-        }
+        if (Array.isArray(data)) return data;
       }
     } catch (e) {
       console.warn('[API Client] getCities error:', e);
-    }
-
-    if (!forceRefresh) {
-      const cached = getCachedCities();
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        return cached;
-      }
     }
     return [];
   },
 
   async createCity(data: Partial<City>): Promise<City> {
-    invalidateCitiesCache();
     const res = await fetch(`${BASE_URL}/cities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -149,67 +133,37 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Erreur lors de la création de la ville.');
     }
-    invalidateCitiesCache();
     return res.json();
   },
 
   async updateCity(id: string | number, data: Partial<City>): Promise<City> {
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
     const res = await fetch(`${BASE_URL}/cities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erreur lors de la mise à jour de la ville.');
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
     return res.json();
   },
 
   async deleteCity(id: string | number): Promise<void> {
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
-    try {
-      const idStr = String(id);
-      Object.keys(localStorage)
-        .filter(k => k.startsWith('citrine_cities') || k.startsWith('citrine_nbs') || k.includes(idStr))
-        .forEach(k => localStorage.removeItem(k));
-    } catch {}
     const res = await fetch(`${BASE_URL}/cities/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Erreur lors de la suppression de la ville.');
-    invalidateCitiesCache();
-    invalidateNeighborhoodsCache(id);
   },
 
-  // Neighborhoods (avec cache 30 jours par ville et réinitialisation immédiate à la modification)
-  async getNeighborhoods(cityId?: string | number, forceRefresh: boolean = false): Promise<Neighborhood[]> {
+  // Neighborhoods (Requête directe en base de données - 0 cache)
+  async getNeighborhoods(cityId?: string | number, _forceRefresh: boolean = false): Promise<Neighborhood[]> {
     try {
       const params = new URLSearchParams();
       if (cityId !== undefined && cityId !== null) params.append('cityId', String(cityId));
-      if (forceRefresh) params.append('forceRefresh', 'true');
-      const queryStr = params.toString() ? `?${params.toString()}` : '';
-      const res = await fetch(`${BASE_URL}/neighborhoods${queryStr}`);
+      params.append('_t', String(Date.now()));
+      const res = await fetch(`${BASE_URL}/neighborhoods?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          if (data.length === 0) {
-            invalidateNeighborhoodsCache(cityId);
-            return [];
-          }
-          setCachedNeighborhoods(cityId, data);
-          return data;
-        }
+        if (Array.isArray(data)) return data;
       }
     } catch (e) {
       console.warn('[API Client] getNeighborhoods error:', e);
-    }
-
-    if (!forceRefresh) {
-      const cached = getCachedNeighborhoods(cityId);
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        return cached;
-      }
     }
     return [];
   },
@@ -326,41 +280,22 @@ export const api = {
     return res.json();
   },
 
-  // Campaigns
-  async getCampaigns(cityId?: string | number, forceRefresh: boolean = false): Promise<PricingCampaign[]> {
-    const cityIdStr = cityId ? String(cityId) : 'all';
-    const CACHE_KEY = `citrine_campaigns_v7_${cityIdStr}`;
-
+  // Campaigns (Requête directe en base de données - 0 cache)
+  async getCampaigns(cityId?: string | number, _forceRefresh: boolean = false): Promise<PricingCampaign[]> {
     try {
       const params = new URLSearchParams();
       if (cityId) params.append('cityId', String(cityId));
-      if (forceRefresh) params.append('forceRefresh', 'true');
-      params.append('_cb', String(Date.now()));
-      const queryStr = `?${params.toString()}`;
-      const url = `${BASE_URL}/campaigns${queryStr}`;
+      params.append('_t', String(Date.now()));
+      const url = `${BASE_URL}/campaigns?${params.toString()}`;
 
       const res = await fetch(url);
       if (res.ok) {
         const freshList: PricingCampaign[] = await res.json();
-        // Le serveur fait foi : mise à jour immédiate du cache local
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: freshList, timestamp: Date.now() }));
-        } catch {}
-        return freshList;
+        return Array.isArray(freshList) ? freshList : [];
       }
     } catch (e) {
       console.warn('[API Client] getCampaigns network error:', e);
-      if (!forceRefresh) {
-        try {
-          const raw = localStorage.getItem(CACHE_KEY);
-          if (raw) {
-            const { data } = JSON.parse(raw);
-            if (Array.isArray(data)) return data;
-          }
-        } catch {}
-      }
     }
-
     return [];
   },
 
@@ -414,25 +349,6 @@ export const api = {
       throw new Error(err.error || 'Erreur lors du lancement de la campagne.');
     }
     const result = await res.json();
-
-    // Ajout incrémental de la nouvelle campagne au cache local sans rien effacer
-    if (result.campaign) {
-      const cacheKeys = [`citrine_campaigns_v7_all`, `citrine_campaigns_v7_${data.cityId}`];
-      for (const key of cacheKeys) {
-        try {
-          const raw = localStorage.getItem(key);
-          let list: PricingCampaign[] = [];
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed.data)) list = parsed.data;
-          }
-          if (!list.some(c => c.id === result.campaign.id)) {
-            list.unshift(result.campaign);
-            localStorage.setItem(key, JSON.stringify({ data: list, timestamp: Date.now() }));
-          }
-        } catch {}
-      }
-    }
 
     return result;
   },
@@ -635,7 +551,7 @@ export const api = {
     if (!res.ok) throw new Error('Erreur lors de la suppression de toutes les campagnes.');
   },
 
-  // Trip Results (Données réelles du serveur en priorité absolue, 0 trajet synthétique)
+  // Trip Results (Données réelles de la base MySQL - 0 cache)
   async getCampaignResults(
     campaignId: string | number,
     filters?: {
@@ -649,18 +565,11 @@ export const api = {
     }
   ): Promise<TripResult[]> {
     const campIdStr = String(campaignId);
-    const hasCustomFilters = Boolean(
-      filters?.startNeighborhood ||
-      filters?.endNeighborhood ||
-      filters?.minPrice ||
-      filters?.maxPrice ||
-      filters?.search ||
-      filters?.limit
-    );
 
     try {
       const params = new URLSearchParams();
       params.append('all', 'true');
+      params.append('_t', String(Date.now()));
       if (filters?.limit) params.append('limit', filters.limit.toString());
       if (filters?.startNeighborhood) params.append('startNeighborhood', filters.startNeighborhood);
       if (filters?.endNeighborhood) params.append('endNeighborhood', filters.endNeighborhood);
@@ -675,22 +584,10 @@ export const api = {
       const data = await res.json();
 
       if (Array.isArray(data)) {
-        if (!hasCustomFilters && data.length > 0) {
-          setCachedCampaignTrips(campIdStr, data).catch(() => {});
-        }
         return data;
       }
       return [];
     } catch {
-      // Secours réseau uniquement si hors-ligne : renvoyer le cache local sans données fictives
-      if (!hasCustomFilters) {
-        try {
-          const cached = await getCachedCampaignTrips(campIdStr);
-          if (cached && cached.length > 0) {
-            return cached as TripResult[];
-          }
-        } catch {}
-      }
       return [];
     }
   },
@@ -798,46 +695,18 @@ export const api = {
     return res.json();
   },
 
-  // History & Audit logs (avec cache navigateur 7 jours)
+  // History & Audit logs (Requête directe MySQL - 0 cache)
   async getHistory(): Promise<any[]> {
-    const CACHE_KEY = 'citrine_history_v7';
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-    let cachedList: any[] = [];
     try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        const { data, timestamp } = JSON.parse(raw);
-        if (Date.now() - timestamp < SEVEN_DAYS_MS && Array.isArray(data)) {
-          cachedList = data;
-        }
-      }
-    } catch {}
-
-    try {
-      const res = await fetch(`${BASE_URL}/history`);
+      const res = await fetch(`${BASE_URL}/history?_t=${Date.now()}`);
       if (res.ok) {
         const freshList: any[] = await res.json();
-        const map = new Map<string, any>();
-        for (const item of cachedList) {
-          if (item && item.id) map.set(item.id, item);
-        }
-        for (const item of freshList) {
-          if (item && item.id) map.set(item.id, item);
-        }
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ data: merged, timestamp: Date.now() }));
-        } catch {}
-        return merged;
+        return Array.isArray(freshList) ? freshList : [];
       }
     } catch (e) {
       console.warn('[API Client] getHistory error:', e);
     }
-
-    return cachedList;
+    return [];
   },
 
   async deleteHistoryItem(id: string | number): Promise<void> {

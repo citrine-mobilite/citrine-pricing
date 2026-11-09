@@ -18,44 +18,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Vérification de la session locale Supabase au démarrage
-    const saved = localStorage.getItem('vtc_pricing_user');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.email) {
-          // Restauration immédiate de l'utilisateur
-          setUser(parsed);
-          setIsLoading(false);
+    let isMounted = true;
 
-          // Validation asynchrone auprès de Supabase
-          api.getUsers()
-            .then((dbUsers) => {
+    async function initAuth() {
+      const saved = localStorage.getItem('vtc_pricing_user');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.email) {
+            setUser(parsed);
+            setIsLoading(false);
+
+            // Validation de session auprès de la base
+            api.getUsers().then((dbUsers) => {
+              if (!isMounted) return;
               const matched = dbUsers.find(
                 u => u.id === parsed.id || u.uuid === parsed.uuid || u.email.toLowerCase() === parsed.email.toLowerCase()
               );
+
               if (matched && matched.active) {
                 setUser(matched);
                 localStorage.setItem('vtc_pricing_user', JSON.stringify(matched));
               } else if (matched && !matched.active) {
-                // Compte désactivé dans Supabase
                 setUser(null);
                 localStorage.removeItem('vtc_pricing_user');
                 localStorage.removeItem('vtc_pricing_token');
               }
-            })
-            .catch(() => {
-              // Réseau temporairement indisponible, garder la session
-            });
-          return;
+            }).catch(() => {});
+            return;
+          }
+        } catch {
+          localStorage.removeItem('vtc_pricing_user');
+          localStorage.removeItem('vtc_pricing_token');
         }
-      } catch {
-        localStorage.removeItem('vtc_pricing_user');
-        localStorage.removeItem('vtc_pricing_token');
+      }
+      if (isMounted) {
+        setUser(null);
+        setIsLoading(false);
       }
     }
-    setUser(null);
-    setIsLoading(false);
+
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (email: string, pass: string) => {

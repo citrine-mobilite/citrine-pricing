@@ -23,7 +23,7 @@ export const DashboardMetricCards: React.FC<DashboardMetricCardsProps> = ({
   failedCampaignsCount,
   activeNeighborhoodsCount,
   totalNeighborhoodsCount,
-  availabilityStats = { yangoRate: 98, heroRate: 95, tmRate: 75 },
+  availabilityStats = { yangoRate: 0, heroRate: 0, tmRate: 0 },
   onNavigate
 }) => {
   const totalRealized = completedCampaignsCount + failedCampaignsCount;

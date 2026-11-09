@@ -1,15 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import {
-  fetchCitiesFromSupabase,
-  upsertCityInSupabase,
-  deleteCityFromSupabase,
-  fetchNeighborhoodsFromSupabase,
-  upsertNeighborhoodsInSupabase,
-  deleteNeighborhoodFromSupabase,
-  deleteNeighborhoodsByCityFromSupabase,
-  supabase
-} from '../db/supabase.js';
+  fetchCitiesFromMySQL,
+  upsertCityInMySQL,
+  deleteCityFromMySQL,
+  fetchNeighborhoodsFromMySQL,
+  upsertNeighborhoodsInMySQL,
+  deleteNeighborhoodFromMySQL,
+  deleteNeighborhoodsByCityFromMySQL
+} from '../db/mysql.js';
 import {
   cities,
   neighborhoods,
@@ -18,13 +17,7 @@ import {
   recordHistory,
   ensureSynced,
   saveNeighborhoodsDiskBackup,
-  saveCitiesDiskBackup,
-  isCitiesCacheValid,
-  invalidateCitiesCache,
-  touchCitiesCache,
-  isNeighborhoodsCacheValid,
-  invalidateNeighborhoodsCache,
-  touchNeighborhoodsCache
+  saveCitiesDiskBackup
 } from '../db/memoryStore.js';
 import { getNextSequence } from '../db/counters.js';
 import { City, Neighborhood } from '../types.js';
@@ -59,22 +52,15 @@ function buildNeighborhoodRecord(item: any, cityId: string, cityName: string): N
   };
 }
 
-// Cities (Servies directement depuis Supabase ou cache mémoire synchronisé)
-router.get('/api/cities', async (req: Request, res: Response) => {
-  await ensureSynced().catch(() => {});
-
-  const forceRefresh = req.query.forceRefresh === 'true';
-
-  if (!isCitiesCacheValid() || cities.length === 0 || forceRefresh) {
-    try {
-      const sbCities = await fetchCitiesFromSupabase();
-      if (sbCities && sbCities.length > 0) {
-        setCities(sbCities);
-        saveCitiesDiskBackup();
-      }
-    } catch (e: any) {
-      console.warn('[Supabase] Erreur lecture villes:', e.message);
+// 1. Villes : Servies directement depuis MySQL (0 cache)
+router.get('/api/cities', async (_req: Request, res: Response) => {
+  try {
+    const dbCities = await fetchCitiesFromMySQL();
+    if (dbCities && dbCities.length > 0) {
+      setCities(dbCities);
     }
+  } catch (e: any) {
+    console.warn('[MySQL] Erreur lecture villes:', e.message);
   }
 
   // Injecter le nombre de quartiers
@@ -126,8 +112,7 @@ router.post('/api/cities', async (req: Request, res: Response) => {
 
   cities.push(newCity);
   saveCitiesDiskBackup();
-  invalidateCitiesCache();
-  await upsertCityInSupabase(newCity).catch((e: any) => console.warn('[Supabase] Error creating city:', e.message));
+  await upsertCityInMySQL(newCity).catch((e: any) => console.warn('[MySQL] Error creating city:', e.message));
 
   await recordHistory({
     action: 'create_city',
@@ -169,7 +154,6 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
     const isNewActive = Boolean(active);
     city.active = isNewActive;
     if (!isNewActive) {
-      // Lorsqu'une ville est désactivée, ses quartiers ne sont plus monitorés
       neighborhoods.forEach(n => {
         if (String(n.cityId ?? '') === String(id) || String(n.cityId ?? '') === String(city.uuid ?? '') || String(n.cityId ?? '') === String(city.id ?? '')) {
           n.active = false;
@@ -177,17 +161,14 @@ router.put('/api/cities/:id', async (req: Request, res: Response) => {
       });
       const affectedNbs = neighborhoods.filter(n => String(n.cityId ?? '') === String(id) || String(n.cityId ?? '') === String(city.uuid ?? '') || String(n.cityId ?? '') === String(city.id ?? ''));
       if (affectedNbs.length > 0) {
-        upsertNeighborhoodsInSupabase(affectedNbs).catch(() => {});
+        upsertNeighborhoodsInMySQL(affectedNbs).catch(() => {});
       }
     }
   }
   if (autoSchedule !== undefined) city.autoSchedule = autoSchedule;
 
   saveCitiesDiskBackup();
-  invalidateCitiesCache();
-  invalidateNeighborhoodsCache(String(city.id));
-
-  await upsertCityInSupabase(city).catch((e: any) => console.warn('[Supabase] Error updating city:', e.message));
+  await upsertCityInMySQL(city).catch((e: any) => console.warn('[MySQL] Error updating city:', e.message));
   return res.json(city);
 });
 
@@ -203,10 +184,8 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   setNeighborhoods(remainingNbs);
   saveNeighborhoodsDiskBackup();
   saveCitiesDiskBackup();
-  invalidateCitiesCache();
-  invalidateNeighborhoodsCache(id);
 
-  await deleteCityFromSupabase(deleted.uuid || deleted.id);
+  await deleteCityFromMySQL(deleted.uuid || deleted.id);
 
   await recordHistory({
     action: 'delete_city',
@@ -218,27 +197,22 @@ router.delete('/api/cities/:id', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Ville et quartiers associés supprimés.' });
 });
 
-// Neighborhoods (Servis depuis le cache mémoire/disque avec validité 30 jours, réinitialisé si modifié)
+// 2. Quartiers : Servis directement depuis MySQL (0 cache)
 router.get('/api/neighborhoods', async (req: Request, res: Response) => {
-  const { cityId, forceRefresh } = req.query;
+  const { cityId } = req.query;
 
-  await ensureSynced().catch(() => {});
-
-  if (forceRefresh === 'true' || !isNeighborhoodsCacheValid(cityId as string) || neighborhoods.length === 0) {
-    try {
-      const sbNbs = await fetchNeighborhoodsFromSupabase(cityId ? String(cityId) : undefined);
-      if (sbNbs && sbNbs.length > 0) {
-        if (cityId) {
-          const others = neighborhoods.filter(n => String(n.cityId) !== String(cityId));
-          setNeighborhoods([...others, ...sbNbs]);
-        } else {
-          setNeighborhoods(sbNbs);
-        }
-        saveNeighborhoodsDiskBackup(cityId as string);
+  try {
+    const dbNbs = await fetchNeighborhoodsFromMySQL(cityId ? String(cityId) : undefined);
+    if (dbNbs && dbNbs.length > 0) {
+      if (cityId) {
+        const others = neighborhoods.filter(n => String(n.cityId) !== String(cityId));
+        setNeighborhoods([...others, ...dbNbs]);
+      } else {
+        setNeighborhoods(dbNbs);
       }
-    } catch (e: any) {
-      console.warn('[Supabase] Erreur lecture quartiers:', e.message);
     }
+  } catch (e: any) {
+    console.warn('[MySQL] Erreur lecture quartiers:', e.message);
   }
 
   let list = neighborhoods;
@@ -246,9 +220,8 @@ router.get('/api/neighborhoods', async (req: Request, res: Response) => {
     list = list.filter(n => String(n.cityId ?? '') === String(cityId) || String(n.cityId ?? '') === String(cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId)?.id ?? '') || String(n.cityId ?? '') === String(cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId)?.uuid ?? ''));
   }
 
-  // Injecter le nom de la ville
   const enriched = list.map(n => {
-    const c = cities.find(city => city.id === n.cityId);
+    const c = cities.find(city => city.id === n.cityId || city.uuid === n.cityId);
     return {
       ...n,
       cityName: c?.name || 'Inconnue'
@@ -292,8 +265,7 @@ router.post('/api/neighborhoods', async (req: Request, res: Response) => {
 
   neighborhoods.push(newNb);
   saveNeighborhoodsDiskBackup(String(city.id));
-  invalidateNeighborhoodsCache(String(city.id));
-  await upsertNeighborhoodsInSupabase([newNb]);
+  await upsertNeighborhoodsInMySQL([newNb]);
 
   return res.status(201).json({ ...newNb, cityName: city.name });
 });
@@ -321,8 +293,7 @@ router.put('/api/neighborhoods/:id', async (req: Request, res: Response) => {
   nb.updatedAt = new Date().toISOString();
 
   saveNeighborhoodsDiskBackup(String(nb.cityId));
-  invalidateNeighborhoodsCache(String(nb.cityId));
-  await upsertNeighborhoodsInSupabase([nb]);
+  await upsertNeighborhoodsInMySQL([nb]);
   return res.json(nb);
 });
 
@@ -335,8 +306,7 @@ router.delete('/api/neighborhoods/:id', async (req: Request, res: Response) => {
 
   const deleted = neighborhoods.splice(idx, 1)[0];
   saveNeighborhoodsDiskBackup(String(deleted.cityId));
-  invalidateNeighborhoodsCache(String(deleted.cityId));
-  await deleteNeighborhoodFromSupabase(deleted.uuid || deleted.id);
+  await deleteNeighborhoodFromMySQL(deleted.uuid || deleted.id);
   return res.json({ success: true, message: 'Quartier supprimé avec succès.' });
 });
 
@@ -346,185 +316,105 @@ router.delete('/api/neighborhoods/city/:cityId', async (req: Request, res: Respo
   const filtered = neighborhoods.filter(n => String(n.cityId ?? '') !== String(cityId));
   setNeighborhoods(filtered);
   saveNeighborhoodsDiskBackup(String(cityId));
-  invalidateNeighborhoodsCache(String(cityId));
   const deletedCount = countBefore - filtered.length;
 
-  await deleteNeighborhoodsByCityFromSupabase(cityId);
+  await deleteNeighborhoodsByCityFromMySQL(cityId);
 
-  return res.json({ success: true, message: `${deletedCount} quartier(s) supprimé(s).` });
+  return res.json({ success: true, deletedCount, message: `${deletedCount} quartier(s) supprimé(s).` });
 });
 
 router.post('/api/neighborhoods/batch-toggle', async (req: Request, res: Response) => {
   const { cityId, active } = req.body;
-  if (!cityId || active === undefined) {
-    return res.status(400).json({ error: 'cityId et statut active requis.' });
+  if (cityId === undefined || active === undefined) {
+    return res.status(400).json({ error: 'cityId et active sont obligatoires.' });
   }
 
   const boolActive = Boolean(active);
+  let updatedCount = 0;
+  const toUpdate: Neighborhood[] = [];
+
   neighborhoods.forEach(n => {
     if (String(n.cityId ?? '') === String(cityId)) {
       n.active = boolActive;
+      n.status = boolActive ? 'actif' : 'inactif';
+      toUpdate.push(n);
+      updatedCount++;
     }
   });
 
   saveNeighborhoodsDiskBackup(String(cityId));
-  invalidateNeighborhoodsCache(String(cityId));
-  return res.json({ success: true, active: boolActive });
-});
-
-router.post('/api/neighborhoods/seed-city', async (req: Request, res: Response) => {
-  const { cityId } = req.body;
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId || c.id == cityId);
-  if (!city) {
-    return res.status(404).json({ error: 'Ville introuvable.' });
+  if (toUpdate.length > 0) {
+    await upsertNeighborhoodsInMySQL(toUpdate);
   }
 
-  return res.json({
-    success: true,
-    message: 'Utilisez le bouton Import Excel pour ajouter de nouveaux quartiers.',
-    neighborhoods: neighborhoods.filter(n => String(n.cityId ?? '') === String(cityId))
-  });
+  return res.json({ success: true, updatedCount, active: boolActive });
 });
 
 router.post('/api/neighborhoods/import-batch', async (req: Request, res: Response) => {
   const { cityId, neighborhoods: importedList } = req.body;
   if (!cityId || !Array.isArray(importedList) || importedList.length === 0) {
-    return res.status(400).json({ error: 'cityId et une liste non-vide de quartiers sont requis.' });
+    return res.status(400).json({ error: 'cityId et liste de quartiers valides sont requis.' });
   }
 
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId || c.id == cityId);
-  if (!city) {
-    return res.status(404).json({ error: 'Ville introuvable.' });
-  }
+  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
+  const cityName = city?.name || 'Inconnue';
 
-  const previousNeighborhoods = [...neighborhoods];
-  const createdNeighborhoods: Neighborhood[] = [];
+  const newRecords: Neighborhood[] = importedList.map(item => buildNeighborhoodRecord(item, String(cityId), cityName));
 
-  try {
-    importedList.forEach((item: any) => {
-      if (item.name && item.lat !== undefined && item.lng !== undefined) {
-        createdNeighborhoods.push(buildNeighborhoodRecord(item, cityId, city.name));
-      }
-    });
+  neighborhoods.push(...newRecords);
+  saveNeighborhoodsDiskBackup(String(cityId));
+  await upsertNeighborhoodsInMySQL(newRecords);
 
-    if (createdNeighborhoods.length === 0) {
-      throw new Error('Aucun quartier valide à importer.');
-    }
-
-    neighborhoods.push(...createdNeighborhoods);
-    saveNeighborhoodsDiskBackup(String(city.id));
-    invalidateNeighborhoodsCache(String(city.id));
-
-    // Sauvegarde directe dans Supabase PostgreSQL (sans Firestore)
-    await upsertNeighborhoodsInSupabase(createdNeighborhoods);
-
-    return res.status(201).json({
-      success: true,
-      count: createdNeighborhoods.length,
-      message: `${createdNeighborhoods.length} quartiers importés avec succès.`
-    });
-  } catch (error: any) {
-    setNeighborhoods([]);
-    saveNeighborhoodsDiskBackup(String(city.id));
-    invalidateNeighborhoodsCache(String(city.id));
-    console.warn('[Neighborhoods Import Batch] Transaction rollback:', error?.message || error);
-    return res.status(500).json({
-      success: false,
-      error: 'Import Excel annulé : aucune donnée n’a été conservée.',
-      details: error?.message || 'Erreur inconnue'
-    });
-  }
+  return res.json({ success: true, count: newRecords.length, neighborhoods: newRecords });
 });
 
 router.post('/api/neighborhoods/reconcile-batch', async (req: Request, res: Response) => {
   const { cityId, items } = req.body;
-  if (!cityId || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'cityId et une liste non-vide de rectifications sont requis.' });
+  if (!cityId || !Array.isArray(items)) {
+    return res.status(400).json({ error: 'cityId et items sont requis.' });
   }
 
-  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId || c.id == cityId);
-  if (!city) {
-    return res.status(404).json({ error: 'Ville introuvable.' });
-  }
+  const city = cities.find(c => String(c.id) === String(cityId) || c.uuid === cityId);
+  const cityName = city?.name || 'Inconnue';
 
-  const previousNeighborhoods = [...neighborhoods];
   let updatedCount = 0;
   let createdCount = 0;
-  let ignoredCount = 0;
-  const modifiedDocs: Neighborhood[] = [];
+  const toUpsert: Neighborhood[] = [];
 
-  try {
-    for (const item of items) {
-      // 1. Protection stricte contre Douala 6ème (exclu à la demande de l'utilisateur)
-      const isDla6 = item.status === 'ignored_douala_6' ||
-        /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.arrondissement || '') ||
-        /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.fullAddress || '') ||
-        /\b(douala\s*6|douala\s*6e|douala\s*6eme|douala\s*6ieme|douala\s*vi|manoka)\b/i.test(item.name || '');
+  for (const item of items) {
+    const existing = neighborhoods.find(n =>
+      String(n.cityId) === String(cityId) &&
+      n.name.toLowerCase().trim() === String(item.name || '').toLowerCase().trim()
+    );
 
-      if (isDla6) {
-        ignoredCount++;
-        continue;
-      }
-
-      if (item.status === 'update' && item.targetId) {
-        const existing = neighborhoods.find(n => n.id === item.targetId || n.uuid === item.targetId);
-        if (existing) {
-          existing.name = String(item.name).trim();
-          existing.fullAddress = String(item.fullAddress || '').trim();
-          if (item.ville) existing.ville = String(item.ville).trim();
-          if (item.departement) existing.departement = String(item.departement).trim();
-          if (item.arrondissement) existing.arrondissement = String(item.arrondissement).trim();
-          if (item.zone) existing.zone = String(item.zone).trim();
-          if (item.zoneType) existing.zoneType = item.zoneType;
-          if (item.itemStatus) existing.status = String(item.itemStatus).trim();
-          if (item.active !== undefined) existing.active = Boolean(item.active);
-          existing.lat = Number(item.lat);
-          existing.lng = Number(item.lng);
-          existing.updatedAt = new Date().toISOString();
-          updatedCount++;
-          modifiedDocs.push(existing);
-        }
-      } else if (item.status === 'create') {
-        const newNb = buildNeighborhoodRecord({ ...item, uuid: normalizeNeighborhoodUuid(item.uuid || undefined) }, cityId, city.name);
-        neighborhoods.push(newNb);
-        createdCount++;
-        modifiedDocs.push(newNb);
-      }
+    if (existing) {
+      if (item.lat) existing.lat = Number(item.lat);
+      if (item.lng) existing.lng = Number(item.lng);
+      if (item.arrondissement) existing.arrondissement = item.arrondissement;
+      if (item.active !== undefined) existing.active = Boolean(item.active);
+      existing.updatedAt = new Date().toISOString();
+      toUpsert.push(existing);
+      updatedCount++;
+    } else {
+      const newRec = buildNeighborhoodRecord(item, String(cityId), cityName);
+      neighborhoods.push(newRec);
+      toUpsert.push(newRec);
+      createdCount++;
     }
-
-    saveNeighborhoodsDiskBackup();
-
-    if (modifiedDocs.length > 0) {
-      await upsertNeighborhoodsInSupabase(modifiedDocs);
-    }
-
-    await recordHistory({
-      action: 'reconcile_neighborhoods',
-      eventType: 'neighborhoods',
-      title: 'Rectification des coordonnées et quartiers via Excel',
-      description: `${updatedCount} quartiers rectifiés, ${createdCount} nouveaux créés, ${ignoredCount} ignorés (Douala 6ème) pour ${city.name}.`,
-      status: 'success'
-    });
-
-    return res.json({
-      success: true,
-      updatedCount,
-      createdCount,
-      ignoredCount,
-      totalProcessed: updatedCount + createdCount,
-      message: `${updatedCount} quartier(s) rectifié(s) et ${createdCount} nouveau(x) quartier(s) créé(s) avec succès.`
-    });
-  } catch (error: any) {
-    setNeighborhoods([]);
-    saveNeighborhoodsDiskBackup(String(city.id));
-    invalidateNeighborhoodsCache(String(city.id));
-    console.warn('[Neighborhoods Reconcile Batch] Transaction rollback:', error?.message || error);
-    return res.status(500).json({
-      success: false,
-      error: 'Import Excel annulé : aucune donnée n’a été conservée.',
-      details: error?.message || 'Erreur inconnue'
-    });
   }
+
+  saveNeighborhoodsDiskBackup(String(cityId));
+  if (toUpsert.length > 0) {
+    await upsertNeighborhoodsInMySQL(toUpsert);
+  }
+
+  return res.json({
+    success: true,
+    updatedCount,
+    createdCount,
+    ignoredCount: 0,
+    message: `${updatedCount} mis à jour, ${createdCount} créés.`
+  });
 });
 
 export default router;

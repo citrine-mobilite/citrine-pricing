@@ -1,6 +1,4 @@
 import { Router, Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import {
   cities,
@@ -14,7 +12,6 @@ import {
   deleteHistoryForCampaign,
   ensureSynced,
   saveLocalCampaignsDiskBackup,
-  loadLocalCampaignsDiskBackup,
   saveCampaignTripsDiskBackup,
   loadCampaignTripsDiskBackup,
   loadCanonicalTripsDiskBackup,
@@ -36,11 +33,12 @@ import {
   runAutomatedAirportCampaign
 } from '../services/campaignEngine.js';
 import {
-  upsertCampaignInSupabase,
-  deleteCampaignInSupabase,
-  fetchCampaignsFromSupabase,
-  fetchCampaignResultsFromSupabase
-} from '../db/supabase.js';
+  upsertCampaignInMySQL,
+  deleteCampaignInMySQL,
+  fetchCampaignsFromMySQL,
+  fetchCampaignResultsFromMySQL,
+  getMySQLPool
+} from '../db/mysql.js';
 import {
   generatePricingPairs,
   calculatePossiblePricingPairsCount,
@@ -62,34 +60,19 @@ function matchesCityId(value: string | number | undefined | null, target: string
 // Helper pour trouver une campagne par son id numérique ou son uuid
 function findCampaign(idOrUuid: string | number): PricingCampaign | undefined {
   const target = String(idOrUuid);
-  const session = campaignSessions.get(idOrUuid) || campaignSessions.get(Number(idOrUuid)) || Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, idOrUuid));
-  if (session) return session.campaign;
-
-  const inMemory = memoryCampaigns.find(c => campaignMatchesId(c, target) || campaignMatchesId(c, Number(target)) || String(c.id) === target || c.uuid === target);
-  if (inMemory) return inMemory;
-
-  // Vérification sur le disque si elle n'est pas encore synchronisée en RAM
-  try {
-    const campsFile = path.resolve(process.cwd(), 'server/data/campaigns.json');
-    if (fs.existsSync(campsFile)) {
-      const raw = fs.readFileSync(campsFile, 'utf8');
-      const diskCamps = JSON.parse(raw);
-      if (Array.isArray(diskCamps)) {
-        const found = diskCamps.find(c => campaignMatchesId(c, target) || String(c.id) === target || c.uuid === target);
-        if (found) {
-          memoryCampaigns.unshift(found);
-          return found;
-        }
-      }
-    }
-  } catch {}
-  return undefined;
+  return memoryCampaigns.find(c => campaignMatchesId(c, target) || campaignMatchesId(c, Number(target)) || String(c.id) === target || c.uuid === target);
 }
 
-// 1. Liste des campagnes (100% Mémoire Vive Serveur & Disque local - 0 lecture Firestore)
+// 1. Liste des campagnes servies en direct depuis MySQL (0 cache)
 router.get('/api/campaigns', async (_req: Request, res: Response) => {
-  if (memoryCampaigns.length === 0) {
-    loadLocalCampaignsDiskBackup();
+  try {
+    const dbCampaigns = await fetchCampaignsFromMySQL();
+    if (dbCampaigns && dbCampaigns.length > 0) {
+      const deduped = dedupeCampaigns(dbCampaigns);
+      memoryCampaigns.splice(0, memoryCampaigns.length, ...deduped);
+    }
+  } catch (e: any) {
+    console.warn('[MySQL] Erreur lecture campagnes:', e.message);
   }
   let list: PricingCampaign[] = [...memoryCampaigns];
 
@@ -152,7 +135,7 @@ router.get('/api/campaigns/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   // 1. Session active en cours
-  const chunkSession = campaignSessions.get(id) || campaignSessions.get(Number(id)) || Array.from(campaignSessions.values()).find(s => campaignMatchesId(s.campaign, id));
+  const chunkSession = campaignSessions.get(id) || Array.from(campaignSessions.values()).find(s => String(s.campaign.id) === id || s.campaign.uuid === id);
   if (chunkSession) {
     return res.json(chunkSession.campaign);
   }
@@ -389,7 +372,7 @@ router.post('/api/campaigns/start', async (req: Request, res: Response) => {
   }
 
   // Initialisation de la session de campagne
-  await upsertCampaignInSupabase(campaign);
+  await upsertCampaignInMySQL(campaign);
   const { totalChunks, totalPairs } = await initializeCampaignSession(campaign, city, pairs);
   saveLocalCampaignsDiskBackup();
 
@@ -545,15 +528,15 @@ router.patch('/api/campaigns/:id/comment', async (req: Request, res: Response) =
     }
     saveLocalCampaignsDiskBackup();
 
-    // 2. Sauvegarde Supabase PostgreSQL
+    // 2. Sauvegarde directe dans MySQL
     try {
-      const { pgPool } = await import('../db/supabase.js');
-      await pgPool.query(
-        'UPDATE public.campaigns SET comments = $1 WHERE uuid = $2 OR id::text = $2',
-        [trimmedComment || null, memCamp.uuid || String(memCamp.id)]
+      const p = getMySQLPool();
+      await p.query(
+        'UPDATE campaigns SET comment = ? WHERE uuid = ? OR id = ?',
+        [trimmedComment || null, memCamp.uuid || String(memCamp.id), String(memCamp.id)]
       );
     } catch (e: any) {
-      console.warn('[Supabase] Warning saving campaign comment:', e.message);
+      console.warn('[MySQL] Warning saving campaign comment:', e.message);
     }
   }
 
@@ -584,15 +567,15 @@ router.delete('/api/campaigns', async (_req: Request, res: Response) => {
   saveLocalCampaignsDiskBackup();
   clearAllShortages();
 
-  // Nettoyage Supabase PostgreSQL (suppression globale)
+  // Nettoyage MySQL (suppression globale)
   try {
-    const { pgPool } = await import('../db/supabase.js');
-    await pgPool.query('DELETE FROM public.trips');
-    await pgPool.query('DELETE FROM public.shortages');
-    await pgPool.query('DELETE FROM public.campaign_results');
-    await pgPool.query('DELETE FROM public.campaigns');
+    const p = getMySQLPool();
+    await p.query('DELETE FROM trips');
+    await p.query('DELETE FROM shortages');
+    await p.query('DELETE FROM campaign_results');
+    await p.query('DELETE FROM campaigns');
   } catch (err: any) {
-    console.warn('[Supabase] Warning global delete:', err.message);
+    console.warn('[MySQL] Warning global delete:', err.message);
   }
 
   await recordHistory({
@@ -643,8 +626,8 @@ router.delete('/api/campaigns/:id', async (req: Request, res: Response) => {
   deleteHistoryForCampaign(String(targetId)).catch(() => {});
   if (targetUuid) deleteHistoryForCampaign(targetUuid).catch(() => {});
 
-  // Nettoyage Supabase PostgreSQL (supprime campagnes, campaign_results, trips et shortages en cascade)
-  deleteCampaignInSupabase(targetUuid || String(targetId)).catch(() => {});
+  // Nettoyage MySQL (supprime campagnes, campaign_results, trips et shortages en cascade)
+  deleteCampaignInMySQL(targetUuid || String(targetId)).catch(() => {});
 
   return res.json({ success: true, message: 'Campagne, résultats et historiques associés supprimés avec succès.' });
 });
@@ -669,28 +652,20 @@ router.get('/api/campaigns/:id/results', async (req: Request, res: Response) => 
     return res.json(session.trips);
   }
 
-  // 2. Cache mémoire RAM serveur instantané (2ms, 0 lecture Firestore)
-  const ramTrips = memoryCampaignTrips[String(targetId)] || memoryCampaignTrips[String(id)] || (targetUuid ? memoryCampaignTrips[targetUuid] : undefined);
-  if (ramTrips && ramTrips.length > 0) {
-    res.setHeader('X-Cache', 'HIT-RAM');
-    return res.json(ramTrips);
-  }
-
-  // 3. Cache disque local serveur persistant (survit aux redémarrages et quotas, 0 lecture Firestore)
-  const diskTrips = loadCampaignTripsDiskBackup(targetId) || loadCampaignTripsDiskBackup(id) || (targetUuid ? loadCampaignTripsDiskBackup(targetUuid) : null);
-  if (diskTrips && diskTrips.length > 0) {
-    res.setHeader('X-Cache', 'HIT-DISK');
-    return res.json(diskTrips);
-  }
-
-  // 4. Supabase PostgreSQL
+  // 2. MySQL direct (source de vérité)
   try {
-    const sbTrips = await fetchCampaignResultsFromSupabase(targetUuid || String(targetId));
-    if (sbTrips && sbTrips.length > 0) {
-      res.setHeader('X-Cache', 'HIT-SUPABASE');
-      return res.json(sbTrips);
+    const dbTrips = await fetchCampaignResultsFromMySQL(targetUuid || String(targetId));
+    if (dbTrips && dbTrips.length > 0) {
+      res.setHeader('X-Cache', 'HIT-MYSQL');
+      return res.json(dbTrips);
     }
   } catch {}
+
+  // 3. Secours mémoire vive session
+  const ramTrips = memoryCampaignTrips[String(targetId)] || memoryCampaignTrips[String(id)] || (targetUuid ? memoryCampaignTrips[targetUuid] : undefined);
+  if (ramTrips && ramTrips.length > 0) {
+    return res.json(ramTrips);
+  }
 
   return res.json([]);
 });
@@ -856,29 +831,28 @@ router.all(['/api/cron/trigger-airport-pricing', '/api/cron/trigger-airport'], a
   }
 });
 
-// 12. Métadonnées et statut des crons programmés (8h, 13h, 18h & 20h, 23h, 2h)
+// 12. Métadonnées et statut des crons (Désactivés)
 router.get('/api/cron/status', async (_req: Request, res: Response) => {
   return res.json({
-    status: 'active',
+    status: 'disabled',
+    message: 'Tous les cron jobs automatiques sont actuellement désactivés.',
     crons: [
       {
         id: 'pricing_general',
         name: 'Tarification Générale (Pricing)',
-        schedule: '8h, 13h, 18h',
-        cronExpression: '0 8,13,18 * * *',
-        slots: ['08:00 UTC', '13:00 UTC', '18:00 UTC'],
-        description: 'Relevé complet multi-classes de la matrice de tous les quartiers actifs intra-ville.',
-        scope: 'Tous les quartiers',
+        schedule: 'Désactivé',
+        cronExpression: 'Désactivé',
+        status: 'disabled',
+        description: 'Planificateur automatique désactivé. Déclenchement manuel uniquement si nécessaire.',
         endpoint: '/api/cron/trigger-pricing'
       },
       {
         id: 'airport_destinations',
-        name: 'Destinations Aéroport Uniquement',
-        schedule: '20h, 23h, 2h',
-        cronExpression: '0 20,23,2 * * *',
-        slots: ['20:00 UTC', '23:00 UTC', '02:00 UTC'],
-        description: 'Relevé nocturne spécialisé reliant chaque quartier actif exclusivement à l’Aéroport.',
-        scope: 'Quartiers vers Aéroport',
+        name: 'Destinations Aéroport',
+        schedule: 'Désactivé',
+        cronExpression: 'Désactivé',
+        status: 'disabled',
+        description: 'Planificateur automatique désactivé. Déclenchement manuel uniquement si nécessaire.',
         endpoint: '/api/cron/trigger-airport-pricing'
       }
     ]

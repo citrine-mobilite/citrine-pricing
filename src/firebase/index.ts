@@ -1,13 +1,4 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { User, City, Neighborhood, PricingCampaign, TripResult } from '../types';
-
-// Initialize Firebase App for Auth only (Supabase / Express API handles all primary data persistence)
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-export const db = null;
 
 export enum OperationType {
   CREATE = 'create',
@@ -23,47 +14,10 @@ export async function testConnection(): Promise<boolean> {
 }
 
 export async function loginWithGoogle(): Promise<User> {
-  const result = await signInWithPopup(auth, googleProvider);
-  const fbUser = result.user;
-
-  let userRole: 'admin' | 'responsable' | 'employe' = 'employe';
-  let userName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur';
-
-  if (
-    fbUser.email === 'citrinemobilite@gmail.com' ||
-    fbUser.email === 'landrymoutongo97@gmail.com' ||
-    fbUser.email === 'landrymouns@gmail.com' ||
-    fbUser.email === 'landrymoutongoprofessionnel@gmail.com' ||
-    fbUser.email === 'admin@vtc-pricing.internal'
-  ) {
-    userRole = 'admin';
-    userName = 'Admin Citrine';
-  }
-
-  const userData: User = {
-    id: fbUser.uid,
-    email: fbUser.email || '',
-    name: userName,
-    role: userRole,
-    active: true,
-    createdAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString()
-  };
-
-  try {
-    await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
-    });
-  } catch {}
-
-  return userData;
+  throw new Error('Connexion directe par email/mot de passe MySQL');
 }
 
-export async function logoutFirebase(): Promise<void> {
-  await signOut(auth);
-}
+export async function logoutFirebase(): Promise<void> {}
 
 export async function getFirestoreCities(): Promise<City[]> {
   const res = await fetch('/api/cities');
@@ -96,13 +50,8 @@ export async function getFirestoreCampaigns(): Promise<PricingCampaign[]> {
   return res.json();
 }
 
-export async function saveFirestoreCampaign(campaign: PricingCampaign): Promise<void> {
-  // Saved via backend
-}
-
-export async function saveFirestoreTripResult(_campaignId: string, _trip: TripResult): Promise<void> {
-  // Saved via backend
-}
+export async function saveFirestoreCampaign(_campaign: PricingCampaign): Promise<void> {}
+export async function saveFirestoreTripResult(_campaignId: string, _trip: TripResult): Promise<void> {}
 
 export async function getFirestoreStats(): Promise<{ userCount: number; cityCount: number; neighborhoodCount: number }> {
   try {

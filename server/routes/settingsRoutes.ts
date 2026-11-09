@@ -183,14 +183,19 @@ router.delete('/api/history/:id', async (req: Request, res: Response) => {
 
 // System Status
 router.get('/api/system/status', async (_req: Request, res: Response) => {
+  const { getMySQLDatabaseStats } = await import('../db/mysql.js');
+  const dbStats = await getMySQLDatabaseStats();
   return res.json({
     status: 'ok',
-    storageMode: 'supabase_postgresql_direct',
+    storageMode: 'mysql_direct',
     activeCampaigns: activePricingSessions.size,
     totalCampaigns: memoryCampaigns.length + activePricingSessions.size,
     totalNeighborhoods: neighborhoods.length,
     totalCities: cities.length,
-    databaseEngine: 'PostgreSQL 17 (Supabase)'
+    databaseEngine: 'MySQL 8 / MariaDB',
+    mysqlConnected: dbStats.connected,
+    mysqlHost: dbStats.host,
+    mysqlDatabase: dbStats.database
   });
 });
 
@@ -199,6 +204,7 @@ router.get('/api/export/db-structure', async (_req: Request, res: Response) => {
   try {
     const structureData = {
       exportType: 'db_structure_schema',
+      databaseEngine: 'MySQL 8',
       exportedAt: new Date().toISOString(),
       cities,
       neighborhoods,
@@ -211,7 +217,7 @@ router.get('/api/export/db-structure', async (_req: Request, res: Response) => {
     };
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="citrine_db_structure_${new Date().toISOString().split('T')[0]}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="citrine_mysql_structure_${new Date().toISOString().split('T')[0]}.json"`);
     return res.send(JSON.stringify(structureData, null, 2));
   } catch (e: any) {
     return res.status(500).json({ error: 'Erreur lors de l’export de la structure DB: ' + e.message });
@@ -225,19 +231,19 @@ router.get('/api/export/db-full', async (_req: Request, res: Response) => {
     let tripsList: any[] = [];
 
     try {
-      const { pgPool } = await import('../db/supabase.js');
-      const [campRes, tripsRes] = await Promise.all([
-        pgPool.query('SELECT * FROM public.campaigns ORDER BY created_at DESC LIMIT 50'),
-        pgPool.query('SELECT * FROM public.trips ORDER BY created_at DESC LIMIT 2000')
-      ]);
-      campaignsList = campRes.rows;
-      tripsList = tripsRes.rows;
+      const { getMySQLPool } = await import('../db/mysql.js');
+      const p = getMySQLPool();
+      const [campRows] = await p.query('SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 50');
+      const [tripsRows] = await p.query('SELECT * FROM trips ORDER BY created_at DESC LIMIT 2000');
+      campaignsList = campRows as any[];
+      tripsList = tripsRows as any[];
     } catch (err: any) {
-      console.warn('[Export] Supabase query warning:', err.message);
+      console.warn('[Export] MySQL query warning:', err.message);
     }
 
     const fullData = {
       exportType: 'full_database_with_data',
+      databaseEngine: 'MySQL 8',
       exportedAt: new Date().toISOString(),
       cities,
       neighborhoods,
@@ -253,61 +259,24 @@ router.get('/api/export/db-full', async (_req: Request, res: Response) => {
     };
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="citrine_db_full_data_${new Date().toISOString().split('T')[0]}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="citrine_mysql_full_data_${new Date().toISOString().split('T')[0]}.json"`);
     return res.send(JSON.stringify(fullData, null, 2));
   } catch (e: any) {
     return res.status(500).json({ error: 'Erreur lors de l’export complet de la DB: ' + e.message });
   }
 });
 
-// Endpoint retournant les statistiques en temps réel de la base Supabase PostgreSQL et ses clés réelles
+// Endpoint retournant les statistiques en temps réel de la base MySQL
 router.get('/api/supabase/stats', async (_req: Request, res: Response) => {
-  const realKeys = {
-    projectId: 'npwauvoacscumdzpbjoc',
-    url: 'https://npwauvoacscumdzpbjoc.supabase.co',
-    databaseEngine: 'PostgreSQL 17.11',
-    databaseUrl: 'postgresql://postgres:Citrine2026!@db.npwauvoacscumdzpbjoc.supabase.co:5432/postgres',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wd2F1dm9hY3NjdW1kenBiam9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NjQ5NjYsImV4cCI6MjEwNzI0MDk2Nn0.R7ysIFdpjlkg64qMFbxdrsmpKuqMezg5XGVOFyhZMMg',
-    serviceRoleKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wd2F1dm9hY3NjdW1kenBiam9jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTY2NDk2NiwiZXhwIjoyMTA3MjQwOTY2fQ.R2t26-Zefs1W0EChZ4njgYxxj-SliRhHk6QwnqZe3ZE'
-  };
-
-  try {
-    const { pgPool } = await import('../db/supabase.js');
-    const [uRes, cRes, nRes, campRes, tRes, sRes] = await Promise.all([
-      pgPool.query('SELECT count(*)::int as count FROM users'),
-      pgPool.query('SELECT count(*)::int as count FROM cities'),
-      pgPool.query('SELECT count(*)::int as count FROM neighborhoods'),
-      pgPool.query('SELECT count(*)::int as count FROM campaigns'),
-      pgPool.query('SELECT count(*)::int as count FROM trips'),
-      pgPool.query('SELECT count(*)::int as count FROM shortages')
-    ]);
-
-    return res.json({
-      connected: true,
-      ...realKeys,
-      stats: {
-        userCount: uRes.rows[0]?.count ?? 4,
-        cityCount: cRes.rows[0]?.count ?? 1,
-        neighborhoodCount: nRes.rows[0]?.count ?? 183,
-        campaignCount: campRes.rows[0]?.count ?? 2,
-        tripsCount: tRes.rows[0]?.count ?? 817,
-        shortagesCount: sRes.rows[0]?.count ?? 157
-      }
-    });
-  } catch (_err: any) {
-    return res.json({
-      connected: true,
-      ...realKeys,
-      stats: {
-        userCount: 4,
-        cityCount: 1,
-        neighborhoodCount: 183,
-        campaignCount: 2,
-        tripsCount: 817,
-        shortagesCount: 157
-      }
-    });
-  }
+  const { getMySQLDatabaseStats } = await import('../db/mysql.js');
+  const dbStats = await getMySQLDatabaseStats();
+  return res.json({
+    connected: dbStats.connected,
+    projectId: 'mysql_production',
+    url: `${dbStats.host}/${dbStats.database}`,
+    databaseEngine: 'MySQL 8 / MariaDB',
+    stats: dbStats.stats
+  });
 });
 
 export default router;

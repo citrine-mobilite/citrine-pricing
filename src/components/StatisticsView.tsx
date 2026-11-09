@@ -155,52 +155,36 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
 
     const serverCur = statsData?.current;
 
-    const avgYangoPrice = countYango > 0 ? Math.round(sumYango / countYango) : (serverCur?.avgYangoPrice || 620);
-    const avgHeroPrice = countHero > 0 ? Math.round(sumHero / countHero) : (serverCur?.avgHeroPrice || 790);
-    const avgTmPrice = countTm > 0 ? Math.round(sumTm / countTm) : (serverCur?.avgTripMasterPrice || 1720);
-    const shortageRate = totalTrips > 0 ? Number(((totalShortage / totalTrips) * 100).toFixed(1)) : (serverCur?.yangoShortageRate || 28.5);
+    const avgYangoPrice = countYango > 0 ? Math.round(sumYango / countYango) : (serverCur?.avgYangoPrice || 0);
+    const avgHeroPrice = countHero > 0 ? Math.round(sumHero / countHero) : (serverCur?.avgHeroPrice || 0);
+    const avgTmPrice = countTm > 0 ? Math.round(sumTm / countTm) : (serverCur?.avgTripMasterPrice || 0);
+    const shortageRate = totalTrips > 0 ? Number(((totalShortage / totalTrips) * 100).toFixed(1)) : (serverCur?.yangoShortageRate || 0);
 
     const totalCompared = heroCheaperCount + yangoCheaperCount;
-    const heroCheaperRate = totalCompared > 0 ? Math.round((heroCheaperCount / totalCompared) * 100) : (serverCur?.heroCheaperRate || 85);
+    const heroCheaperRate = totalCompared > 0 ? Math.round((heroCheaperCount / totalCompared) * 100) : (serverCur?.heroCheaperRate || 0);
 
-    // Distance Brackets from server or robust fallback model
+    // Distance Brackets from server (strictement 0 si aucune donnée)
     const distanceBrackets = (serverCur?.distanceBrackets && serverCur.distanceBrackets.length > 0)
       ? serverCur.distanceBrackets
-      : [
-          { bracket: '0-3', label: '0 – 3 km (Centre & Local)', minKm: 0, maxKm: 3, avgDistanceKm: 1.8, avgYango: 500, avgHero: 540, avgTripMaster: 1450, yangoPerKm: 277, heroPerKm: 300, heroEconomyPct: -8, shortageRate: 22.4, tripsCount: 140 },
-          { bracket: '3-7', label: '3 – 7 km (Intra-urbain)', minKm: 3, maxKm: 7, avgDistanceKm: 4.8, avgYango: 720, avgHero: 680, avgTripMaster: 1720, yangoPerKm: 150, heroPerKm: 141, heroEconomyPct: 6, shortageRate: 28.1, tripsCount: 110 },
-          { bracket: '7-12', label: '7 – 12 km (Inter-zones)', minKm: 7, maxKm: 12, avgDistanceKm: 9.4, avgYango: 1480, avgHero: 1120, avgTripMaster: 2350, yangoPerKm: 157, heroPerKm: 119, heroEconomyPct: 24, shortageRate: 36.5, tripsCount: 45 },
-          { bracket: '12-20', label: '12 – 20 km (Périphérie / Rocades)', minKm: 12, maxKm: 20, avgDistanceKm: 15.6, avgYango: 2850, avgHero: 1850, avgTripMaster: 3600, yangoPerKm: 182, heroPerKm: 118, heroEconomyPct: 35, shortageRate: 41.2, tripsCount: 20 },
-          { bracket: '>20', label: '+ de 20 km (Longue distance / Aéroports)', minKm: 20, maxKm: 999, avgDistanceKm: 24.2, avgYango: 4900, avgHero: 3100, avgTripMaster: 5800, yangoPerKm: 202, heroPerKm: 128, heroEconomyPct: 37, shortageRate: 48.0, tripsCount: 12 }
-        ];
+      : [];
 
-    // Time Slot Breakdown
+    // Time Slot Breakdown (strictement 0 si aucune donnée)
     const timeSlots = (serverCur?.timeSlotStats && serverCur.timeSlotStats.length > 0)
       ? serverCur.timeSlotStats
-      : [
-          { slot: '08:00', label: 'Matin — Heure de pointe (08h00)', avgYango: 780, avgHero: 680, shortageRate: 38.4, surgeRate: 42.0, tripsCount: 95, heroEconomyPct: 13 },
-          { slot: '13:00', label: 'Midi — Trafic fluide (13h00)', avgYango: 540, avgHero: 560, shortageRate: 18.2, surgeRate: 8.5, tripsCount: 142, heroEconomyPct: -4 },
-          { slot: '18:00', label: 'Soirée — Sortie de bureau (18h00)', avgYango: 920, avgHero: 720, shortageRate: 44.1, surgeRate: 56.0, tripsCount: 87, heroEconomyPct: 22 }
-        ];
+      : [];
 
     // Multi-classes pricing
     const classes = serverCur?.classesBreakdown || {
-      eco: { yango: avgYangoPrice, hero: avgHeroPrice, tripMaster: avgTmPrice, count: 167 },
-      confort: { yango: Math.round(avgYangoPrice * 1.35), hero: Math.round(avgHeroPrice * 1.3), tripMaster: Math.round(avgTmPrice * 1.35), count: 167 },
-      moto: { yango: Math.round(avgYangoPrice * 0.45), hero: Math.round(avgHeroPrice * 0.45), tripMaster: Math.round(avgTmPrice * 0.4), count: 167 },
-      suv: { yango: Math.round(avgYangoPrice * 1.7), hero: Math.round(avgHeroPrice * 1.55), count: 167 }
+      eco: { yango: avgYangoPrice, hero: avgHeroPrice, tripMaster: avgTmPrice, count: countYango },
+      confort: { yango: Math.round(avgYangoPrice * 1.35), hero: Math.round(avgHeroPrice * 1.3), tripMaster: Math.round(avgTmPrice * 1.35), count: countYango },
+      moto: { yango: Math.round(avgYangoPrice * 0.45), hero: Math.round(avgHeroPrice * 0.45), tripMaster: Math.round(avgTmPrice * 0.4), count: countYango },
+      suv: { yango: Math.round(avgYangoPrice * 1.7), hero: Math.round(avgHeroPrice * 1.55), count: countHero }
     };
 
-    // Strategic Corridors
+    // Strategic Corridors (strictement vides si aucune donnée)
     const strategicCorridors = (serverCur?.strategicCorridors && serverCur.strategicCorridors.length > 0)
       ? serverCur.strategicCorridors
-      : [
-          { corridor: 'Akwa ➔ Bonabéri', origin: 'Akwa', destination: 'Bonabéri', distanceKm: 8.4, avgYango: 1650, avgHero: 1200, economyFcfa: 450, economyPct: 27, shortageRate: 35.2, tripsCount: 38 },
-          { corridor: 'Bonamoussadi ➔ Bonanjo', origin: 'Bonamoussadi', destination: 'Bonanjo', distanceKm: 11.2, avgYango: 2100, avgHero: 1550, economyFcfa: 550, economyPct: 26, shortageRate: 42.0, tripsCount: 32 },
-          { corridor: 'Aéroport ➔ Akwa', origin: 'Aéroport', destination: 'Akwa', distanceKm: 6.8, avgYango: 3500, avgHero: 2400, economyFcfa: 1100, economyPct: 31, shortageRate: 18.5, tripsCount: 28 },
-          { corridor: 'Ndokoti ➔ Deido', origin: 'Ndokoti', destination: 'Deido', distanceKm: 5.6, avgYango: 850, avgHero: 750, economyFcfa: 100, economyPct: 12, shortageRate: 25.0, tripsCount: 26 },
-          { corridor: 'Makepe ➔ Bali', origin: 'Makepe', destination: 'Bali', distanceKm: 9.8, avgYango: 1800, avgHero: 1350, economyFcfa: 450, economyPct: 25, shortageRate: 31.4, tripsCount: 24 }
-        ];
+      : [];
 
     // Airport Specifics (données réelles issues du serveur ou calculées)
     const serverAirport = serverCur?.airportStats;
@@ -230,18 +214,18 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
         }))
       : Object.entries(serverCur?.arrondissementSummary || {}).map(([name, d]: [string, any]) => ({
           name,
-          avgY: d.avgPrice || 620,
-          avgH: d.heroAvgPrice || 750,
-          count: d.sampleCount || 10
+          avgY: d.avgPrice || 0,
+          avgH: d.heroAvgPrice || 0,
+          count: d.sampleCount || 0
         }));
 
-    const finalTripsCount = totalTrips > 0 ? totalTrips : (serverCur?.totalTrips || 324);
+    const finalTripsCount = totalTrips > 0 ? totalTrips : (serverCur?.totalTrips || 0);
     const avgSavingsPerTrip = Math.max(0, avgYangoPrice - avgHeroPrice);
     const totalSavingsFcfa = finalTripsCount * avgSavingsPerTrip;
 
     return {
       totalTrips: finalTripsCount,
-      completedCount: completedCampaigns.length || (serverCur?.completedCampaigns || 2),
+      completedCount: completedCampaigns.length || (serverCur?.completedCampaigns || 0),
       avgYangoPrice,
       avgHeroPrice,
       avgTmPrice,
